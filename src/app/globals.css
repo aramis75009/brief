@@ -1,26 +1,122 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ---------------------------------------------------------------------------
+ * Tokens repris tels quels de Brief.dc.html (claude.ai/design).
+ * Ne pas inventer de teinte : toute couleur ici existe dans la maquette.
+ * ------------------------------------------------------------------------ */
+@theme {
+  /* Fonds */
+  --color-canvas: #dcd8d2;
+  --color-surface: #faf8f5;
+  --color-card: #ffffff;
+
+  /* Encre */
+  --color-ink: #1c1a18;
+  --color-ink-hover: #332f2b;
+  --color-ink-soft: #4a4640;
+  --color-muted: #8a8580;
+  --color-muted-2: #b0aaa4;
+  --color-muted-3: #a9a29b;
+  --color-muted-4: #ada7a0;
+  --color-faint: #c3bdb6;
+
+  /* Accent terracotta */
+  --color-accent: #c0603c;
+  --color-accent-hover: #9e4b2c;
+  --color-accent-deep: #b2542f;
+  --color-accent-soft: #f6e4db;
+
+  /* Neutres chauds */
+  --color-stone-1: #f1eee9;
+  --color-stone-2: #f4f1ec;
+  --color-stone-3: #efede9;
+  --color-track: #dad5cf;
+  --color-disabled: #d8cfc9;
+  --color-grip: #d9d4ce;
+  --color-dot: #d3cec8;
+
+  /* Sémantique */
+  --color-ok: #5a7a5e;
+  --color-warn: #a8792f;
+  --color-danger: #8e3b22;
+
+  --font-sans: var(--font-outfit), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, Menlo, monospace;
+
+  /* Animations de la maquette */
+  --animate-br-ring: br-ring 1.9s ease-out infinite;
+  --animate-br-in: br-in 0.2s ease both;
+  --animate-br-sheet: br-sheet 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-br-spin: br-spin 0.7s linear infinite;
+  --animate-br-bar: br-bar 0.8s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@keyframes br-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  70% { opacity: 0; }
+  100% { transform: scale(2.15); opacity: 0; }
+}
+@keyframes br-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes br-sheet {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes br-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes br-bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Empêche le rebond de scroll iOS sur le conteneur d'app. */
+  overscroll-behavior: none;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* La maquette masque les scrollbars — comportement conservé. */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Respecte les préférences système sans casser la lecture du niveau audio. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
