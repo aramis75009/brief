@@ -44,3 +44,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# NB : `vercel link` ré-ajoute parfois `.env*` ici. Ne pas le laisser : placée en
+# dernier, cette règle écrase les négations `!.env.example` du bloc Secrets en
+# haut du fichier et rend le template non committable. Le bloc du haut suffit.
