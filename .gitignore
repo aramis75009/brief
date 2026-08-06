@@ -1,0 +1,46 @@
+# --- Secrets / env -----------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# --- Dépendances -------------------------------------------------------------
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# --- Build / cache -----------------------------------------------------------
+.next/
+out/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Vercel ------------------------------------------------------------------
+.vercel
+
+# --- Logs --------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# --- Divers ------------------------------------------------------------------
+*.pem
+
+# --- OS / éditeur ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
