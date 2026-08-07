@@ -19,6 +19,74 @@ function pickMimeType(): string | null {
   return null;
 }
 
+/* ---------------------------------------------------------------------------
+ * Stream partagé — UNE seule autorisation par session.
+ *
+ * Le flux et l'AudioContext vivent au niveau du module, pas du composant : on
+ * appelle getUserMedia au premier tap sur le micro, puis on réutilise. Les
+ * enregistrements suivants ne redemandent rien.
+ *
+ * ⚠️ Conséquence assumée : tant que le flux est ouvert, l'indicateur micro d'iOS
+ * (pastille orange) reste allumé entre deux dictées. C'est le prix de la
+ * réutilisation. On relâche donc explicitement quand la page passe en arrière-
+ * plan ou se ferme (pagehide), ce qui éteint l'indicateur en sortant de l'app.
+ * ------------------------------------------------------------------------ */
+let sharedStream: MediaStream | null = null;
+let sharedCtx: AudioContext | null = null;
+let sharedAnalyser: AnalyserNode | null = null;
+
+function streamIsLive(s: MediaStream | null): s is MediaStream {
+  return !!s && s.getAudioTracks().some((t) => t.readyState === "live");
+}
+
+async function acquireStream(): Promise<MediaStream> {
+  if (streamIsLive(sharedStream)) return sharedStream;
+  sharedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // Le graphe d'analyse est reconstruit avec le nouveau flux.
+  sharedAnalyser = null;
+  return sharedStream;
+}
+
+function releaseShared() {
+  if (sharedStream) {
+    for (const track of sharedStream.getTracks()) track.stop();
+    sharedStream = null;
+  }
+  sharedAnalyser = null;
+  if (sharedCtx) {
+    const ctx = sharedCtx;
+    sharedCtx = null;
+    void ctx.close().catch(() => {});
+  }
+}
+
+if (typeof window !== "undefined") {
+  // Sortie de l'app / fermeture d'onglet : on rend le micro au système.
+  window.addEventListener("pagehide", releaseShared);
+}
+
+async function getAnalyser(stream: MediaStream): Promise<AnalyserNode | null> {
+  if (sharedAnalyser) return sharedAnalyser;
+  try {
+    const Ctor: typeof AudioContext =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!sharedCtx) sharedCtx = new Ctor();
+    // Safari peut rendre le contexte suspendu même après un geste utilisateur.
+    if (sharedCtx.state === "suspended") await sharedCtx.resume();
+
+    const source = sharedCtx.createMediaStreamSource(stream);
+    const analyser = sharedCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.75;
+    source.connect(analyser);
+    sharedAnalyser = analyser;
+    return analyser;
+  } catch {
+    return null;
+  }
+}
+
 export type RecorderStatus = "idle" | "requesting" | "recording" | "error";
 
 export type RecorderError = {
@@ -34,33 +102,27 @@ export type Recording = {
 };
 
 const BARS = 4;
+const FLOOR = 0.35;
 
 export function useRecorder(onComplete: (rec: Recording) => void) {
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [error, setError] = useState<RecorderError | null>(null);
   const [seconds, setSeconds] = useState(0);
-  const [levels, setLevels] = useState<number[]>(() => new Array(BARS).fill(0.35));
+  const [levels, setLevels] = useState<number[]>(() => new Array(BARS).fill(FLOOR));
 
-  const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Le callback est lu depuis `onstop`, hors cycle de rendu : on le garde à jour
-  // dans un effet plutôt que pendant le rendu.
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
 
-  /**
-   * Libère TOUT : pistes du MediaStream (sinon l'indicateur micro iOS reste
-   * allumé après l'arrêt), AudioContext, rAF et timer d'arrêt automatique.
-   */
-  const releaseHardware = useCallback(() => {
+  /** Arrête la mesure et les timers — sans toucher au flux, qui est réutilisé. */
+  const stopMetering = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -69,33 +131,35 @@ export function useRecorder(onComplete: (rec: Recording) => void) {
       clearTimeout(autoStopRef.current);
       autoStopRef.current = null;
     }
-    if (streamRef.current) {
-      for (const track of streamRef.current.getTracks()) track.stop();
-      streamRef.current = null;
-    }
-    if (ctxRef.current) {
-      const ctx = ctxRef.current;
-      ctxRef.current = null;
-      void ctx.close().catch(() => {});
-    }
-    recorderRef.current = null;
   }, []);
 
-  useEffect(() => releaseHardware, [releaseHardware]);
+  useEffect(
+    () => () => {
+      stopMetering();
+      if (recorderRef.current && recorderRef.current.state !== "inactive") {
+        try {
+          recorderRef.current.stop();
+        } catch {
+          /* déjà arrêté */
+        }
+      }
+      releaseShared();
+    },
+    [stopMetering],
+  );
 
   const stop = useCallback(() => {
     const rec = recorderRef.current;
     if (rec && rec.state !== "inactive") {
-      rec.stop(); // onstop assemble le blob puis appelle releaseHardware
+      rec.stop(); // onstop assemble le blob
     } else {
-      releaseHardware();
+      stopMetering();
       setStatus("idle");
     }
-  }, [releaseHardware]);
+  }, [stopMetering]);
 
   const start = useCallback(async () => {
     setError(null);
-
     if (typeof window === "undefined") return;
 
     if (!window.isSecureContext) {
@@ -129,12 +193,14 @@ export function useRecorder(onComplete: (rec: Recording) => void) {
       return;
     }
 
-    setStatus("requesting");
+    // `requesting` n'est visible qu'à la toute première dictée de la session :
+    // ensuite acquireStream rend le flux déjà autorisé, sans prompt.
+    const firstTime = !streamIsLive(sharedStream);
+    if (firstTime) setStatus("requesting");
 
     let stream: MediaStream;
     try {
-      // Demandé au tap uniquement — jamais au chargement de la page.
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await acquireStream();
     } catch (e) {
       const name = e instanceof DOMException ? e.name : "";
       setStatus("error");
@@ -155,36 +221,19 @@ export function useRecorder(onComplete: (rec: Recording) => void) {
       } else {
         setError({
           title: "Le micro n'a pas pu démarrer.",
-          steps: [
-            "Ferme les autres apps ou onglets qui utilisent le micro, puis réessaie.",
-          ],
+          steps: ["Ferme les autres apps ou onglets qui utilisent le micro, puis réessaie."],
         });
       }
       return;
     }
 
-    streamRef.current = stream;
     chunksRef.current = [];
 
-    // --- Analyse du niveau réel pour piloter l'onde -------------------------
-    try {
-      const Ctor: typeof AudioContext =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new Ctor();
-      ctxRef.current = ctx;
-      // Safari peut créer le contexte suspendu même après un geste utilisateur.
-      if (ctx.state === "suspended") await ctx.resume();
-
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.75;
-      source.connect(analyser);
-
+    // --- Niveau réel pour piloter l'onde ------------------------------------
+    const analyser = await getAnalyser(stream);
+    if (analyser) {
       const bins = new Uint8Array(analyser.frequencyBinCount);
       const bandSize = Math.floor(bins.length / BARS);
-
       const tick = () => {
         analyser.getByteFrequencyData(bins);
         const next: number[] = [];
@@ -192,16 +241,14 @@ export function useRecorder(onComplete: (rec: Recording) => void) {
           let sum = 0;
           for (let i = b * bandSize; i < (b + 1) * bandSize; i++) sum += bins[i];
           const avg = sum / bandSize / 255;
-          // Plancher à 0.35 : la barre reste visible dans le silence, comme la maquette.
-          next.push(Math.min(1, Math.max(0.35, avg * 2.4)));
+          // Plancher : la barre reste visible dans le silence, comme la maquette.
+          next.push(Math.min(1, Math.max(FLOOR, avg * 2.4)));
         }
         setLevels(next);
         setSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000));
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
-    } catch {
-      /* Pas d'analyse possible : l'enregistrement continue, l'onde reste au repos. */
     }
 
     // --- Enregistrement ------------------------------------------------------
@@ -215,14 +262,16 @@ export function useRecorder(onComplete: (rec: Recording) => void) {
       const elapsed = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
       const blob = new Blob(chunksRef.current, { type: mimeType });
       chunksRef.current = [];
-      releaseHardware();
+      stopMetering();
+      recorderRef.current = null;
       setStatus("idle");
       setSeconds(0);
-      setLevels(new Array(BARS).fill(0.35));
+      setLevels(new Array(BARS).fill(FLOOR));
       if (blob.size > 0) onCompleteRef.current({ blob, mimeType, seconds: elapsed });
     };
     rec.onerror = () => {
-      releaseHardware();
+      stopMetering();
+      recorderRef.current = null;
       setStatus("error");
       setError({
         title: "L'enregistrement s'est interrompu.",
@@ -240,7 +289,7 @@ export function useRecorder(onComplete: (rec: Recording) => void) {
         recorderRef.current.stop();
       }
     }, MAX_SECONDS * 1000);
-  }, [releaseHardware]);
+  }, [stopMetering]);
 
   const dismissError = useCallback(() => {
     setError(null);

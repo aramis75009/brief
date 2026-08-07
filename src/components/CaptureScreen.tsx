@@ -41,6 +41,11 @@ export function CaptureScreen({
   const hasTranscript = !!transcript.trim();
   const showEmptyHint = !hasTranscript && !error && !transcribing;
 
+  // Un seul CTA, trois états : arrêter (pendant l'enregistrement), attendre
+  // (pendant la transcription), structurer (dès qu'il y a du texte).
+  const ctaDisabled = transcribing || busy || (!recording && !hasTranscript);
+  const ctaAction = recording ? onToggleMic : onStructure;
+
   const micHint = error
     ? "Micro indisponible"
     : busy
@@ -148,7 +153,7 @@ export function CaptureScreen({
         )}
       </div>
 
-      <div className="flex flex-none flex-col items-center gap-3.5 px-[26px] pt-1.5 pb-2.5">
+      <div className="flex flex-none flex-col items-center gap-3 px-[26px] pt-1.5 pb-3">
         <div className="relative flex h-28 w-28 items-center justify-center">
           {recording && (
             <>
@@ -186,37 +191,44 @@ export function CaptureScreen({
           </button>
         </div>
 
-        <span className="text-[12.5px] font-medium tracking-[0.1px] text-muted tabular-nums">
-          {micHint}
+        <span className="h-4 text-[12.5px] font-medium tracking-[0.1px] text-muted tabular-nums">
+          {recording ? `${micHint} · stop auto ${fmtClock(MAX_SECONDS)}` : micHint}
         </span>
 
-        {recording && (
-          <span className="-mt-2.5 text-[11px] font-medium text-muted-2">
-            arrêt automatique à {fmtClock(MAX_SECONDS)}
-          </span>
-        )}
-
-        {hasTranscript && !recording && (
-          <button
-            type="button"
-            onClick={onStructure}
-            className="animate-br-in flex h-[54px] w-full cursor-pointer items-center justify-center gap-[9px] rounded-[18px] border-none bg-ink text-base font-semibold tracking-[0.1px] text-surface transition-all duration-200 hover:bg-ink-hover active:scale-[0.985]"
-          >
-            Structurer
-            <ArrowRightIcon />
-          </button>
-        )}
-
-        {recording && (
-          <button
-            type="button"
-            onClick={onToggleMic}
-            className="animate-br-in flex h-[54px] w-full cursor-pointer items-center justify-center gap-[9px] rounded-[18px] border border-[rgba(28,26,24,0.1)] bg-card text-base font-semibold tracking-[0.1px] text-ink transition-all duration-200 hover:bg-stone-1 active:scale-[0.985]"
-          >
-            <StopIcon size={18} />
-            Arrêter
-          </button>
-        )}
+        {/* CTA toujours monté : la hauteur du bloc bas ne varie pas, donc il ne
+            peut plus être rogné par la tab bar quand une transcription arrive. */}
+        <button
+          type="button"
+          onClick={ctaAction}
+          disabled={ctaDisabled}
+          aria-busy={transcribing}
+          className={
+            "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-[18px] border-none " +
+            "text-base font-semibold tracking-[0.1px] transition-all duration-200 " +
+            (ctaDisabled
+              ? "cursor-default bg-disabled text-ink-soft"
+              : recording
+                ? "cursor-pointer bg-card text-ink shadow-[inset_0_0_0_1px_rgba(28,26,24,0.1)] hover:bg-stone-1 active:scale-[0.985]"
+                : "cursor-pointer bg-ink text-surface hover:bg-ink-hover active:scale-[0.985]")
+          }
+        >
+          {transcribing ? (
+            <>
+              <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[rgba(28,26,24,0.2)] border-t-ink-soft" />
+              Transcription…
+            </>
+          ) : recording ? (
+            <>
+              <StopIcon size={18} />
+              Arrêter l&apos;enregistrement
+            </>
+          ) : (
+            <>
+              Structurer la note
+              <ArrowRightIcon />
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ export function TabBar({
   onNavigate: (v: View) => void;
 }) {
   return (
-    <div className="flex h-[78px] flex-none items-start border-t border-[rgba(28,26,24,0.07)] bg-[rgba(250,248,245,0.94)] px-[18px] pt-2 backdrop-blur-[12px] pb-[env(safe-area-inset-bottom)] sm:pb-0">
+    <div className="safe-bottom flex flex-none items-start border-t border-[rgba(28,26,24,0.07)] bg-[rgba(250,248,245,0.94)] px-[18px] pt-2 pb-2 backdrop-blur-[12px] sm:h-[78px] sm:pb-0">
       {TABS.map(({ key, label, Icon, matches }) => {
         const on = matches.includes(view);
         return (

@@ -72,42 +72,83 @@
   50% { transform: scaleY(1); }
 }
 
-* {
-  box-sizing: border-box;
+/* ---------------------------------------------------------------------------
+ * Safe areas — classes écrites à la main VOLONTAIREMENT.
+ * Tailwind v4 ne génère pas les utilitaires arbitraires contenant `env()`
+ * (`pb-[env(safe-area-inset-bottom)]` & co. ne produisent aucune règle). Vérifié
+ * en cherchant la classe dans le CSS compilé : absente. Ne pas « simplifier »
+ * ces classes en utilitaires Tailwind, le padding disparaîtrait silencieusement.
+ * ------------------------------------------------------------------------ */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
-html,
-body {
-  margin: 0;
-  height: 100%;
+/* Dans le cadre iPhone dessiné (>= sm), les safe areas de l'appareil hôte
+   n'ont plus de sens : on les neutralise. */
+@media (min-width: 40rem) {
+  .safe-top,
+  .safe-bottom,
+  .safe-x {
+    padding: 0;
+  }
 }
 
-body {
-  background: var(--color-canvas);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  /* Empêche le rebond de scroll iOS sur le conteneur d'app. */
-  overscroll-behavior: none;
-}
+/* ---------------------------------------------------------------------------
+ * Reset — OBLIGATOIREMENT dans @layer base.
+ *
+ * Du CSS écrit hors `@layer` l'emporte sur TOUTES les couches, donc sur
+ * `@layer utilities` de Tailwind, quelle que soit la spécificité. Sans cette
+ * couche, `button { color: inherit }` écrasait `text-surface` : le bouton
+ * « Structurer la note » s'affichait en noir sur noir, libellé et icône
+ * invisibles. Ne pas sortir ces règles du layer.
+ * ------------------------------------------------------------------------ */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-  color: inherit;
-}
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+  }
 
-select {
-  appearance: none;
-  -webkit-appearance: none;
-}
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* Empêche le rebond de scroll iOS sur le conteneur d'app. */
+    overscroll-behavior: none;
+  }
 
-/* La maquette masque les scrollbars — comportement conservé. */
-::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  /* La maquette masque les scrollbars — comportement conservé. */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
 }
 
 /* Respecte les préférences système sans casser la lecture du niveau audio. */
