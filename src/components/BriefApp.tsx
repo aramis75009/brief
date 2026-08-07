@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { CaptureScreen } from "./CaptureScreen";
+import { CaptureScreen, type AppError } from "./CaptureScreen";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
 import { PinGate } from "./PinGate";
 import { ReviewScreen } from "./ReviewScreen";
@@ -10,19 +10,23 @@ import { TabBar } from "./TabBar";
 import { TaskSheet } from "./TaskSheet";
 import { TasksScreen, type FilterKey } from "./TasksScreen";
 import { Toast } from "./Toast";
-import { LANGS, demoSent, dueISOFor, uid } from "@/lib/mock";
-import { parseNote } from "@/lib/parse";
-import { UnauthorizedError, apiFetch, getPin, readStoredTranscript } from "@/lib/pin";
+import {
+  ApiError,
+  fetchProjects,
+  parseNote,
+  pushTasks,
+  transcribeAudio,
+  type ProjectsSource,
+} from "@/lib/api";
+import { uid } from "@/lib/demo";
+import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
+import { FALLBACK_PROJECTS, inboxIdOf } from "@/lib/todoist";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
-import type { Draft, SentTask, ToastKind, View } from "@/lib/types";
+import type { Draft, Phase, Project, SentTask, ToastKind, TodoistTask, View } from "@/lib/types";
 
 /** La transcription brute survit au rechargement — elle ne doit jamais être perdue. */
 const TRANSCRIPT_KEY = "brief:transcript";
 
-/**
- * `false` au rendu serveur, `true` sur le client : c'est le signal officiel React
- * pour du contenu client-only, sans écart d'hydratation ni setState dans un effet.
- */
 const subscribeNoop = () => () => {};
 const useHydrated = () => useSyncExternalStore(subscribeNoop, () => true, () => false);
 
@@ -31,27 +35,29 @@ export function BriefApp() {
   const [unlocked, setUnlocked] = useState(() => !!getPin());
 
   const [view, setView] = useState<View>("capture");
+  // Phase du travail en cours. L'enregistrement n'en fait pas partie : il est
+  // dérivé du recorder juste avant le rendu, ce qui évite un effet de synchro.
+  const [workPhase, setWorkPhase] = useState<Phase>("idle");
+  const [appError, setAppError] = useState<AppError | null>(null);
+
   const [transcript, setTranscript] = useState(readStoredTranscript);
-  const [transcribing, setTranscribing] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [sent, setSent] = useState<SentTask[]>(demoSent);
+  const [sent, setSent] = useState<SentTask[]>([]);
+
+  const [projects, setProjects] = useState<Project[]>(FALLBACK_PROJECTS);
+  const [projectsSource, setProjectsSource] = useState<ProjectsSource | null>(null);
+  const [reloading, setReloading] = useState(false);
+
   const [filter, setFilter] = useState<FilterKey>("all");
   const [sheetId, setSheetId] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
 
-  const [todoist, setTodoist] = useState(true);
-  const [defaultProject, setDefaultProject] = useState("flip");
-  const [lang, setLang] = useState("fr-FR");
-  const [auto, setAuto] = useState(false);
-
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Lu depuis un callback asynchrone, jamais pendant le rendu.
-  const autoRef = useRef(auto);
+  const projectsRef = useRef(projects);
   useEffect(() => {
-    autoRef.current = auto;
-  }, [auto]);
+    projectsRef.current = projects;
+  }, [projects]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -59,14 +65,13 @@ export function BriefApp() {
       if (transcript) window.localStorage.setItem(TRANSCRIPT_KEY, transcript);
       else window.localStorage.removeItem(TRANSCRIPT_KEY);
     } catch {
-      /* idem */
+      /* stockage indisponible */
     }
   }, [transcript, hydrated]);
 
   useEffect(
     () => () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
-      if (syncTimer.current) clearTimeout(syncTimer.current);
     },
     [],
   );
@@ -74,69 +79,120 @@ export function BriefApp() {
   const flash = useCallback((msg: string, kind: ToastKind = "ok") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, kind });
-    toastTimer.current = setTimeout(() => setToast(null), 2800);
+    toastTimer.current = setTimeout(() => setToast(null), 3200);
   }, []);
 
-  const structure = useCallback(
-    (text: string) => {
-      const parsed = parseNote(text, defaultProject).map<Draft>((t) => ({
-        ...t,
-        id: uid(),
-        dueISO: dueISOFor(t.dueKey),
-      }));
-      setDrafts(parsed);
-      setView("review");
+  /** Toute erreur passe par ici : message français + sortie de secours. */
+  const fail = useCallback((e: unknown, fallbackTitle: string, retry?: () => void) => {
+    if (e instanceof UnauthorizedError) {
+      clearPin();
+      setUnlocked(false);
+      setWorkPhase("idle");
+      setAppError(null);
+      return;
+    }
+    const title = e instanceof ApiError ? e.message : fallbackTitle;
+    setWorkPhase("error");
+    setAppError({
+      title,
+      steps: [],
+      retryLabel: "Réessayer",
+      onRetry: retry,
+    });
+  }, []);
+
+  const dismissError = useCallback(() => {
+    setAppError(null);
+    setWorkPhase("idle");
+  }, []);
+
+  /* --- Projets ------------------------------------------------------------ */
+  const loadProjects = useCallback(
+    async (opts: { silent?: boolean } = {}) => {
+      if (!opts.silent) setReloading(true);
+      try {
+        const { projects: list, source } = await fetchProjects();
+        if (list.length) {
+          setProjects(list);
+          setProjectsSource(source);
+        }
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          clearPin();
+          setUnlocked(false);
+        } else {
+          // Non bloquant : on garde la liste de repli déjà en place.
+          setProjectsSource("fallback");
+          if (!opts.silent) flash("Projets Todoist injoignables — liste de repli.", "err");
+        }
+      } finally {
+        setReloading(false);
+      }
     },
-    [defaultProject],
+    [flash],
+  );
+
+  /* --- Structuration ------------------------------------------------------ */
+  // Le bouton « Réessayer » doit rappeler structure() : on passe par une ref
+  // pour ne pas référencer la callback avant sa déclaration.
+  const structureRef = useRef<(text: string) => void>(() => {});
+  const loadedRef = useRef(false);
+
+  const structure = useCallback(
+    async (text: string) => {
+      const source = text.trim();
+      if (!source) return;
+      setAppError(null);
+      setWorkPhase("parsing");
+      try {
+        // Liste à jour juste avant l'appel : le LLM doit voir les vrais projets.
+        if (!loadedRef.current) {
+          loadedRef.current = true;
+          await loadProjects({ silent: true });
+        }
+        const tasks = await parseNote(source, projectsRef.current);
+        setDrafts(tasks.map((t) => ({ ...t, id: uid() })));
+        setWorkPhase("idle");
+        setView("review");
+      } catch (e) {
+        // La transcription reste intacte : on ne perd jamais le texte.
+        fail(e, "La structuration a échoué.", () => structureRef.current(source));
+      }
+    },
+    [fail, loadProjects],
   );
 
   /* --- Transcription ------------------------------------------------------ */
   const onRecorded = useCallback(
     async (rec: Recording) => {
-      setTranscribing(true);
+      setAppError(null);
+      setWorkPhase("uploading");
       try {
-        const form = new FormData();
-        // Le mimeType réel accompagne le blob : le serveur ne le devine jamais.
-        const ext = rec.mimeType.includes("mp4") ? "m4a" : "webm";
-        form.append("file", rec.blob, `note.${ext}`);
-        form.append("mimeType", rec.mimeType);
-
-        const res = await apiFetch("/api/transcribe", { method: "POST", body: form });
-        const data = (await res.json()) as { text?: string; error?: string };
-
-        if (!res.ok) {
-          flash(data.error || "La transcription a échoué.", "err");
-          return;
-        }
-
-        const text = (data.text || "").trim();
+        const text = await transcribeAudio(rec.blob, rec.mimeType, () => setWorkPhase("transcribing"));
         if (!text) {
+          setWorkPhase("idle");
           flash("Rien n'a été entendu.", "err");
           return;
         }
-
         // On AJOUTE à l'existant : une nouvelle dictée n'écrase jamais la précédente.
-        let merged = "";
-        setTranscript((prev) => {
-          merged = prev.trim() ? `${prev.trim()} ${text}` : text;
-          return merged;
-        });
-        if (autoRef.current) structure(merged);
+        const merged = transcript.trim() ? `${transcript.trim()} ${text}` : text;
+        setTranscript(merged);
+        setWorkPhase("idle");
       } catch (e) {
-        if (e instanceof UnauthorizedError) {
-          setUnlocked(false);
-          flash("Session expirée — ressaisis ton code.", "err");
-        } else {
-          flash("Réseau indisponible. Réessaie.", "err");
-        }
-      } finally {
-        setTranscribing(false);
+        fail(e, "La transcription a échoué.");
       }
     },
-    [flash, structure],
+    [transcript, flash, fail],
   );
 
   const recorder = useRecorder(onRecorded);
+
+  // Un seul état visible, dérivé : pas de synchronisation à maintenir.
+  const phase: Phase = recorder.recording ? "recording" : workPhase;
+
+  useEffect(() => {
+    structureRef.current = (text: string) => void structure(text);
+  }, [structure]);
 
   const toggleMic = useCallback(() => {
     if (recorder.recording) recorder.stop();
@@ -148,45 +204,121 @@ export function BriefApp() {
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
   }, []);
 
-  const removeDraft = useCallback(
-    (id: string) => {
-      setDrafts((ds) => ds.filter((d) => d.id !== id));
-      flash("Tâche supprimée");
-    },
-    [flash],
-  );
+  const removeDraft = useCallback((id: string) => {
+    setDrafts((ds) => ds.filter((d) => d.id !== id));
+  }, []);
 
   const addDraft = useCallback(() => {
     setDrafts((ds) => [
       ...ds,
-      { id: uid(), title: "", projectId: defaultProject, dueKey: "none", dueText: "", dueISO: null, prio: "p4" },
+      {
+        id: uid(),
+        content: "",
+        due_lang: "fr",
+        priority: 1,
+        project_id: inboxIdOf(projectsRef.current),
+      },
     ]);
-  }, [defaultProject]);
+  }, []);
 
-  const send = useCallback(() => {
-    if (sending || !drafts.length) return;
-    if (!todoist) {
-      flash("Connecte Todoist dans Réglages", "err");
+  /* --- Envoi vers Todoist ------------------------------------------------- */
+  const payloadOf = (d: Draft): TodoistTask => ({
+    content: d.content.trim(),
+    ...(d.due_string ? { due_string: d.due_string } : {}),
+    due_lang: "fr",
+    priority: d.priority,
+    project_id: d.project_id,
+  });
+
+  const sendRef = useRef<() => void>(() => {});
+
+  const send = useCallback(async () => {
+    const ready = drafts.filter((d) => d.content.trim());
+    if (!ready.length) {
+      flash("Aucune tâche à envoyer.", "err");
       return;
     }
-    setSending(true);
-    // Envoi simulé : la route Todoist n'existe pas encore (étape suivante).
-    setTimeout(() => {
-      const added: SentTask[] = drafts
-        .filter((d) => d.title.trim())
-        .map((d) => ({ ...d, title: d.title.trim(), sync: "pending" }));
-      setSent((s) => [...added, ...s]);
-      setDrafts([]);
-      setTranscript("");
-      setSending(false);
-      setView("capture");
-      flash(`${added.length} ${added.length > 1 ? "tâches envoyées" : "tâche envoyée"} vers Todoist`);
-      const ids = new Set(added.map((a) => a.id));
-      syncTimer.current = setTimeout(() => {
-        setSent((s) => s.map((t) => (ids.has(t.id) ? { ...t, sync: "synced" } : t)));
-      }, 1700);
-    }, 1200);
-  }, [drafts, sending, todoist, flash]);
+    setAppError(null);
+    setWorkPhase("pushing");
+    try {
+      const { results, created } = await pushTasks(ready.map(payloadOf));
+
+      const next: SentTask[] = ready.map((d, i) => {
+        const r = results[i];
+        return r?.ok
+          ? { ...d, content: d.content.trim(), status: "sent", todoistId: r.id }
+          : { ...d, content: d.content.trim(), status: "failed", error: r?.error ?? "Échec inconnu." };
+      });
+
+      setSent((s) => [...next, ...s]);
+      // Seules les tâches créées quittent la revue : les échecs restent
+      // éditables ici ET consultables dans l'onglet Tâches.
+      setDrafts((ds) => ds.filter((d) => !next.some((n) => n.id === d.id && n.status === "sent")));
+
+      const failed = next.length - created;
+      if (failed === 0) {
+        setTranscript("");
+        setWorkPhase("success");
+        setView("capture");
+        flash(`${created} tâche${created > 1 ? "s" : ""} envoyée${created > 1 ? "s" : ""} vers Todoist`);
+      } else {
+        setWorkPhase("idle");
+        setView("tasks");
+        setFilter("failed");
+        flash(
+          `${created} envoyée${created > 1 ? "s" : ""}, ${failed} en échec — réessayable`,
+          "err",
+        );
+      }
+    } catch (e) {
+      fail(e, "L'envoi vers Todoist a échoué.", () => sendRef.current());
+      setWorkPhase("idle");
+    }
+  }, [drafts, flash, fail]);
+
+  useEffect(() => {
+    sendRef.current = () => void send();
+  }, [send]);
+
+  /** Réessaie uniquement les tâches indiquées — jamais celles déjà créées. */
+  const retry = useCallback(
+    async (ids: string[]) => {
+      const targets = sent.filter((t) => ids.includes(t.id) && t.status === "failed");
+      if (!targets.length) return;
+
+      setRetryingIds(new Set(ids));
+      try {
+        const { results, created } = await pushTasks(targets.map(payloadOf));
+        setSent((s) =>
+          s.map((t) => {
+            const i = targets.findIndex((x) => x.id === t.id);
+            if (i === -1) return t;
+            const r = results[i];
+            return r?.ok
+              ? { ...t, status: "sent", todoistId: r.id, error: undefined }
+              : { ...t, status: "failed", error: r?.error ?? "Échec inconnu." };
+          }),
+        );
+        const failed = targets.length - created;
+        flash(
+          failed === 0
+            ? `${created} tâche${created > 1 ? "s" : ""} créée${created > 1 ? "s" : ""}`
+            : `${created} créée${created > 1 ? "s" : ""}, ${failed} encore en échec`,
+          failed === 0 ? "ok" : "err",
+        );
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          clearPin();
+          setUnlocked(false);
+        } else {
+          flash(e instanceof ApiError ? e.message : "Nouvel envoi impossible.", "err");
+        }
+      } finally {
+        setRetryingIds(new Set());
+      }
+    },
+    [sent, flash],
+  );
 
   /* --- Rendu -------------------------------------------------------------- */
   if (!hydrated) {
@@ -210,7 +342,6 @@ export function BriefApp() {
   }
 
   const sheetTask = sheetId ? (sent.find((t) => t.id === sheetId) ?? null) : null;
-  const langShort = (LANGS.find((l) => l.code === lang) ?? LANGS[0]).short;
 
   return (
     <PhoneFrame>
@@ -218,53 +349,67 @@ export function BriefApp() {
 
       {view === "capture" && (
         <CaptureScreen
-          langShort={langShort}
+          phase={phase}
           transcript={transcript}
-          recording={recorder.recording}
-          busy={recorder.busy}
-          transcribing={transcribing}
-          seconds={recorder.seconds}
           levels={recorder.levels}
-          error={recorder.error}
+          seconds={recorder.seconds}
+          micError={recorder.error}
+          appError={appError}
           onToggleMic={toggleMic}
           onClear={() => setTranscript("")}
-          onStructure={() => structure(transcript)}
+          onStructure={() => void structure(transcript)}
           onLoadDemo={setTranscript}
-          onDismissError={recorder.dismissError}
+          onDismissError={() => {
+            recorder.dismissError();
+            dismissError();
+          }}
         />
       )}
 
       {view === "review" && (
         <ReviewScreen
           drafts={drafts}
-          sending={sending}
+          projects={projects}
+          transcript={transcript}
+          pushing={phase === "pushing"}
           onBack={() => setView("capture")}
           onPatch={patchDraft}
           onRemove={removeDraft}
           onAdd={addDraft}
-          onSend={send}
+          onSend={() => void send()}
         />
       )}
 
       {view === "tasks" && (
-        <TasksScreen sent={sent} filter={filter} onFilter={setFilter} onOpen={setSheetId} />
+        <TasksScreen
+          sent={sent}
+          projects={projects}
+          filter={filter}
+          onFilter={setFilter}
+          onOpen={setSheetId}
+          retrying={retryingIds.size > 0}
+          onRetryAll={() =>
+            void retry(sent.filter((t) => t.status === "failed").map((t) => t.id))
+          }
+        />
       )}
 
       {view === "settings" && (
         <SettingsScreen
-          todoist={todoist}
-          onToggleTodoist={() => setTodoist((v) => !v)}
-          defaultProject={defaultProject}
-          onDefaultProject={setDefaultProject}
-          lang={lang}
-          onLang={setLang}
-          auto={auto}
-          onToggleAuto={() => setAuto((v) => !v)}
-          onResetDemo={() => {
-            setSent(demoSent());
+          projects={projects}
+          projectsSource={projectsSource}
+          reloading={reloading}
+          onReloadProjects={() => void loadProjects()}
+          onClearSession={() => {
+            setTranscript("");
             setDrafts([]);
+            setSent([]);
             setFilter("all");
-            flash("Démo réinitialisée");
+            flash("Session vidée");
+          }}
+          onLock={() => {
+            clearPin();
+            setUnlocked(false);
           }}
         />
       )}
@@ -274,12 +419,14 @@ export function BriefApp() {
       {sheetTask && (
         <TaskSheet
           task={sheetTask}
+          projects={projects}
+          retrying={retryingIds.has(sheetTask.id)}
           onClose={() => setSheetId(null)}
           onDelete={() => {
             setSent((s) => s.filter((t) => t.id !== sheetTask.id));
             setSheetId(null);
-            flash("Tâche supprimée");
           }}
+          onRetry={() => void retry([sheetTask.id])}
         />
       )}
 

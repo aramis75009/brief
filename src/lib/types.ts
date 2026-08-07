@@ -1,54 +1,57 @@
-export type PrioKey = "p1" | "p2" | "p3" | "p4";
+/** Priorité Todoist : 4 = urgent … 1 = par défaut. */
+export type PrioValue = 4 | 3 | 2 | 1;
 
+/**
+ * Projet Todoist. `id` est une CHAÎNE alphanumérique (ex. `6hF34F5QgwXp7JHf`) —
+ * ne jamais la convertir en nombre.
+ */
 export type Project = {
   id: string;
   name: string;
-  /** Libellé utilisé dans la syntaxe Quick Add (#Projet). */
-  tag: string;
-  bg: string;
-  fg: string;
-  kw: string[];
 };
 
-export type Prio = {
-  label: string;
-  long: string;
-  bg: string;
-  fg: string;
+export type ProjectSkin = { bg: string; fg: string };
+
+/** Charge utile envoyée telle quelle à l'API Todoist. */
+export type TodoistTask = {
+  content: string;
+  /** Date en français naturel ("demain 14h"). Champ omis s'il n'y en a pas. */
+  due_string?: string;
+  /** Obligatoire : sans lui Todoist lit les dates en anglais et les ignore. */
+  due_lang: "fr";
+  priority: PrioValue;
+  project_id: string;
 };
 
-export type DueOption = {
-  key: string;
-  label: string;
-  /** Français naturel — c'est Todoist qui résout la date côté serveur. */
-  text: string;
-  days?: number;
-  weekday?: number;
-  eom?: boolean;
-};
+/** Tâche éditable dans l'écran Revue (charge utile + identifiant local). */
+export type Draft = TodoistTask & { id: string };
 
-/** Résultat du découpage d'une note en tâches. Contrat stable : voir parse.ts. */
-export type ParsedTask = {
-  title: string;
-  projectId: string;
-  dueKey: string;
-  dueText: string;
-  prio: PrioKey;
-};
+/** Résultat de création, tâche par tâche. */
+export type PushResult =
+  | { ok: true; id: string }
+  | { ok: false; error: string };
 
-/** Tâche en cours d'édition dans l'écran Revue. */
-export type Draft = ParsedTask & {
-  id: string;
-  dueISO: string | null;
-};
-
-export type SyncState = "synced" | "pending";
-
-/** Tâche envoyée, affichée dans l'écran Tâches. */
 export type SentTask = Draft & {
-  sync: SyncState;
+  /** `sent` = créée dans Todoist, `failed` = à réessayer. */
+  status: "sent" | "failed";
+  todoistId?: string;
+  error?: string;
 };
 
 export type View = "capture" | "review" | "tasks" | "settings";
 
 export type ToastKind = "ok" | "err";
+
+/**
+ * État de la chaîne, de bout en bout. Un seul état à la fois : c'est lui qui
+ * pilote les libellés, les spinners et ce qui est cliquable.
+ */
+export type Phase =
+  | "idle"
+  | "recording"
+  | "uploading"
+  | "transcribing"
+  | "parsing"
+  | "pushing"
+  | "success"
+  | "error";

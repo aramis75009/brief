@@ -1,35 +1,7 @@
 "use client";
 
-import { ChevronDownIcon } from "./icons";
-import { LANGS, PROJECTS, projectById } from "@/lib/mock";
-
-function Toggle({
-  on,
-  onToggle,
-  label,
-}: {
-  on: boolean;
-  onToggle: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      role="switch"
-      aria-checked={on}
-      title={label}
-      aria-label={label}
-      className="relative h-[30px] w-[50px] flex-none cursor-pointer rounded-[15px] border-none transition-colors duration-200"
-      style={{ background: on ? "#C0603C" : "#DAD5CF" }}
-    >
-      <span
-        className="absolute top-[3px] left-[3px] h-6 w-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform duration-200"
-        style={{ transform: `translateX(${on ? 20 : 0}px)` }}
-      />
-    </button>
-  );
-}
+import { skinFor } from "@/lib/todoist";
+import type { Project } from "@/lib/types";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -40,27 +12,21 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function SettingsScreen({
-  todoist,
-  onToggleTodoist,
-  defaultProject,
-  onDefaultProject,
-  lang,
-  onLang,
-  auto,
-  onToggleAuto,
-  onResetDemo,
+  projects,
+  projectsSource,
+  reloading,
+  onReloadProjects,
+  onClearSession,
+  onLock,
 }: {
-  todoist: boolean;
-  onToggleTodoist: () => void;
-  defaultProject: string;
-  onDefaultProject: (id: string) => void;
-  lang: string;
-  onLang: (code: string) => void;
-  auto: boolean;
-  onToggleAuto: () => void;
-  onResetDemo: () => void;
+  projects: Project[];
+  projectsSource: "todoist" | "fallback" | "cache" | null;
+  reloading: boolean;
+  onReloadProjects: () => void;
+  onClearSession: () => void;
+  onLock: () => void;
 }) {
-  const langName = (LANGS.find((l) => l.code === lang) ?? LANGS[0]).name;
+  const live = projectsSource === "todoist" || projectsSource === "cache";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -74,99 +40,95 @@ export function SettingsScreen({
           <div className="overflow-hidden rounded-[20px] border border-[rgba(28,26,24,0.07)] bg-card">
             <div className="flex min-h-14 items-center gap-3 px-4 py-[15px]">
               <div className="flex-1">
-                <p className="m-0 text-[15px] font-semibold text-ink">Todoist connecté</p>
+                <p className="m-0 text-[15px] font-semibold text-ink">Todoist</p>
                 <p className="mt-0.5 mb-0 text-xs font-normal text-muted">
-                  {todoist ? "Compte « paupy@brief.app » · 5 projets" : "Non connecté"}
+                  {live
+                    ? `Connecté · ${projects.length} projet${projects.length > 1 ? "s" : ""}`
+                    : "Liste de repli — projets en dur"}
                 </p>
               </div>
-              <Toggle on={todoist} onToggle={onToggleTodoist} label="Connexion Todoist" />
+              <span
+                className="flex-none rounded-lg px-2.5 py-1 text-[11px] font-semibold"
+                style={{
+                  background: live ? "#E6EAE4" : "#F4EBDD",
+                  color: live ? "#3F5145" : "#8A6A2E",
+                }}
+              >
+                {live ? "en ligne" : "repli"}
+              </span>
             </div>
 
             <div className="mx-4 h-px bg-[rgba(28,26,24,0.06)]" />
 
-            <label className="flex min-h-14 cursor-pointer items-center gap-3 px-4 py-[15px]">
+            <button
+              type="button"
+              onClick={onReloadProjects}
+              disabled={reloading}
+              className="flex min-h-14 w-full cursor-pointer items-center gap-3 border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-stone-2 disabled:opacity-60"
+            >
               <div className="flex-1">
-                <p className="m-0 text-[15px] font-semibold text-ink">Projet par défaut</p>
+                <p className="m-0 text-[15px] font-semibold text-ink">Recharger les projets</p>
                 <p className="mt-0.5 mb-0 text-xs font-normal text-muted">
-                  Si aucun projet n&apos;est détecté
+                  Le cache serveur dure 1 h
                 </p>
               </div>
-              <span className="relative inline-flex h-[34px] items-center gap-1.5 rounded-xl bg-stone-1 pr-[26px] pl-3 text-[13px] font-semibold text-ink">
-                {projectById(defaultProject).name}
-                <ChevronDownIcon className="absolute right-2.5 opacity-50" />
-                <select
-                  value={defaultProject}
-                  onChange={(e) => onDefaultProject(e.target.value)}
-                  aria-label="Projet par défaut"
-                  className="absolute inset-0 h-full w-full cursor-pointer border-none opacity-0"
-                >
-                  {PROJECTS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </span>
-            </label>
+              {reloading && (
+                <span className="animate-br-spin block h-4 w-4 flex-none rounded-full border-2 border-[rgba(28,26,24,0.15)] border-t-accent" />
+              )}
+            </button>
           </div>
         </div>
 
         <div>
-          <SectionLabel>Dictée</SectionLabel>
+          <SectionLabel>Projets</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {projects.map((p) => {
+              const skin = skinFor(p);
+              return (
+                <span
+                  key={p.id}
+                  className="inline-flex h-8 items-center rounded-[11px] px-3 text-[12.5px] font-semibold"
+                  style={{ background: skin.bg, color: skin.fg }}
+                >
+                  {p.name}
+                </span>
+              );
+            })}
+          </div>
+          <p className="mx-1 mt-2.5 mb-0 text-[11px] leading-[1.5] text-faint">
+            Brief n&apos;en crée aucun : le plan gratuit Todoist est limité à 5 projets.
+          </p>
+        </div>
+
+        <div>
+          <SectionLabel>Session</SectionLabel>
           <div className="overflow-hidden rounded-[20px] border border-[rgba(28,26,24,0.07)] bg-card">
-            <label className="flex min-h-14 cursor-pointer items-center gap-3 px-4 py-[15px]">
-              <div className="flex-1">
-                <p className="m-0 text-[15px] font-semibold text-ink">Langue</p>
-                <p className="mt-0.5 mb-0 text-xs font-normal text-muted">Reconnaissance vocale</p>
-              </div>
-              <span className="relative inline-flex h-[34px] items-center gap-1.5 rounded-xl bg-stone-1 pr-[26px] pl-3 text-[13px] font-semibold text-ink">
-                {langName}
-                <ChevronDownIcon className="absolute right-2.5 opacity-50" />
-                <select
-                  value={lang}
-                  onChange={(e) => onLang(e.target.value)}
-                  aria-label="Langue de dictée"
-                  className="absolute inset-0 h-full w-full cursor-pointer border-none opacity-0"
-                >
-                  {LANGS.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              </span>
-            </label>
+            <button
+              type="button"
+              onClick={onClearSession}
+              className="min-h-14 w-full cursor-pointer border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-stone-2"
+            >
+              <p className="m-0 text-[15px] font-semibold text-accent">Vider la session</p>
+              <p className="mt-0.5 mb-0 text-xs font-normal text-muted">
+                Efface transcription et historique local
+              </p>
+            </button>
 
             <div className="mx-4 h-px bg-[rgba(28,26,24,0.06)]" />
 
-            <div className="flex min-h-14 items-center gap-3 px-4 py-[15px]">
-              <div className="flex-1">
-                <p className="m-0 text-[15px] font-semibold text-ink">Structurer automatiquement</p>
-                <p className="mt-0.5 mb-0 text-xs font-normal text-muted">
-                  Passe en revue dès la fin de la dictée
-                </p>
-              </div>
-              <Toggle on={auto} onToggle={onToggleAuto} label="Structuration automatique" />
-            </div>
+            <button
+              type="button"
+              onClick={onLock}
+              className="min-h-14 w-full cursor-pointer border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-stone-2"
+            >
+              <p className="m-0 text-[15px] font-semibold text-ink">Verrouiller</p>
+              <p className="mt-0.5 mb-0 text-xs font-normal text-muted">Redemande le code</p>
+            </button>
           </div>
-        </div>
-
-        <div>
-          <SectionLabel>Données</SectionLabel>
-          <button
-            type="button"
-            onClick={onResetDemo}
-            className="min-h-14 w-full cursor-pointer rounded-[20px] border border-[rgba(28,26,24,0.07)] bg-card px-4 py-[15px] text-left transition-all duration-200 hover:border-[rgba(192,96,60,0.35)]"
-          >
-            <p className="m-0 text-[15px] font-semibold text-accent">Réinitialiser la démo</p>
-            <p className="mt-0.5 mb-0 text-xs font-normal text-muted">
-              Restaure les tâches d&apos;exemple
-            </p>
-          </button>
         </div>
 
         <p className="mx-1 my-0 text-[11px] text-faint">
-          Brief · prototype · parsing local (remplaçable par un LLM)
+          Brief · transcription Groq Whisper · structuration LLM · envoi Todoist
         </p>
       </div>
     </div>
