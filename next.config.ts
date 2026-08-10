@@ -4,7 +4,19 @@ const nextConfig: NextConfig = {
   // Sortie autonome : le conteneur embarque le serveur et ses seules
   // dépendances utiles, sans node_modules complet. Indispensable pour une
   // image légère sur le VPS.
-  output: "standalone",
+  //
+  // ⚠️ MAIS INCOMPATIBLE AVEC VERCEL. En mode standalone, Next range ses
+  // fichiers de traçage dans `.next/standalone/` et n'émet plus
+  // `.next/next-server.js.nft.json`. Le builder Vercel va le chercher là dans
+  // son étape `onBuildComplete` et échoue sur :
+  //     ENOENT: no such file or directory, open '.next/next-server.js.nft.json'
+  //
+  // Piège vicieux : `npm run build` réussit en local, parce que cette étape
+  // est propre à Vercel. L'échec n'apparaît qu'une fois poussé.
+  //
+  // `VERCEL` vaut "1" dans leurs builds. Le VPS, lui, n'a pas cette variable et
+  // garde donc la sortie autonome dont le Dockerfile a besoin.
+  output: process.env.VERCEL ? undefined : "standalone",
 
   async headers() {
     return [
