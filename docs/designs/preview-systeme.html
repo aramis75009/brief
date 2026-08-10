@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="fr" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brief — Système de design</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   BRIEF — tokens du système proposé
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --page:      #F5F3F0;
+  --tile:      #FFFFFF;
+  --ink:       #131211;
+  --ink-2:     #5C5852;
+  --ink-3:     #94908A;
+  --line:      rgba(19,18,17,.08);
+  --line-2:    rgba(19,18,17,.14);
+
+  --action:    #EC5230;
+  --action-lo: #FDEAE4;
+
+  --p1-bg: #E6E0F2; --p1-fg: #4A3F63;
+  --p2-bg: #DCE4EF; --p2-fg: #37475F;
+  --p3-bg: #DFE8DE; --p3-fg: #38513E;
+  --p4-bg: #F0E6D6; --p4-fg: #5A4830;
+  --p5-bg: #F3E1DA; --p5-fg: #6B4034;
+
+  --ok:    #3F6B4A;
+  --warn:  #9C6F22;
+  --error: #B23A22;
+
+  --r-chip: 10px;
+  --r-field: 14px;
+  --r-row: 20px;
+  --r-tile: 28px;
+  --r-pill: 999px;
+
+  --e1: 0 1px 2px rgba(19,18,17,.06), 0 4px 12px -8px rgba(19,18,17,.18);
+  --e2: 0 12px 32px -16px rgba(19,18,17,.35);
+  --e-mic: 0 12px 28px -12px rgba(236,82,48,.55);
+
+  --t-micro: 90ms;
+  --t-short: 180ms;
+  --t-med: 260ms;
+  --ease-in-out: cubic-bezier(.22,1,.36,1);
+}
+
+[data-mode="dark"] {
+  --page:  #0F0E0D;
+  --tile:  #1C1A19;
+  --ink:   #F2F0ED;
+  --ink-2: #A29D96;
+  --ink-3: #706B65;
+  --line:  rgba(242,240,237,.10);
+  --line-2:rgba(242,240,237,.18);
+
+  --action-lo: #3A1D14;
+
+  --p1-bg: #322B44; --p1-fg: #C9BEE4;
+  --p2-bg: #262F3D; --p2-fg: #B4C6DE;
+  --p3-bg: #263129; --p3-fg: #B3C9B6;
+  --p4-bg: #362D20; --p4-fg: #DCC69E;
+  --p5-bg: #3A281F; --p5-fg: #E0B7A5;
+
+  --ok:    #7FAE87;
+  --warn:  #C9A055;
+  --error: #E07C5E;
+
+  --e1: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px -8px rgba(0,0,0,.6);
+  --e2: 0 14px 34px -16px rgba(0,0,0,.75);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "General Sans", -apple-system, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--t-med) ease, color var(--t-med) ease;
+}
+
+/* ─── Chrome de la page d'aperçu ─────────────────────────── */
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 120px; }
+
+header.top {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap;
+  padding: 72px 0 40px;
+}
+h1.title {
+  margin: 0; font-size: 56px; font-weight: 600;
+  letter-spacing: -1.6px; line-height: 1;
+}
+.sub { margin: 12px 0 0; font-size: 17px; color: var(--ink-2); max-width: 46ch; line-height: 1.5; }
+
+.mode-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 44px; padding: 0 18px;
+  border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: var(--tile); color: var(--ink);
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  transition: all var(--t-short) var(--ease-in-out);
+}
+.mode-toggle:hover { border-color: var(--ink-3); }
+
+section { padding: 56px 0 0; }
+h2.sec {
+  margin: 0 0 6px; font-size: 11px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase; color: var(--ink-3);
+}
+h3.sec-t { margin: 0 0 28px; font-size: 27px; font-weight: 600; letter-spacing: -.6px; }
+.note { font-size: 14px; line-height: 1.6; color: var(--ink-2); max-width: 62ch; margin: 0 0 28px; }
+.note code { font-size: 13px; background: var(--action-lo); color: var(--action); padding: 1px 6px; border-radius: 6px; }
+[data-mode="dark"] .note code { color: #F09678; }
+
+/* ─── Cartes de section ──────────────────────────────────── */
+.panel {
+  background: var(--tile); border: 1px solid var(--line);
+  border-radius: var(--r-tile); padding: 32px;
+  box-shadow: var(--e1);
+}
+
+/* ─── Typo ───────────────────────────────────────────────── */
+.type-row { display: flex; align-items: baseline; gap: 24px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.type-row:last-child { border-bottom: 0; }
+.type-meta { flex: 0 0 130px; font-size: 12px; color: var(--ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
+.t56 { font-size: 56px; font-weight: 600; letter-spacing: -1.6px; line-height: 1; }
+.t40 { font-size: 40px; font-weight: 600; letter-spacing: -1.1px; line-height: 1.05; }
+.t27 { font-size: 27px; font-weight: 600; letter-spacing: -.6px; }
+.t21 { font-size: 21px; font-weight: 600; letter-spacing: -.3px; }
+.t17 { font-size: 17px; font-weight: 400; line-height: 1.5; }
+.t15 { font-size: 15px; font-weight: 500; }
+.t13 { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.t11 { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-3); }
+
+/* ─── Palette ────────────────────────────────────────────── */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px,1fr)); gap: 14px; }
+.sw { border-radius: var(--r-row); overflow: hidden; border: 1px solid var(--line); }
+.sw-chip { height: 82px; }
+.sw-meta { padding: 11px 13px 13px; background: var(--tile); }
+.sw-name { font-size: 13px; font-weight: 600; }
+.sw-hex { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+/* ─── Composants ─────────────────────────────────────────── */
+.comp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 28px; }
+.comp-label { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-3); margin-bottom: 14px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  height: 52px; padding: 0 24px; border: 0; border-radius: var(--r-field);
+  font-family: inherit; font-size: 16px; font-weight: 600;
+  cursor: pointer; transition: all var(--t-short) var(--ease-in-out);
+}
+.btn:active { transform: scale(.985); }
+.btn-primary { background: var(--ink); color: var(--page); width: 100%; }
+.btn-primary:hover { opacity: .88; }
+.btn-accent { background: var(--action); color: #fff; width: 100%; }
+.btn-ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-2); width: 100%; }
+.btn-ghost:hover { background: var(--page); }
+.btn:disabled { background: var(--line); color: var(--ink-3); cursor: default; }
+
+.field {
+  width: 100%; height: 48px; padding: 0 16px;
+  border: 1px solid var(--line-2); border-radius: var(--r-field);
+  background: var(--tile); color: var(--ink);
+  font-family: inherit; font-size: 15px;
+  transition: border-color var(--t-short) ease;
+}
+.field:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px var(--action-lo); }
+.field::placeholder { color: var(--ink-3); }
+
+.chip {
+  display: inline-flex; align-items: center; height: 26px; padding: 0 11px;
+  border-radius: var(--r-chip); font-size: 12px; font-weight: 600;
+}
+
+.alert { border-radius: var(--r-row); padding: 15px 17px; font-size: 14px; line-height: 1.5; display: flex; gap: 11px; align-items: flex-start; }
+.alert b { display: block; font-weight: 600; margin-bottom: 2px; }
+.alert-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 7px; }
+
+/* ─── Rayons ─────────────────────────────────────────────── */
+.radii { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+.radius-demo { text-align: center; }
+.radius-box { background: var(--p2-bg); border: 1px solid var(--line); }
+.radius-cap { font-size: 11.5px; color: var(--ink-3); margin-top: 9px; font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MAQUETTES — écrans réels de Brief
+   ═══════════════════════════════════════════════════════════════ */
+.phones { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 32px; }
+.phone-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.phone-cap { font-size: 13px; font-weight: 600; color: var(--ink-2); text-align: center; }
+.phone-cap span { display: block; font-weight: 400; color: var(--ink-3); font-size: 12.5px; margin-top: 3px; }
+
+.phone {
+  width: 340px; height: 700px;
+  background: var(--page);
+  border-radius: 44px;
+  border: 1px solid var(--line-2);
+  box-shadow: var(--e2);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  position: relative;
+}
+.screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.scr-head { padding: 26px 20px 10px; flex: none; }
+.scr-title { font-size: 27px; font-weight: 600; letter-spacing: -.7px; margin: 0; }
+.scr-sub { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 0; line-height: 1.45; }
+.scr-body { flex: 1; overflow: hidden; padding: 8px 20px 0; }
+.scr-foot { flex: none; padding: 8px 20px 12px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+/* Barre d'onglets */
+.tabbar {
+  flex: none; display: flex; align-items: center;
+  border-top: 1px solid var(--line);
+  background: var(--tile); padding: 8px 12px 16px;
+}
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--ink-3); }
+.tab.on { color: var(--action); }
+.tab-l { font-size: 10.5px; font-weight: 600; letter-spacing: .2px; }
+
+/* Tuile statistique géante */
+.stat-tile {
+  background: var(--ink); color: var(--page);
+  border-radius: var(--r-tile); padding: 20px 22px 22px;
+  margin-bottom: 12px;
+}
+.stat-n { font-size: 56px; font-weight: 600; letter-spacing: -2.4px; line-height: .95; font-variant-numeric: tabular-nums; }
+.stat-l { font-size: 13.5px; opacity: .68; margin-top: 6px; line-height: 1.35; }
+.stat-bars { display: flex; gap: 9px; align-items: flex-end; height: 40px; margin-top: 18px; }
+.stat-bars i { width: 11px; flex: none; border-radius: var(--r-pill); background: rgba(245,243,240,.22); display: block; }
+.stat-bars i.hot { background: var(--action); }
+
+/* Tuiles projet */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { border-radius: var(--r-row); padding: 14px 15px 15px; }
+.tile-n { font-size: 27px; font-weight: 600; letter-spacing: -.8px; font-variant-numeric: tabular-nums; line-height: 1; }
+.tile-l { font-size: 12.5px; font-weight: 500; margin-top: 5px; opacity: .82; }
+
+/* Micro */
+.mic-zone { position: relative; width: 108px; height: 108px; display: grid; place-items: center; }
+.halo { position: absolute; width: 88px; height: 88px; border-radius: 50%; background: rgba(236,82,48,.22); animation: ring 1.9s ease-out infinite; }
+.halo:nth-child(2) { animation-delay: .63s; }
+.halo:nth-child(3) { animation-delay: 1.26s; }
+@keyframes ring { 0% { transform: scale(1); opacity: .5 } 70% { opacity: 0 } 100% { transform: scale(2.1); opacity: 0 } }
+.mic {
+  position: relative; width: 88px; height: 88px; border-radius: 50%;
+  background: var(--action); color: #fff; border: 0;
+  display: grid; place-items: center; cursor: pointer;
+  box-shadow: var(--e-mic);
+}
+.mic-hint { font-size: 12.5px; font-weight: 500; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* Carte transcription */
+.card {
+  background: var(--tile); border: 1px solid var(--line);
+  border-radius: var(--r-row); padding: 16px 17px 17px;
+  box-shadow: var(--e1); margin-bottom: 10px;
+}
+.card-lab { font-size: 10.5px; font-weight: 600; letter-spacing: 1.1px; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+.card-p { font-size: 15.5px; line-height: 1.5; margin: 0; }
+
+/* Lignes de tri (écran Revue) */
+.sortrow {
+  background: var(--tile); border: 1px solid var(--line);
+  border-radius: var(--r-row); padding: 13px 14px 12px; margin-bottom: 9px;
+  box-shadow: var(--e1);
+}
+.sortrow-t { font-size: 14.5px; font-weight: 500; line-height: 1.35; margin: 0 0 9px; }
+.sortrow-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.meta-pill {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 9px;
+  border-radius: var(--r-chip); border: 1px solid var(--line-2);
+  font-size: 11.5px; font-weight: 500; color: var(--ink-2);
+}
+.prio-dot { width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; }
+
+/* Groupes (écran Tâches) */
+.group-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; }
+.seg { display: flex; gap: 3px; background: var(--line); border-radius: var(--r-field); padding: 3px; margin-top: 12px; }
+.seg button {
+  flex: 1; height: 34px; border: 0; border-radius: 11px; background: transparent;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink-3); cursor: pointer;
+}
+.seg button.on { background: var(--tile); color: var(--ink); box-shadow: 0 1px 4px -2px rgba(19,18,17,.35); }
+
+footer.end { padding: 72px 0 0; font-size: 13.5px; color: var(--ink-3); line-height: 1.7; border-top: 1px solid var(--line); margin-top: 72px; }
+
+@media (max-width: 640px) {
+  .wrap { padding: 0 18px 80px; }
+  h1.title { font-size: 40px; letter-spacing: -1.1px; }
+  header.top { padding: 44px 0 28px; }
+  .panel { padding: 22px; }
+  .type-row { flex-direction: column; gap: 6px; }
+  .type-meta { flex: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1 class="title">Brief</h1>
+    <p class="sub">Système de design proposé — console bento douce. Une action, cinq destinations, zéro décoration.</p>
+  </div>
+  <button class="mode-toggle" id="toggle">◐ Mode sombre</button>
+</header>
+
+<!-- ═══════════ MAQUETTES ═══════════ -->
+<section>
+  <h2 class="sec">01 — Le produit</h2>
+  <h3 class="sec-t">Trois écrans, système appliqué</h3>
+  <p class="note">Rendu réel : vraie police General Sans, vraies valeurs de la palette, vrais rayons. Ce que tu vois est ce que le CSS produira. Bascule en mode sombre pour vérifier les deux thèmes.</p>
+
+  <div class="phones">
+
+    <!-- ── CAPTURE ── -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="screen">
+          <div class="scr-head">
+            <h2 class="scr-title">Brief</h2>
+            <p class="scr-sub">Dicte ta note, elle part en Quick Add Todoist.</p>
+          </div>
+          <div class="scr-body">
+            <div class="stat-tile">
+              <div class="stat-n">7</div>
+              <div class="stat-l">tâches parties aujourd'hui</div>
+              <div class="stat-bars">
+                <i style="height:38%"></i><i style="height:62%"></i><i style="height:44%"></i>
+                <i style="height:88%"></i><i style="height:56%"></i><i style="height:30%"></i>
+                <i class="hot" style="height:100%"></i>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-lab">Transcription</div>
+              <p class="card-p">Rappeler le fournisseur demain matin, et boucler la fiche produit avant vendredi.</p>
+            </div>
+          </div>
+          <div class="scr-foot">
+            <div class="mic-zone">
+              <span class="halo"></span><span class="halo"></span><span class="halo"></span>
+              <button class="mic" aria-label="Dicter">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/>
+                </svg>
+              </button>
+            </div>
+            <span class="mic-hint">Appuyer pour dicter</span>
+            <button class="btn btn-primary">
+              Structurer la note
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <div class="tabbar">
+            <div class="tab on">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
+              <span class="tab-l">Capture</span>
+            </div>
+            <div class="tab">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              <span class="tab-l">Tâches</span>
+            </div>
+            <div class="tab">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>
+              <span class="tab-l">Réglages</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="phone-cap">Capture<span>Le micro est le seul objet coloré de l'écran</span></p>
+    </div>
+
+    <!-- ── REVUE / TABLE DE TRI ── -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="screen">
+          <div class="scr-head">
+            <h2 class="scr-title">Revue</h2>
+            <p class="scr-sub">3 tâches détectées — vérifie la destination.</p>
+          </div>
+          <div class="scr-body">
+            <div class="sortrow">
+              <p class="sortrow-t">Rappeler le fournisseur</p>
+              <div class="sortrow-meta">
+                <span class="chip" style="background:var(--p2-bg);color:var(--p2-fg)">Frip &amp; Trend</span>
+                <span class="meta-pill">demain 9 h</span>
+                <span class="meta-pill"><i class="prio-dot" style="background:var(--error)"></i>P1</span>
+              </div>
+            </div>
+            <div class="sortrow">
+              <p class="sortrow-t">Boucler la fiche produit</p>
+              <div class="sortrow-meta">
+                <span class="chip" style="background:var(--p3-bg);color:var(--p3-fg)">My Flip</span>
+                <span class="meta-pill">vendredi</span>
+                <span class="meta-pill"><i class="prio-dot" style="background:var(--warn)"></i>P2</span>
+              </div>
+            </div>
+            <div class="sortrow">
+              <p class="sortrow-t">Relire le devis de la Table de Paupy</p>
+              <div class="sortrow-meta">
+                <span class="chip" style="background:var(--p4-bg);color:var(--p4-fg)">La Table de Paupy</span>
+                <span class="meta-pill">pas d'échéance</span>
+                <span class="meta-pill"><i class="prio-dot" style="background:var(--ink-3)"></i>P4</span>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <div class="card-lab">Ajouter</div>
+              <input class="field" placeholder="Nouvelle tâche…">
+            </div>
+          </div>
+          <div class="scr-foot">
+            <button class="btn btn-accent">Envoyer 3 tâches</button>
+            <button class="btn btn-ghost">Retour à la dictée</button>
+          </div>
+          <div class="tabbar">
+            <div class="tab on"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg><span class="tab-l">Capture</span></div>
+            <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="tab-l">Tâches</span></div>
+            <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg><span class="tab-l">Réglages</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="phone-cap">Revue — table de tri<span>Chaque ligne est un aiguillage, pas une phrase</span></p>
+    </div>
+
+    <!-- ── VISION GLOBALE ── -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="screen">
+          <div class="scr-head">
+            <h2 class="scr-title">Tâches</h2>
+            <div class="seg">
+              <button class="on">Tout</button><button>Envoyées</button><button>Échouées</button>
+            </div>
+          </div>
+          <div class="scr-body">
+            <div class="tiles" style="margin-bottom:14px">
+              <div class="tile" style="background:var(--p2-bg);color:var(--p2-fg)">
+                <div class="tile-n">12</div><div class="tile-l">Frip &amp; Trend</div>
+              </div>
+              <div class="tile" style="background:var(--p3-bg);color:var(--p3-fg)">
+                <div class="tile-n">8</div><div class="tile-l">My Flip</div>
+              </div>
+              <div class="tile" style="background:var(--p4-bg);color:var(--p4-fg)">
+                <div class="tile-n">5</div><div class="tile-l">La Table de Paupy</div>
+              </div>
+              <div class="tile" style="background:var(--p1-bg);color:var(--p1-fg)">
+                <div class="tile-n">3</div><div class="tile-l">Web@cadémie</div>
+              </div>
+            </div>
+
+            <div class="group-head">
+              <span class="chip" style="background:var(--p2-bg);color:var(--p2-fg)">Frip &amp; Trend</span>
+              <span style="font-size:11.5px;font-weight:500;color:var(--ink-3)">2 tâches</span>
+            </div>
+            <div class="sortrow">
+              <p class="sortrow-t">Rappeler le fournisseur</p>
+              <div class="sortrow-meta">
+                <span class="meta-pill" style="color:var(--ok);border-color:var(--ok)">✓ envoyée</span>
+                <span class="meta-pill">demain 9 h</span>
+              </div>
+            </div>
+            <div class="sortrow" style="border-color:var(--error)">
+              <p class="sortrow-t">Commander les étiquettes</p>
+              <div class="sortrow-meta">
+                <span class="meta-pill" style="color:var(--error);border-color:var(--error)">échec réseau</span>
+                <span class="meta-pill">jeudi</span>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg><span class="tab-l">Capture</span></div>
+            <div class="tab on"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="tab-l">Tâches</span></div>
+            <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg><span class="tab-l">Réglages</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="phone-cap">Tâches — vision globale<span>La couleur d'une tuile = un projet Todoist</span></p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════ TYPO ═══════════ -->
+<section>
+  <h2 class="sec">02 — Typographie</h2>
+  <h3 class="sec-t">General Sans, famille unique</h3>
+  <p class="note">Géométrique comme ta référence, mais avec des ouvertures plus serrées : reste lisible à 13 px sur mobile. Une seule famille, pas de mono — une police de moins à télécharger sur une app qu'on ouvre pour gagner dix secondes. Huit crans, pas un de plus.</p>
+  <div class="panel">
+    <div class="type-row"><div class="type-meta">56 / 600 / -2.4</div><div class="t56">7 parties</div></div>
+    <div class="type-row"><div class="type-meta">40 / 600 / -1.1</div><div class="t40">Vision globale</div></div>
+    <div class="type-row"><div class="type-meta">27 / 600 / -0.7</div><div class="t27">Revue — 3 tâches détectées</div></div>
+    <div class="type-row"><div class="type-meta">21 / 600 / -0.3</div><div class="t21">Frip &amp; Trend</div></div>
+    <div class="type-row"><div class="type-meta">17 / 400</div><div class="t17">Rappeler le fournisseur demain matin, et boucler la fiche produit avant vendredi.</div></div>
+    <div class="type-row"><div class="type-meta">15 / 500</div><div class="t15">Structurer la note</div></div>
+    <div class="type-row"><div class="type-meta">13 / 500</div><div class="t13">Dicte ta note, elle part en Quick Add Todoist.</div></div>
+    <div class="type-row"><div class="type-meta">11 / 600 / +1.2</div><div class="t11">Transcription</div></div>
+  </div>
+</section>
+
+<!-- ═══════════ COULEUR ═══════════ -->
+<section>
+  <h2 class="sec">03 — Couleur</h2>
+  <h3 class="sec-t">Une action, cinq destinations</h3>
+  <p class="note">Le corail <code>#EC5230</code> ne sert qu'à agir : micro, envoi, onglet actif. Les cinq teintes ne décorent jamais — chacune désigne un projet Todoist. Si tu vois du sable dans l'app, la tâche part chez La Table de Paupy. C'est la règle qui empêche la palette de dériver.</p>
+  <div class="panel">
+    <div class="comp-label">Action &amp; encre</div>
+    <div class="swatches" style="margin-bottom:32px">
+      <div class="sw"><div class="sw-chip" style="background:#EC5230"></div><div class="sw-meta"><div class="sw-name">Action</div><div class="sw-hex">#EC5230</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:var(--ink)"></div><div class="sw-meta"><div class="sw-name">Encre</div><div class="sw-hex">#131211</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#5C5852"></div><div class="sw-meta"><div class="sw-name">Encre 2</div><div class="sw-hex">#5C5852</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#94908A"></div><div class="sw-meta"><div class="sw-name">Encre 3</div><div class="sw-hex">#94908A</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#F5F3F0"></div><div class="sw-meta"><div class="sw-name">Page</div><div class="sw-hex">#F5F3F0</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#FFFFFF;border-bottom:1px solid var(--line)"></div><div class="sw-meta"><div class="sw-name">Tuile</div><div class="sw-hex">#FFFFFF</div></div></div>
+    </div>
+
+    <div class="comp-label">Destinations — projets Todoist</div>
+    <div class="swatches" style="margin-bottom:32px">
+      <div class="sw"><div class="sw-chip" style="background:#E6E0F2"></div><div class="sw-meta"><div class="sw-name">Lilas</div><div class="sw-hex">#E6E0F2 · #4A3F63</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#DCE4EF"></div><div class="sw-meta"><div class="sw-name">Ardoise</div><div class="sw-hex">#DCE4EF · #37475F</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#DFE8DE"></div><div class="sw-meta"><div class="sw-name">Sauge</div><div class="sw-hex">#DFE8DE · #38513E</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#F0E6D6"></div><div class="sw-meta"><div class="sw-name">Sable</div><div class="sw-hex">#F0E6D6 · #5A4830</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#F3E1DA"></div><div class="sw-meta"><div class="sw-name">Argile</div><div class="sw-hex">#F3E1DA · #6B4034</div></div></div>
+    </div>
+
+    <div class="comp-label">Sémantique</div>
+    <div class="swatches">
+      <div class="sw"><div class="sw-chip" style="background:#3F6B4A"></div><div class="sw-meta"><div class="sw-name">Succès</div><div class="sw-hex">#3F6B4A</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#9C6F22"></div><div class="sw-meta"><div class="sw-name">Attention</div><div class="sw-hex">#9C6F22</div></div></div>
+      <div class="sw"><div class="sw-chip" style="background:#B23A22"></div><div class="sw-meta"><div class="sw-name">Erreur</div><div class="sw-hex">#B23A22</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ COMPOSANTS ═══════════ -->
+<section>
+  <h2 class="sec">04 — Composants</h2>
+  <h3 class="sec-t">Boutons, champs, alertes, rayons</h3>
+  <div class="panel">
+    <div class="comp-grid">
+      <div>
+        <div class="comp-label">Boutons</div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <button class="btn btn-primary">Structurer la note</button>
+          <button class="btn btn-accent">Envoyer 3 tâches</button>
+          <button class="btn btn-ghost">Retour à la dictée</button>
+          <button class="btn btn-primary" disabled>Rien à envoyer</button>
+        </div>
+      </div>
+      <div>
+        <div class="comp-label">Champs &amp; chips</div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <input class="field" placeholder="Nouvelle tâche…">
+          <input class="field" value="Rappeler le fournisseur">
+          <div style="display:flex;gap:7px;flex-wrap:wrap;padding-top:4px">
+            <span class="chip" style="background:var(--p1-bg);color:var(--p1-fg)">Web@cadémie</span>
+            <span class="chip" style="background:var(--p2-bg);color:var(--p2-fg)">Frip &amp; Trend</span>
+            <span class="chip" style="background:var(--p3-bg);color:var(--p3-fg)">My Flip</span>
+            <span class="chip" style="background:var(--p4-bg);color:var(--p4-fg)">Paupy</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="comp-label">Alertes</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="alert" style="background:var(--p3-bg);color:var(--p3-fg)"><i class="alert-dot" style="background:var(--ok)"></i><div><b>3 tâches envoyées</b>Elles sont dans Todoist.</div></div>
+          <div class="alert" style="background:var(--p4-bg);color:var(--p4-fg)"><i class="alert-dot" style="background:var(--warn)"></i><div><b>Échéance ambiguë</b>« bientôt » n'a pas été converti en date.</div></div>
+          <div class="alert" style="background:var(--action-lo);color:var(--error)"><i class="alert-dot" style="background:var(--error)"></i><div><b>Micro indisponible</b>Autorise l'accès dans les réglages du navigateur.</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="comp-label">Rayons — hiérarchie</div>
+        <p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin:0 0 16px">Le rayon grandit avec l'élément. C'est ce qui évite le rendu « tout est un bonbon ».</p>
+        <div class="radii">
+          <div class="radius-demo"><div class="radius-box" style="width:44px;height:44px;border-radius:10px"></div><div class="radius-cap">10 chip</div></div>
+          <div class="radius-demo"><div class="radius-box" style="width:56px;height:56px;border-radius:14px"></div><div class="radius-cap">14 champ</div></div>
+          <div class="radius-demo"><div class="radius-box" style="width:72px;height:72px;border-radius:20px"></div><div class="radius-cap">20 ligne</div></div>
+          <div class="radius-demo"><div class="radius-box" style="width:92px;height:92px;border-radius:28px"></div><div class="radius-cap">28 tuile</div></div>
+          <div class="radius-demo"><div class="radius-box" style="width:56px;height:56px;border-radius:999px"></div><div class="radius-cap">∞ pilule</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="end">
+  Brief — système proposé par <b>/design-consultation</b>, 9 août 2026.<br>
+  Structure reprise de la référence Cooper ; palette et hiérarchie de rayons remplacées pour éviter le pastel par défaut des générateurs d'UI.
+</footer>
+
+</div>
+
+<script>
+const btn = document.getElementById('toggle');
+btn.addEventListener('click', () => {
+  const dark = document.documentElement.dataset.mode === 'dark';
+  document.documentElement.dataset.mode = dark ? 'light' : 'dark';
+  btn.textContent = dark ? '◐ Mode sombre' : '◑ Mode clair';
+});
+</script>
+</body>
+</html>

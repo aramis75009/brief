@@ -113,12 +113,12 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-between px-7 pt-6 pb-4">
       <div className="flex flex-col items-center">
-        <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[26px] bg-accent text-[#FFF3EE] shadow-[0_10px_26px_-10px_rgba(192,96,60,0.65)]">
+        <div className="flex h-[72px] w-[72px] items-center justify-center rounded-tile bg-action text-[#FFF3EE] shadow-[var(--e-mic)]">
           <MicIcon size={32} />
         </div>
 
-        <h1 className="mt-5 mb-0 text-[27px] font-semibold tracking-[-0.5px] text-ink">Brief</h1>
-        <p className="mt-1.5 mb-0 text-center text-[13.5px] leading-[1.45] font-normal text-muted">
+        <h1 className="mt-5 mb-0 text-27 font-semibold tracking-[-0.5px] text-ink">Brief</h1>
+        <p className="mt-1.5 mb-0 text-center text-13 leading-[1.45] font-normal text-ink-2">
           Saisis ton code pour accéder à l&apos;app.
         </p>
 
@@ -134,7 +134,7 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
                 key={i}
                 className="h-[15px] w-[15px] rounded-full transition-all duration-150"
                 style={{
-                  background: filled ? "#C0603C" : "transparent",
+                  background: filled ? "var(--color-action)" : "transparent",
                   border: filled ? "none" : "1.5px solid #D8CFC9",
                   transform: shake ? `translateX(${i % 2 ? 5 : -5}px)` : "none",
                   transitionDuration: shake ? "60ms" : "150ms",
@@ -146,10 +146,10 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
 
         <div className="mt-4 flex h-5 items-center">
           {checking && (
-            <span className="animate-br-spin block h-4 w-4 rounded-full border-2 border-[rgba(28,26,24,0.15)] border-t-accent" />
+            <span className="animate-br-spin block h-4 w-4 rounded-full border-2 border-[var(--line-2)] border-t-action" />
           )}
           {!checking && error && (
-            <span className="animate-br-in text-[13px] font-semibold text-accent-deep">
+            <span className="animate-br-in text-13 font-semibold text-error">
               {error}
             </span>
           )}
@@ -171,8 +171,8 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
                 "mx-auto flex h-16 w-16 cursor-pointer items-center justify-center rounded-full " +
                 "border-none transition-all duration-150 select-none disabled:opacity-40 " +
                 (isDel
-                  ? "bg-transparent text-ink-soft active:bg-stone-1"
-                  : "bg-card text-[26px] font-medium text-ink shadow-[0_1px_3px_-2px_rgba(28,26,24,0.35)] active:scale-95 active:bg-stone-1")
+                  ? "bg-transparent text-ink-2 active:bg-page"
+                  : "bg-tile text-27 font-medium text-ink shadow-[var(--e1)] active:scale-95 active:bg-page")
               }
             >
               {isDel ? <BackspaceIcon /> : key}

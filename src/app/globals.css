@@ -1,54 +1,121 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
- * Tokens repris tels quels de Brief.dc.html (claude.ai/design).
- * Ne pas inventer de teinte : toute couleur ici existe dans la maquette.
+ * Tokens — source de vérité : DESIGN.md à la racine du dépôt.
+ *
+ * Règle qui gouverne la palette : LA COULEUR NE DÉCORE JAMAIS. Le corail sert
+ * uniquement à agir (micro, envoi, onglet actif, focus). Les cinq teintes
+ * « destination » désignent chacune un projet. Une teinte posée pour faire joli
+ * est un bug de design, pas une variation.
+ *
+ * Ne pas ajouter de valeur ici sans l'ajouter d'abord à DESIGN.md.
  * ------------------------------------------------------------------------ */
 @theme {
   /* Fonds */
-  --color-canvas: #dcd8d2;
-  --color-surface: #faf8f5;
-  --color-card: #ffffff;
+  --color-page: #f5f3f0;
+  --color-tile: #ffffff;
 
   /* Encre */
-  --color-ink: #1c1a18;
-  --color-ink-hover: #332f2b;
-  --color-ink-soft: #4a4640;
-  --color-muted: #8a8580;
-  --color-muted-2: #b0aaa4;
-  --color-muted-3: #a9a29b;
-  --color-muted-4: #ada7a0;
-  --color-faint: #c3bdb6;
+  --color-ink: #131211;
+  --color-ink-2: #5c5852;
+  --color-ink-3: #94908a;
 
-  /* Accent terracotta */
-  --color-accent: #c0603c;
-  --color-accent-hover: #9e4b2c;
-  --color-accent-deep: #b2542f;
-  --color-accent-soft: #f6e4db;
+  /* Action — jamais décoratif */
+  --color-action: #ec5230;
+  --color-action-lo: #fdeae4;
 
-  /* Neutres chauds */
-  --color-stone-1: #f1eee9;
-  --color-stone-2: #f4f1ec;
-  --color-stone-3: #efede9;
-  --color-track: #dad5cf;
-  --color-disabled: #d8cfc9;
-  --color-grip: #d9d4ce;
-  --color-dot: #d3cec8;
+  /* Destinations — une teinte = un projet */
+  --color-p1: #e6e0f2;
+  --color-p1-ink: #4a3f63;
+  --color-p2: #dce4ef;
+  --color-p2-ink: #37475f;
+  --color-p3: #dfe8de;
+  --color-p3-ink: #38513e;
+  --color-p4: #f0e6d6;
+  --color-p4-ink: #5a4830;
+  --color-p5: #f3e1da;
+  --color-p5-ink: #6b4034;
 
   /* Sémantique */
-  --color-ok: #5a7a5e;
-  --color-warn: #a8792f;
-  --color-danger: #8e3b22;
+  --color-ok: #3f6b4a;
+  --color-warn: #9c6f22;
+  --color-error: #b23a22;
 
-  --font-sans: var(--font-outfit), "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, Menlo, monospace;
+  /* Rayons — le rayon grandit avec l'élément. C'est ce qui évite le rendu
+     « tout est un bonbon » des maquettes bento génériques. */
+  --radius-chip: 10px;
+  --radius-field: 14px;
+  --radius-row: 20px;
+  --radius-tile: 28px;
 
-  /* Animations de la maquette */
+  /* Typographie — une seule famille, pas de mono. Une police de moins à
+     charger sur une app qu'on ouvre pour gagner dix secondes. */
+  --font-sans: var(--font-general-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Échelle typographique — huit crans, pas un de plus. Toute taille absente
+     de cette liste est une erreur. */
+  --text-11: 11px;
+  --text-13: 13px;
+  --text-15: 15px;
+  --text-17: 17px;
+  --text-21: 21px;
+  --text-27: 27px;
+  --text-40: 40px;
+  --text-56: 56px;
+
+  /* Mouvement — une seule animation en boucle dans toute l'app : le halo. */
   --animate-br-ring: br-ring 1.9s ease-out infinite;
-  --animate-br-in: br-in 0.2s ease both;
+  --animate-br-in: br-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-br-sheet: br-sheet 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-br-spin: br-spin 0.7s linear infinite;
-  --animate-br-bar: br-bar 0.8s ease-in-out infinite;
+}
+
+/* Lignes et ombres : hors @theme, ces valeurs portent une transparence qui
+   dépend du thème. Elles vivent donc dans :root et basculent en mode sombre. */
+:root {
+  --line: rgba(19, 18, 17, 0.08);
+  --line-2: rgba(19, 18, 17, 0.14);
+  --e1: 0 1px 2px rgba(19, 18, 17, 0.06), 0 4px 12px -8px rgba(19, 18, 17, 0.18);
+  --e2: 0 12px 32px -16px rgba(19, 18, 17, 0.35);
+  --e-mic: 0 12px 28px -12px rgba(236, 82, 48, 0.55);
+}
+
+/* ---------------------------------------------------------------------------
+ * Mode sombre — on redessine les surfaces, on n'inverse pas. Les teintes de
+ * destination sont désaturées et assombries ; le corail d'action ne bouge pas,
+ * il tient sur les deux fonds.
+ * ------------------------------------------------------------------------ */
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-page: #0f0e0d;
+    --color-tile: #1c1a19;
+    --color-ink: #f2f0ed;
+    --color-ink-2: #a29d96;
+    --color-ink-3: #706b65;
+    --color-action-lo: #3a1d14;
+
+    --color-p1: #322b44;
+    --color-p1-ink: #c9bee4;
+    --color-p2: #262f3d;
+    --color-p2-ink: #b4c6de;
+    --color-p3: #263129;
+    --color-p3-ink: #b3c9b6;
+    --color-p4: #362d20;
+    --color-p4-ink: #dcc69e;
+    --color-p5: #3a281f;
+    --color-p5-ink: #e0b7a5;
+
+    --color-ok: #7fae87;
+    --color-warn: #c9a055;
+    --color-error: #e07c5e;
+  }
+
+  :root {
+    --line: rgba(242, 240, 237, 0.1);
+    --line-2: rgba(242, 240, 237, 0.18);
+    --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px -8px rgba(0, 0, 0, 0.6);
+    --e2: 0 14px 34px -16px rgba(0, 0, 0, 0.75);
+  }
 }
 
 @keyframes br-ring {
@@ -66,10 +133,6 @@
 }
 @keyframes br-spin {
   to { transform: rotate(360deg); }
-}
-@keyframes br-bar {
-  0%, 100% { transform: scaleY(0.35); }
-  50% { transform: scaleY(1); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -105,7 +168,7 @@
  *
  * Du CSS écrit hors `@layer` l'emporte sur TOUTES les couches, donc sur
  * `@layer utilities` de Tailwind, quelle que soit la spécificité. Sans cette
- * couche, `button { color: inherit }` écrasait `text-surface` : le bouton
+ * couche, `button { color: inherit }` écrasait la couleur du texte : le bouton
  * « Structurer la note » s'affichait en noir sur noir, libellé et icône
  * invisibles. Ne pas sortir ces règles du layer.
  * ------------------------------------------------------------------------ */
@@ -121,7 +184,7 @@
   }
 
   body {
-    background: var(--color-canvas);
+    background: var(--color-page);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -142,6 +205,11 @@
   select {
     appearance: none;
     -webkit-appearance: none;
+  }
+
+  /* Les chiffres alignés partout : compteurs, minuteur, tuiles de charge. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 
   /* La maquette masque les scrollbars — comportement conservé. */

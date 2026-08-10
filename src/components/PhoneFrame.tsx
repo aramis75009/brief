@@ -11,9 +11,9 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-dvh items-center justify-center sm:px-4 sm:py-7">
       <div
         className="
-          safe-x relative flex h-dvh w-full flex-col overflow-hidden bg-surface
+          safe-x relative flex h-dvh w-full flex-col overflow-hidden bg-tile
           sm:h-[844px] sm:w-[390px] sm:rounded-[44px]
-          sm:shadow-[0_30px_70px_-20px_rgba(28,26,24,0.38),0_0_0_1px_rgba(28,26,24,0.06)]
+          sm:shadow-[0_30px_70px_-20px_rgba(19,18,17,0.38),0_0_0_1px_rgba(19,18,17,0.06)]
         "
       >
         {children}
@@ -31,7 +31,7 @@ export function StatusBar() {
   return (
     <>
       <div className="safe-top flex-none sm:hidden" />
-      <div className="hidden h-11 flex-none items-end justify-between px-[26px] pb-1 text-[12.5px] font-semibold tracking-[0.2px] text-ink sm:flex">
+      <div className="hidden h-11 flex-none items-end justify-between px-[26px] pb-1 text-13 font-semibold tracking-[0.2px] text-ink sm:flex">
         <span>9:41</span>
         <span className="flex items-center gap-[5px] opacity-75">
           <span className="relative block h-2 w-4 rounded-[2.5px] border-[1.4px] border-ink">

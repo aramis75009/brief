@@ -3,8 +3,8 @@
 import { MicIcon, SettingsIcon, TasksIcon } from "./icons";
 import type { View } from "@/lib/types";
 
-const ACTIVE = "#C0603C";
-const IDLE = "#ADA7A0";
+const ACTIVE = "var(--color-action)";
+const IDLE = "var(--color-ink-3)";
 
 type Tab = {
   key: View;
@@ -28,7 +28,7 @@ export function TabBar({
   onNavigate: (v: View) => void;
 }) {
   return (
-    <div className="safe-bottom flex flex-none items-start border-t border-[rgba(28,26,24,0.07)] bg-[rgba(250,248,245,0.94)] px-[18px] pt-2 pb-2 backdrop-blur-[12px] sm:h-[78px] sm:pb-0">
+    <div className="safe-bottom flex flex-none items-start border-t border-[var(--line)] bg-[rgba(250,248,245,0.94)] px-[18px] pt-2 pb-2 backdrop-blur-[12px] sm:h-[78px] sm:pb-0">
       {TABS.map(({ key, label, Icon, matches }) => {
         const on = matches.includes(view);
         return (
@@ -37,11 +37,11 @@ export function TabBar({
             type="button"
             onClick={() => onNavigate(key)}
             aria-current={on ? "page" : undefined}
-            className="flex h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-[14px] border-none bg-transparent transition-all duration-200"
+            className="flex h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-field border-none bg-transparent transition-all duration-200"
             style={{ color: on ? ACTIVE : IDLE }}
           >
             <Icon size={22} />
-            <span className="text-[10.5px] font-semibold tracking-[0.2px]">{label}</span>
+            <span className="text-11 font-semibold tracking-[0.2px]">{label}</span>
           </button>
         );
       })}

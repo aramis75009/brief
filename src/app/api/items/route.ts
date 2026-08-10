@@ -1,0 +1,112 @@
+import { isRealCalendarDate } from "@/lib/due";
+import { requirePin } from "@/lib/guard";
+import { inboxIdOf, isPriority } from "@/lib/projects";
+import { readItems, readProjects, saveItems } from "@/lib/store";
+import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
+
+/**
+ * Enregistrement des items. Remplace l'ancienne route de push vers Todoist.
+ *
+ * Idempotent par construction : l'`id` du brouillon est réutilisé tel quel, donc
+ * un double envoi écrase au lieu de dupliquer. C'est ce qui rend le double-clic
+ * et le rejeu d'une file d'attente hors-ligne inoffensifs, sans logique de
+ * déduplication à maintenir.
+ */
+
+function coerce(input: unknown, knownProjects: Set<string>, inbox: string): DraftItem | null {
+  if (typeof input !== "object" || input === null) return null;
+  const v = input as Record<string, unknown>;
+
+  const title = String(v.title ?? "").trim();
+  const id = String(v.id ?? "").trim();
+  if (!title || !id) return null;
+
+  const kind: ItemKind = v.kind === "event" ? "event" : "task";
+  const projectId = knownProjects.has(String(v.projectId ?? "")) ? String(v.projectId) : inbox;
+
+  // Une date illisible devient « pas d'échéance » : mieux vaut un rappel absent
+  // et visible qu'un rappel programmé au mauvais moment.
+  let due: string | null = null;
+  if (typeof v.due === "string" && v.due.trim()) {
+    const parsed = new Date(v.due);
+    // `isRealCalendarDate` d'abord : new Date("2026-02-31") rend le 3 mars
+    // sans erreur, donc `Number.isNaN` seul laisse passer des dates fausses.
+    if (isRealCalendarDate(v.due) && !Number.isNaN(parsed.getTime())) due = v.due;
+  }
+
+  return {
+    id,
+    kind,
+    title,
+    projectId,
+    due,
+    allDay: v.allDay === true,
+    priority: isPriority(v.priority) ? v.priority : 4,
+    rrule: typeof v.rrule === "string" && /^FREQ=/i.test(v.rrule) ? v.rrule : null,
+    notes: typeof v.notes === "string" ? v.notes : undefined,
+  };
+}
+
+export async function GET(req: Request): Promise<Response> {
+  const denied = requirePin(req);
+  if (denied) return denied;
+  return Response.json({ items: await readItems() });
+}
+
+export async function POST(req: Request): Promise<Response> {
+  const denied = requirePin(req);
+  if (denied) return denied;
+
+  let body: { items?: unknown };
+  try {
+    body = (await req.json()) as { items?: unknown };
+  } catch {
+    return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
+  }
+
+  const rows = Array.isArray(body.items) ? body.items : [];
+  if (!rows.length) {
+    return Response.json({ error: "Aucun item à enregistrer." }, { status: 400 });
+  }
+
+  const projects = await readProjects();
+  const known = new Set(projects.map((p) => p.id));
+  const inbox = inboxIdOf(projects);
+  const now = new Date().toISOString();
+
+  const results: SaveResult[] = [];
+  const toSave: Item[] = [];
+
+  for (const row of rows) {
+    const draft = coerce(row, known, inbox);
+    if (!draft) {
+      const id = String((row as { id?: unknown })?.id ?? "?");
+      results.push({ ok: false, id, error: "Item invalide : titre ou identifiant manquant." });
+      continue;
+    }
+    toSave.push({ ...draft, createdAt: now, remindedAt: null, doneAt: null });
+    results.push({ ok: true, id: draft.id });
+  }
+
+  if (toSave.length) {
+    try {
+      await saveItems(toSave);
+    } catch (e) {
+      // Le disque peut être en lecture seule (Vercel). On le dit plutôt que de
+      // laisser croire que les items sont enregistrés.
+      return Response.json(
+        {
+          error: "Items non enregistrés côté serveur.",
+          detail: e instanceof Error ? e.message : String(e),
+          saved: 0,
+          total: rows.length,
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  const saved = results.filter((r) => r.ok).length;
+  const status = saved === 0 ? 400 : saved === rows.length ? 200 : 207;
+  return Response.json({ results, saved, total: rows.length }, { status });
+}

@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.data
+.vercel
+certificates
+docs
+*.md
+!README.md
+.env*
+!.env.example

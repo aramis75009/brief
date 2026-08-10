@@ -13,16 +13,17 @@ import { Toast } from "./Toast";
 import {
   ApiError,
   fetchProjects,
+  fetchItems,
   parseNote,
-  pushTasks,
+  saveItems,
   transcribeAudio,
-  type ProjectsSource,
 } from "@/lib/api";
 import { uid } from "@/lib/demo";
+import { enqueue, flushQueue, queueDepth } from "@/lib/queue";
 import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
-import { FALLBACK_PROJECTS, inboxIdOf } from "@/lib/todoist";
+import { SEED_PROJECTS, inboxIdOf } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
-import type { Draft, Phase, Project, SentTask, ToastKind, TodoistTask, View } from "@/lib/types";
+import type { DraftItem, Item, Phase, Project, ToastKind, View } from "@/lib/types";
 
 /** La transcription brute survit au rechargement — elle ne doit jamais être perdue. */
 const TRANSCRIPT_KEY = "brief:transcript";
@@ -41,16 +42,15 @@ export function BriefApp() {
   const [appError, setAppError] = useState<AppError | null>(null);
 
   const [transcript, setTranscript] = useState(readStoredTranscript);
-  const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [sent, setSent] = useState<SentTask[]>([]);
+  const [drafts, setDrafts] = useState<DraftItem[]>([]);
+  /** Les items enregistrés, relus depuis le serveur : Brief en est la source. */
+  const [sent, setSent] = useState<Item[]>([]);
 
-  const [projects, setProjects] = useState<Project[]>(FALLBACK_PROJECTS);
-  const [projectsSource, setProjectsSource] = useState<ProjectsSource | null>(null);
+  const [projects, setProjects] = useState<Project[]>(SEED_PROJECTS);
   const [reloading, setReloading] = useState(false);
 
   const [filter, setFilter] = useState<FilterKey>("all");
   const [sheetId, setSheetId] = useState<string | null>(null);
-  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,24 +106,37 @@ export function BriefApp() {
     setWorkPhase("idle");
   }, []);
 
+  /* --- Items enregistrés --------------------------------------------------- */
+  const refreshItems = useCallback(async () => {
+    try {
+      // La file part en premier : sinon l'écran Tâches afficherait un état
+      // incomplet en donnant l'impression que des dictées ont disparu.
+      if (queueDepth() > 0) {
+        const { saved, remaining } = await flushQueue();
+        if (saved) flash(`${saved} item(s) en attente enregistré(s).`);
+        if (remaining) flash(`${remaining} toujours en attente.`, "err");
+      }
+      setSent(await fetchItems());
+    } catch {
+      // Une lecture qui échoue ne casse pas la capture : l'écran Tâches
+      // affichera simplement ce qu'il avait, la dictée reste possible.
+    }
+  }, [flash]);
+
   /* --- Projets ------------------------------------------------------------ */
   const loadProjects = useCallback(
     async (opts: { silent?: boolean } = {}) => {
       if (!opts.silent) setReloading(true);
       try {
-        const { projects: list, source } = await fetchProjects();
-        if (list.length) {
-          setProjects(list);
-          setProjectsSource(source);
-        }
+        const list = await fetchProjects();
+        if (list.length) setProjects(list);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           clearPin();
           setUnlocked(false);
         } else {
-          // Non bloquant : on garde la liste de repli déjà en place.
-          setProjectsSource("fallback");
-          if (!opts.silent) flash("Projets Todoist injoignables — liste de repli.", "err");
+          // Non bloquant : on garde la liste d'amorçage déjà en place.
+          if (!opts.silent) flash("Projets illisibles — liste par défaut.", "err");
         }
       } finally {
         setReloading(false);
@@ -150,8 +163,8 @@ export function BriefApp() {
           loadedRef.current = true;
           await loadProjects({ silent: true });
         }
-        const tasks = await parseNote(source, projectsRef.current);
-        setDrafts(tasks.map((t) => ({ ...t, id: uid() })));
+        const items = await parseNote(source);
+        setDrafts(items);
         setWorkPhase("idle");
         setView("review");
       } catch (e) {
@@ -200,7 +213,7 @@ export function BriefApp() {
   }, [recorder]);
 
   /* --- Revue -------------------------------------------------------------- */
-  const patchDraft = useCallback((id: string, patch: Partial<Draft>) => {
+  const patchDraft = useCallback((id: string, patch: Partial<DraftItem>) => {
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
   }, []);
 
@@ -213,112 +226,64 @@ export function BriefApp() {
       ...ds,
       {
         id: uid(),
-        content: "",
-        due_lang: "fr",
-        priority: 1,
-        project_id: inboxIdOf(projectsRef.current),
+        kind: "task",
+        title: "",
+        projectId: inboxIdOf(projectsRef.current),
+        due: null,
+        allDay: true,
+        priority: 4,
+        rrule: null,
       },
     ]);
   }, []);
 
-  /* --- Envoi vers Todoist ------------------------------------------------- */
-  const payloadOf = (d: Draft): TodoistTask => ({
-    content: d.content.trim(),
-    ...(d.due_string ? { due_string: d.due_string } : {}),
-    due_lang: "fr",
-    priority: d.priority,
-    project_id: d.project_id,
-  });
-
+  /* --- Enregistrement ------------------------------------------------------ */
   const sendRef = useRef<() => void>(() => {});
 
   const send = useCallback(async () => {
-    const ready = drafts.filter((d) => d.content.trim());
+    const ready = drafts.filter((d) => d.title.trim());
     if (!ready.length) {
-      flash("Aucune tâche à envoyer.", "err");
+      flash("Rien à enregistrer.", "err");
       return;
     }
     setAppError(null);
-    setWorkPhase("pushing");
+    setWorkPhase("saving");
     try {
-      const { results, created } = await pushTasks(ready.map(payloadOf));
+      // Le brouillon EST la charge utile : plus de conversion vers un format
+      // tiers, donc plus de champ qui se perd au passage.
+      const { saved, total } = await saveItems(ready.map((d) => ({ ...d, title: d.title.trim() })));
 
-      const next: SentTask[] = ready.map((d, i) => {
-        const r = results[i];
-        return r?.ok
-          ? { ...d, content: d.content.trim(), status: "sent", todoistId: r.id }
-          : { ...d, content: d.content.trim(), status: "failed", error: r?.error ?? "Échec inconnu." };
-      });
-
-      setSent((s) => [...next, ...s]);
-      // Seules les tâches créées quittent la revue : les échecs restent
-      // éditables ici ET consultables dans l'onglet Tâches.
-      setDrafts((ds) => ds.filter((d) => !next.some((n) => n.id === d.id && n.status === "sent")));
-
-      const failed = next.length - created;
-      if (failed === 0) {
-        setTranscript("");
-        setWorkPhase("success");
-        setView("capture");
-        flash(`${created} tâche${created > 1 ? "s" : ""} envoyée${created > 1 ? "s" : ""} vers Todoist`);
-      } else {
+      if (saved < total) {
         setWorkPhase("idle");
-        setView("tasks");
-        setFilter("failed");
-        flash(
-          `${created} envoyée${created > 1 ? "s" : ""}, ${failed} en échec — réessayable`,
-          "err",
-        );
+        flash(`${saved} enregistré(s) sur ${total}.`, "err");
+        return;
       }
+
+      await refreshItems();
+      setDrafts([]);
+      setTranscript("");
+      setWorkPhase("success");
+      setView("capture");
+      flash(`${saved} item${saved > 1 ? "s" : ""} enregistré${saved > 1 ? "s" : ""}`);
     } catch (e) {
-      fail(e, "L'envoi vers Todoist a échoué.", () => sendRef.current());
+      // Serveur injoignable : la note ne doit pas disparaître. On met en file
+      // et on le DIT — un item en file n'est jamais compté comme enregistré.
+      const queued = enqueue(ready.map((d) => ({ ...d, title: d.title.trim() })));
       setWorkPhase("idle");
+      if (queued) {
+        setDrafts([]);
+        setTranscript("");
+        setView("capture");
+        flash(`Hors ligne — ${ready.length} en attente, ça partira à la réouverture.`, "err");
+      } else {
+        fail(e, "L'enregistrement a échoué et la mise en attente aussi.", () => sendRef.current());
+      }
     }
-  }, [drafts, flash, fail]);
+  }, [drafts, flash, fail, refreshItems]);
 
   useEffect(() => {
     sendRef.current = () => void send();
   }, [send]);
-
-  /** Réessaie uniquement les tâches indiquées — jamais celles déjà créées. */
-  const retry = useCallback(
-    async (ids: string[]) => {
-      const targets = sent.filter((t) => ids.includes(t.id) && t.status === "failed");
-      if (!targets.length) return;
-
-      setRetryingIds(new Set(ids));
-      try {
-        const { results, created } = await pushTasks(targets.map(payloadOf));
-        setSent((s) =>
-          s.map((t) => {
-            const i = targets.findIndex((x) => x.id === t.id);
-            if (i === -1) return t;
-            const r = results[i];
-            return r?.ok
-              ? { ...t, status: "sent", todoistId: r.id, error: undefined }
-              : { ...t, status: "failed", error: r?.error ?? "Échec inconnu." };
-          }),
-        );
-        const failed = targets.length - created;
-        flash(
-          failed === 0
-            ? `${created} tâche${created > 1 ? "s" : ""} créée${created > 1 ? "s" : ""}`
-            : `${created} créée${created > 1 ? "s" : ""}, ${failed} encore en échec`,
-          failed === 0 ? "ok" : "err",
-        );
-      } catch (e) {
-        if (e instanceof UnauthorizedError) {
-          clearPin();
-          setUnlocked(false);
-        } else {
-          flash(e instanceof ApiError ? e.message : "Nouvel envoi impossible.", "err");
-        }
-      } finally {
-        setRetryingIds(new Set());
-      }
-    },
-    [sent, flash],
-  );
 
   /* --- Rendu -------------------------------------------------------------- */
   if (!hydrated) {
@@ -326,7 +291,7 @@ export function BriefApp() {
       <PhoneFrame>
         <StatusBar />
         <div className="flex flex-1 items-center justify-center">
-          <span className="animate-br-spin block h-6 w-6 rounded-full border-2 border-[rgba(28,26,24,0.12)] border-t-accent" />
+          <span className="animate-br-spin block h-6 w-6 rounded-full border-2 border-[var(--line-2)] border-t-action" />
         </div>
       </PhoneFrame>
     );
@@ -371,7 +336,7 @@ export function BriefApp() {
           drafts={drafts}
           projects={projects}
           transcript={transcript}
-          pushing={phase === "pushing"}
+          saving={phase === "saving"}
           onBack={() => setView("capture")}
           onPatch={patchDraft}
           onRemove={removeDraft}
@@ -387,17 +352,12 @@ export function BriefApp() {
           filter={filter}
           onFilter={setFilter}
           onOpen={setSheetId}
-          retrying={retryingIds.size > 0}
-          onRetryAll={() =>
-            void retry(sent.filter((t) => t.status === "failed").map((t) => t.id))
-          }
         />
       )}
 
       {view === "settings" && (
         <SettingsScreen
           projects={projects}
-          projectsSource={projectsSource}
           reloading={reloading}
           onReloadProjects={() => void loadProjects()}
           onClearSession={() => {
@@ -420,13 +380,11 @@ export function BriefApp() {
         <TaskSheet
           task={sheetTask}
           projects={projects}
-          retrying={retryingIds.has(sheetTask.id)}
           onClose={() => setSheetId(null)}
           onDelete={() => {
             setSent((s) => s.filter((t) => t.id !== sheetTask.id));
             setSheetId(null);
           }}
-          onRetry={() => void retry([sheetTask.id])}
         />
       )}
 

@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { ArrowLeftIcon, ChevronDownIcon, ClockIcon, CloseIcon, PlusIcon, TrashIcon } from "./icons";
-import { DUE_SUGGESTIONS, PRIOS, PRIO_VALUES, skinFor } from "@/lib/todoist";
-import type { Draft, PrioValue, Project } from "@/lib/types";
+import { formatDue, resolveDue } from "@/lib/due";
+import { DUE_SUGGESTIONS, PRIORITIES, PRIORITY_VALUES, skinFor } from "@/lib/projects";
+import type { DraftItem, Priority, Project } from "@/lib/types";
 
 const SWIPE_DELETE_PX = -95;
 const SWIPE_MAX_PX = -160;
@@ -12,19 +13,19 @@ export function ReviewScreen({
   drafts,
   projects,
   transcript,
-  pushing,
+  saving,
   onBack,
   onPatch,
   onRemove,
   onAdd,
   onSend,
 }: {
-  drafts: Draft[];
+  drafts: DraftItem[];
   projects: Project[];
   transcript: string;
-  pushing: boolean;
+  saving: boolean;
   onBack: () => void;
-  onPatch: (id: string, patch: Partial<Draft>) => void;
+  onPatch: (id: string, patch: Partial<DraftItem>) => void;
   onRemove: (id: string) => void;
   onAdd: () => void;
   onSend: () => void;
@@ -67,20 +68,20 @@ export function ReviewScreen({
           onClick={onBack}
           title="Retour"
           aria-label="Retour à la capture"
-          className="flex h-[38px] w-[38px] flex-none cursor-pointer items-center justify-center rounded-[13px] border border-[rgba(28,26,24,0.09)] bg-card text-ink transition-all duration-200 hover:bg-stone-1"
+          className="flex h-[38px] w-[38px] flex-none cursor-pointer items-center justify-center rounded-field border border-[var(--line-2)] bg-tile text-ink transition-all duration-200 hover:bg-page"
         >
           <ArrowLeftIcon />
         </button>
         <div className="flex flex-col">
-          <h2 className="m-0 text-xl font-semibold tracking-[-0.3px] text-ink">Revue</h2>
-          <span className="text-xs font-medium text-muted">
+          <h2 className="m-0 text-21 font-semibold tracking-[-0.3px] text-ink">Revue</h2>
+          <span className="text-11 font-medium text-ink-2">
             {n} {n > 1 ? "tâches détectées" : "tâche détectée"}
           </span>
         </div>
         <button
           type="button"
           onClick={onAdd}
-          className="ml-auto flex h-[38px] cursor-pointer items-center gap-1.5 rounded-[13px] border border-dashed border-[rgba(28,26,24,0.22)] bg-transparent px-3.5 text-[13px] font-semibold text-ink-soft transition-all duration-200 hover:border-accent hover:text-accent"
+          className="ml-auto flex h-[38px] cursor-pointer items-center gap-1.5 rounded-field border border-dashed border-[rgba(19,18,17,0.22)] bg-transparent px-3.5 text-13 font-semibold text-ink-2 transition-all duration-200 hover:border-action hover:text-action"
         >
           <PlusIcon />
           Tâche
@@ -90,35 +91,35 @@ export function ReviewScreen({
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-[18px] pt-0.5 pb-4">
         {/* La transcription brute reste accessible depuis la revue : on ne perd
             jamais le texte d'origine, même si la structuration est mauvaise. */}
-        <div className="flex-none rounded-[18px] border border-[rgba(28,26,24,0.07)] bg-stone-2">
+        <div className="flex-none rounded-row border border-[var(--line)] bg-page">
           <button
             type="button"
             onClick={() => setShowRaw((v) => !v)}
             aria-expanded={showRaw}
             className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-4 py-3 text-left"
           >
-            <span className="text-[10.5px] font-semibold tracking-[1.1px] text-muted-2 uppercase">
+            <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
               Transcription brute
             </span>
             <ChevronDownIcon
-              className={"ml-auto text-muted-2 transition-transform duration-200 " + (showRaw ? "rotate-180" : "")}
+              className={"ml-auto text-ink-3 transition-transform duration-200 " + (showRaw ? "rotate-180" : "")}
             />
           </button>
           {showRaw && (
-            <p className="animate-br-in m-0 px-4 pb-3.5 text-[13.5px] leading-[1.5] text-ink-soft">
+            <p className="animate-br-in m-0 px-4 pb-3.5 text-13 leading-[1.5] text-ink-2">
               {transcript}
             </p>
           )}
         </div>
 
         {drafts.map((d) => {
-          const project = byId(d.project_id);
+          const project = byId(d.projectId);
           const skin = skinFor(project);
           const dx = dragId === d.id ? dragDx : 0;
 
           return (
-            <div key={d.id} className="relative flex-none overflow-hidden rounded-[22px]">
-              <div className="absolute inset-0 flex items-center justify-end bg-accent pr-[22px] text-white">
+            <div key={d.id} className="relative flex-none overflow-hidden rounded-tile">
+              <div className="absolute inset-0 flex items-center justify-end bg-action pr-[22px] text-white">
                 <TrashIcon />
               </div>
               <div
@@ -126,7 +127,7 @@ export function ReviewScreen({
                 onPointerMove={onMove}
                 onPointerUp={onUp}
                 onPointerCancel={onUp}
-                className="relative touch-pan-y rounded-[22px] border border-[rgba(28,26,24,0.07)] bg-card px-[13px] pt-[15px] pb-3 shadow-[0_2px_12px_-8px_rgba(28,26,24,0.3)]"
+                className="relative touch-pan-y rounded-tile border border-[var(--line)] bg-tile px-[13px] pt-[15px] pb-3 shadow-[var(--e1)]"
                 style={{
                   transform: `translateX(${dx}px)`,
                   transition: dragId === d.id && dragging ? "none" : "transform .2s ease",
@@ -134,18 +135,18 @@ export function ReviewScreen({
               >
                 <div className="flex items-start gap-2">
                   <input
-                    value={d.content}
-                    onChange={(e) => onPatch(d.id, { content: e.target.value })}
+                    value={d.title}
+                    onChange={(e) => onPatch(d.id, { title: e.target.value })}
                     placeholder="Intitulé de la tâche"
                     aria-label="Intitulé de la tâche"
-                    className="w-full flex-1 border-none border-b border-b-transparent bg-transparent pt-0.5 pb-[5px] text-[15.5px] leading-[1.35] font-semibold tracking-[-0.2px] text-ink outline-none transition-colors duration-200 focus:border-b-accent"
+                    className="w-full flex-1 border-none border-b border-b-transparent bg-transparent pt-0.5 pb-[5px] text-15 leading-[1.35] font-semibold tracking-[-0.2px] text-ink outline-none transition-colors duration-200 focus:border-b-accent"
                   />
                   <button
                     type="button"
                     onClick={() => onRemove(d.id)}
                     title="Supprimer"
                     aria-label="Supprimer la tâche"
-                    className="-mt-1 mr-[-2px] flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-[11px] border-none bg-transparent text-muted-2 transition-all duration-200 hover:bg-accent-soft hover:text-accent"
+                    className="-mt-1 mr-[-2px] flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-chip border-none bg-transparent text-ink-3 transition-all duration-200 hover:bg-action-lo hover:text-action"
                   >
                     <CloseIcon />
                   </button>
@@ -153,14 +154,14 @@ export function ReviewScreen({
 
                 <div className="mt-2.5 flex flex-wrap items-center gap-[7px]">
                   <span
-                    className="relative inline-flex h-8 items-center rounded-[11px] pr-[26px] pl-[11px] text-[12.5px] font-semibold"
+                    className="relative inline-flex h-8 items-center rounded-chip pr-[26px] pl-[11px] text-13 font-semibold"
                     style={{ background: skin.bg, color: skin.fg }}
                   >
                     {project?.name ?? "Projet"}
                     <ChevronDownIcon className="absolute right-[9px] opacity-55" />
                     <select
-                      value={d.project_id}
-                      onChange={(e) => onPatch(d.id, { project_id: e.target.value })}
+                      value={d.projectId}
+                      onChange={(e) => onPatch(d.id, { projectId: e.target.value })}
                       aria-label="Projet"
                       className="absolute inset-0 h-full w-full cursor-pointer border-none opacity-0"
                     >
@@ -172,18 +173,38 @@ export function ReviewScreen({
                     </select>
                   </span>
 
-                  <span className="relative inline-flex h-8 items-center gap-1.5 rounded-[11px] bg-stone-1 pr-6 pl-2.5 text-[12.5px] font-medium text-ink-soft">
+                  {/* Nature de l'item — VISIBLE ET MODIFIABLE PAR CONSTRUCTION.
+                      Une erreur de classement du modèle n'est signalée nulle
+                      part ailleurs : l'item partirait simplement dans la
+                      mauvaise catégorie sans que rien ne l'indique. */}
+                  <button
+                    type="button"
+                    onClick={() => onPatch(d.id, { kind: d.kind === "event" ? "task" : "event" })}
+                    aria-label={`Nature : ${d.kind === "event" ? "rendez-vous" : "tâche"}, appuyer pour changer`}
+                    className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-chip border border-[var(--line-2)] bg-tile px-2.5 text-13 font-semibold text-ink-2 transition-colors duration-200 hover:bg-page"
+                  >
+                    {d.kind === "event" ? "Rendez-vous" : "Tâche"}
+                  </button>
+
+                  <span className="relative inline-flex h-8 items-center gap-1.5 rounded-chip bg-page pr-6 pl-2.5 text-13 font-medium text-ink-2">
                     <ClockIcon />
-                    {d.due_string || "Pas d'échéance"}
+                    {formatDue(d.due, d.allDay)}
                     <select
-                      value={d.due_string ?? ""}
-                      onChange={(e) =>
-                        onPatch(d.id, { due_string: e.target.value || undefined })
-                      }
+                      value=""
+                      onChange={(e) => {
+                        const resolved = resolveDue(e.target.value);
+                        // Un libellé non reconnu efface l'échéance au lieu
+                        // d'inventer une date : une échéance absente se voit,
+                        // une échéance fausse ne se voit pas.
+                        onPatch(d.id, {
+                          due: resolved?.due ?? null,
+                          allDay: resolved?.allDay ?? true,
+                        });
+                      }}
                       aria-label="Échéance"
                       className="absolute inset-0 h-full w-full cursor-pointer border-none opacity-0"
                     >
-                      {[...new Set([d.due_string ?? "", ...DUE_SUGGESTIONS])].map((s) => (
+                      {DUE_SUGGESTIONS.map((s) => (
                         <option key={s || "none"} value={s}>
                           {s || "Pas d'échéance"}
                         </option>
@@ -191,24 +212,24 @@ export function ReviewScreen({
                     </select>
                   </span>
 
-                  <span className="inline-flex h-8 gap-[3px] rounded-[11px] bg-stone-1 p-[3px]">
-                    {PRIO_VALUES.map((v: PrioValue) => {
+                  <span className="inline-flex h-8 gap-[3px] rounded-chip bg-page p-[3px]">
+                    {PRIORITY_VALUES.map((v: Priority) => {
                       const on = d.priority === v;
                       return (
                         <button
                           key={v}
                           type="button"
                           onClick={() => onPatch(d.id, { priority: v })}
-                          title={PRIOS[v].long}
+                          title={PRIORITIES[v].long}
                           aria-pressed={on}
-                          className="min-w-[30px] cursor-pointer rounded-[9px] border-none px-[7px] text-xs font-semibold transition-all duration-200"
+                          className="min-w-[30px] cursor-pointer rounded-[9px] border-none px-[7px] text-11 font-semibold transition-all duration-200"
                           style={{
-                            background: on ? PRIOS[v].bg : "transparent",
-                            color: on ? PRIOS[v].fg : "#A9A29B",
-                            boxShadow: on ? "0 1px 4px -2px rgba(28,26,24,.4)" : "none",
+                            background: on ? PRIORITIES[v].bg : "transparent",
+                            color: on ? PRIORITIES[v].fg : "var(--color-ink-3)",
+                            boxShadow: on ? "var(--e1)" : "none",
                           }}
                         >
-                          {PRIOS[v].label}
+                          {PRIORITIES[v].label}
                         </button>
                       );
                     })}
@@ -220,35 +241,35 @@ export function ReviewScreen({
         })}
 
         {!n && (
-          <p className="mx-1 mt-2 mb-0 text-[13px] leading-[1.5] text-muted">
+          <p className="mx-1 mt-2 mb-0 text-13 leading-[1.5] text-ink-2">
             Aucune tâche. Ajoute-en une à la main, ou reviens en arrière pour redicter — ta
             transcription est conservée.
           </p>
         )}
 
         {!!n && (
-          <p className="mt-0.5 mx-1 mb-0 text-[11.5px] leading-[1.5] text-muted-2">
+          <p className="mt-0.5 mx-1 mb-0 text-11 leading-[1.5] text-ink-3">
             Glisse une carte vers la gauche pour la supprimer. Tape un chip pour l&apos;éditer.
           </p>
         )}
       </div>
 
-      <div className="safe-bottom flex-none border-t border-[rgba(28,26,24,0.07)] bg-[rgba(250,248,245,0.92)] px-[18px] pt-3 pb-3 backdrop-blur-[10px]">
+      <div className="safe-bottom flex-none border-t border-[var(--line)] bg-[rgba(250,248,245,0.92)] px-[18px] pt-3 pb-3 backdrop-blur-[10px]">
         <button
           type="button"
           onClick={onSend}
-          disabled={pushing || !n}
-          className="flex h-[54px] w-full items-center justify-center gap-2.5 rounded-[18px] border-none text-base font-semibold transition-all duration-200 active:scale-[0.985] disabled:cursor-default"
+          disabled={saving || !n}
+          className="flex h-[54px] w-full items-center justify-center gap-2.5 rounded-row border-none text-15 font-semibold transition-all duration-200 active:scale-[0.985] disabled:cursor-default"
           style={{
-            background: n && !pushing ? "#C0603C" : "#D8CFC9",
-            color: n && !pushing ? "#FFFFFF" : "#4A4640",
-            boxShadow: n && !pushing ? "0 8px 22px -12px rgba(192,96,60,0.9)" : "none",
+            background: n && !saving ? "var(--color-action)" : "var(--color-ink-3)",
+            color: n && !saving ? "var(--color-tile)" : "var(--color-ink-2)",
+            boxShadow: n && !saving ? "var(--e-mic)" : "none",
           }}
         >
-          {pushing && (
+          {saving && (
             <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[rgba(255,255,255,0.35)] border-t-white" />
           )}
-          {pushing ? "Envoi en cours…" : `Envoyer vers Todoist (${n})`}
+          {saving ? "Envoi en cours…" : `Enregistrer ()`}
         </button>
       </div>
     </div>

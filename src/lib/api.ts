@@ -1,7 +1,7 @@
 "use client";
 
 import { PIN_HEADER, UnauthorizedError, clearPin, getPin } from "./pin";
-import type { Project, PushResult, TodoistTask } from "./types";
+import type { DraftItem, Item, Project, SaveResult } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -15,7 +15,8 @@ const TIMEOUTS = {
   projects: 12_000,
   transcribe: 90_000,
   parse: 50_000,
-  push: 70_000,
+  save: 30_000,
+  items: 15_000,
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
@@ -46,58 +47,34 @@ async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): 
   return data;
 }
 
-export type ProjectsSource = "todoist" | "cache" | "fallback";
-
-/**
- * Le corps reste le tableau `[{id, name}]` attendu ; la provenance est lue dans
- * l'en-tête `x-brief-source` pour que Réglages puisse afficher « en ligne » ou
- * « repli » sans deuxième appel.
- */
-export async function fetchProjects(): Promise<{ projects: Project[]; source: ProjectsSource }> {
-  const pin = getPin();
-  const headers = new Headers();
-  if (pin) headers.set(PIN_HEADER, pin);
-
-  let res: Response;
-  try {
-    res = await fetch("/api/projects", {
-      headers,
-      signal: AbortSignal.timeout(TIMEOUTS.projects),
-    });
-  } catch (e) {
-    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      throw new ApiError("La liste des projets n'a pas répondu à temps.");
-    }
-    throw new ApiError("Réseau indisponible. Vérifie ta connexion.");
-  }
-
-  if (res.status === 401) {
-    clearPin();
-    throw new UnauthorizedError();
-  }
-  if (!res.ok) throw new ApiError(`Impossible de charger les projets (${res.status}).`);
-
-  const projects = (await res.json()) as Project[];
-  const source = (res.headers.get("x-brief-source") as ProjectsSource | null) ?? "fallback";
-  return { projects, source };
+/** Les projets appartiennent à Brief : plus aucune provenance externe à afficher. */
+export async function fetchProjects(): Promise<Project[]> {
+  return jsonFetch<Project[]>("/api/projects", {}, TIMEOUTS.projects);
 }
 
-export async function parseNote(text: string, projects: Project[]): Promise<TodoistTask[]> {
-  const data = await jsonFetch<{ tasks: TodoistTask[] }>(
+/** Les items déjà enregistrés, pour l'écran Tâches et la vision globale. */
+export async function fetchItems(): Promise<Item[]> {
+  const data = await jsonFetch<{ items: Item[] }>("/api/items", {}, TIMEOUTS.items);
+  return data.items ?? [];
+}
+
+/** Les projets ne transitent plus par le client : le serveur les possède. */
+export async function parseNote(text: string): Promise<DraftItem[]> {
+  const data = await jsonFetch<{ items: DraftItem[] }>(
     "/api/parse",
-    { method: "POST", body: JSON.stringify({ text, projects }) },
+    { method: "POST", body: JSON.stringify({ text }) },
     TIMEOUTS.parse,
   );
-  return data.tasks ?? [];
+  return data.items ?? [];
 }
 
-export async function pushTasks(
-  tasks: TodoistTask[],
-): Promise<{ results: PushResult[]; created: number; total: number }> {
+export async function saveItems(
+  items: DraftItem[],
+): Promise<{ results: SaveResult[]; saved: number; total: number }> {
   return jsonFetch(
-    "/api/push",
-    { method: "POST", body: JSON.stringify({ tasks }) },
-    TIMEOUTS.push,
+    "/api/items",
+    { method: "POST", body: JSON.stringify({ items }) },
+    TIMEOUTS.save,
   );
 }
 

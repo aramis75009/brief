@@ -1,23 +1,34 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const outfit = Outfit({
-  variable: "--font-outfit",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+/**
+ * General Sans (Fontshare) — famille unique de l'app.
+ *
+ * `next/font/local` et non `next/font/google` : General Sans n'est pas sur
+ * Google Fonts. Les .woff2 sont versionnés dans le dépôt pour que le build ne
+ * dépende pas de la disponibilité d'un CDN tiers.
+ *
+ * Choisie contre Outfit et Poppins pour une raison mesurable : ses ouvertures
+ * plus serrées la gardent lisible à 13 px sur mobile, taille à laquelle les
+ * géométriques classiques se referment. JetBrains Mono a été supprimée — les
+ * chiffres alignés passent par `font-variant-numeric: tabular-nums`.
+ */
+const generalSans = localFont({
+  variable: "--font-general-sans",
+  display: "swap",
+  src: [
+    { path: "./fonts/GeneralSans-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/GeneralSans-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/GeneralSans-600.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/GeneralSans-700.woff2", weight: "700", style: "normal" },
+  ],
 });
 
 export const metadata: Metadata = {
   applicationName: "Brief",
   title: "Brief",
-  description: "Dicte ta note, elle part en Quick Add Todoist.",
+  description: "Dicte ta note, Brief la range.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -44,7 +55,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FAF8F5",
+  // Aligné sur --color-page. Deux valeurs pour que la barre de statut suive le
+  // thème système au lieu de rester crème sur un fond sombre.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F5F3F0" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F0E0D" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -55,10 +71,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="fr"
-      className={`${outfit.variable} ${jetbrainsMono.variable} h-full antialiased`}
-    >
+    <html lang="fr" className={`${generalSans.variable} h-full antialiased`}>
       <body className="min-h-full">{children}</body>
     </html>
   );

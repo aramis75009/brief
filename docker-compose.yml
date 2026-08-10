@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# Brief sur VPS.
+#
+#   docker compose up -d --build
+#
+# Le cron des rappels tourne dans un conteneur séparé plutôt que dans l'app :
+# un planificateur en mémoire disparaîtrait à chaque redémarrage du serveur, et
+# c'est exactement ce qu'il ne doit pas faire.
+# ---------------------------------------------------------------------------
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Brief}
+    restart: unless-stopped
+    env_file: .env.production
+    volumes:
+      - brief-data:/app/data
+    ports:
+      # Écoute en local seulement : c'est le reverse proxy qui expose en HTTPS.
+      # Le micro exige un contexte sécurisé, donc pas d'accès en clair.
+      - "127.0.0.1:3000:3000"
+
+  cron:
+    image: alpine:3.20
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file: .env.production
+    command: >
+      sh -c "apk add --no-cache curl >/dev/null &&
+             while true; do
+               curl -fsS -m 30 -H \"Authorization: Bearer $$BRIEF_CRON_TOKEN\" \
+                 http://app:3000/api/cron/reminders || echo '[cron] passage échoué';
+               sleep 60;
+             done"
+
+volumes:
+  brief-data:

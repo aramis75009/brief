@@ -48,3 +48,7 @@ Thumbs.db
 # NB : `vercel link` ré-ajoute parfois `.env*` ici. Ne pas le laisser : placée en
 # dernier, cette règle écrase les négations `!.env.example` du bloc Secrets en
 # haut du fichier et rend le template non committable. Le bloc du haut suffit.
+.gstack/
+
+# Données serveur locales (abonnements push, avant Postgres)
+.data/

@@ -8,16 +8,18 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Brief — dictée vers Todoist",
+    name: "Brief — ton organisation, dictée",
     short_name: "Brief",
-    description: "Dicte ta note, elle part en Quick Add Todoist.",
+    description: "Dicte ta note, Brief la range.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    // Alignés sur le fond crème de l'app pour que la status bar s'y fonde.
-    background_color: "#FAF8F5",
-    theme_color: "#FAF8F5",
+    // Alignés sur --color-page (DESIGN.md). Le manifest n'accepte qu'une seule
+    // valeur : on prend celle du mode clair, le mode sombre étant géré par la
+    // balise theme-color du layout.
+    background_color: "#F5F3F0",
+    theme_color: "#F5F3F0",
     lang: "fr",
     dir: "ltr",
     categories: ["productivity", "utilities"],
