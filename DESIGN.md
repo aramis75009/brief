@@ -5,11 +5,12 @@
 
 ## Contexte produit
 
-- **Ce que c'est :** une app de dictée vocale. Tu parles, Whisper transcrit, un LLM découpe la note en tâches, tu relis, ça part dans Todoist.
+- **Ce que c'est :** un organiseur personnel piloté à la voix. Tu parles, Whisper transcrit, un LLM découpe la note en tâches et rendez-vous datés, tu relis, Brief les garde et te les rappelle.
 - **Pour qui :** un utilisateur unique (Aramis), sur iPhone, en PWA installée sur l'écran d'accueil.
-- **Positionnement :** filiale de Todoist. Brief ne stocke rien à long terme, il **aiguille**. Todoist reste le système de vérité des tâches.
+- **Positionnement :** Brief **possède ses données**, sur un VPS auto-hébergé. Il n'aiguille plus vers un service tiers et n'a donc aucun plafond de projets. C'est lui le système de vérité.
 - **Type de projet :** app mobile web (PWA), Next.js 16 / React 19 / Tailwind v4.
-- **La chose mémorable :** le micro est la fonction. Tout le reste s'efface derrière lui. L'écran Tâches sert de vision globale, pas de gestionnaire.
+- **La chose mémorable :** « Je parle, c'est rangé. » Le micro est le héros, tout le reste s'efface.
+- **Ce que Brief fait et que personne d'autre ne fait :** la **vision globale de charge inter-projets**. Les listes de tâches montrent des tâches ; l'onglet Vision montre **ce qui déborde**. C'est le seul écran qui justifie d'ouvrir l'app après avoir dicté.
 
 ## Direction esthétique
 
@@ -23,7 +24,7 @@
 
 Les concurrents traitent leur sortie comme un **document** : notes, résumé, action items en prose. Brief ne produit pas un document, il produit une **décision de routage** — quel projet, quelle date, quelle priorité.
 
-**Conséquence directe : la couleur n'est jamais décorative.** Chaque surface teintée de l'app encode un projet Todoist. Si une teinte apparaît sans désigner une destination, c'est un bug de design.
+**Conséquence directe : la couleur n'est jamais décorative.** Chaque surface teintée de l'app encode un projet. Si une teinte apparaît sans désigner une destination, c'est un bug de design.
 
 ## Typographie
 
@@ -66,21 +67,50 @@ Toute taille hors de cette liste est une erreur. L'app actuelle en compte plus d
 
 `--action: #EC5230` · `--action-lo: #FDEAE4` (sombre : `#3A1D14`)
 
-De la famille du corail Todoist (`#E44332`), plus chaud et plus saturé : dit « filiale » sans une ligne de texte.
+**Justification réécrite le 10 août 2026.** L'ancienne — « de la famille du corail Todoist, dit filiale sans une ligne de texte » — n'a plus d'objet : il n'y a plus de maison mère. La valeur ne change pas pour autant, et la raison est meilleure : c'est **la seule couleur saturée du système**, et aucune teinte de destination ne s'en approche. Le corail ne peut donc jamais être confondu avec un projet.
 
 **Le corail ne sert qu'à agir.** Micro, bouton d'envoi, onglet actif, focus. Jamais pour décorer, jamais pour désigner un projet. Il reste identique en mode sombre — il tient sur les deux fonds.
 
-### Destinations — les projets Todoist
+### Destinations — les projets
 
-| Nom | Fond clair | Encre claire | Fond sombre | Encre sombre |
-|---|---|---|---|---|
-| Lilas | `#E6E0F2` | `#4A3F63` | `#322B44` | `#C9BEE4` |
-| Ardoise | `#DCE4EF` | `#37475F` | `#262F3D` | `#B4C6DE` |
-| Sauge | `#DFE8DE` | `#38513E` | `#263129` | `#B3C9B6` |
-| Sable | `#F0E6D6` | `#5A4830` | `#362D20` | `#DCC69E` |
-| Argile | `#F3E1DA` | `#6B4034` | `#3A281F` | `#E0B7A5` |
+| Nom | Var | Fond clair | Encre claire | Fond sombre | Encre sombre |
+|---|---|---|---|---|---|
+| Lilas | `p1` | `#E6E0F2` | `#4A3F63` | `#322B44` | `#C9BEE4` |
+| Ardoise | `p2` | `#DCE4EF` | `#37475F` | `#262F3D` | `#B4C6DE` |
+| Sauge | `p3` | `#DFE8DE` | `#38513E` | `#263129` | `#B3C9B6` |
+| Sable | `p4` | `#F0E6D6` | `#5A4830` | `#362D20` | `#DCC69E` |
+| Argile | `p5` | `#F3E1DA` | `#6B4034` | `#3A281F` | `#E0B7A5` |
+| Acier | `p6` | `#E3E6EB` | `#414A54` | `#2A2E33` | `#C0C7D0` |
+| Lin | `p7` | `#EDE6E0` | `#5B4C42` | `#302823` | `#D6C4B8` |
+| Glacier | `p8` | `#E0E9EC` | `#33505A` | `#223034` | `#AFCBD3` |
 
-Attribution : par nom pour les projets connus, sinon par hachage stable de l'`id` Todoist (voir `skinFor()` dans `src/lib/todoist.ts`). Un projet garde sa couleur d'une session à l'autre — c'est ce qui rend l'écran Tâches lisible sans lire les libellés.
+**Justification réécrite le 10 août 2026.** L'ancienne — « cinq teintes parce que le plan gratuit plafonne à cinq projets » — était caduque et en contradiction directe avec « aucun plafond ». Elle est remplacée par un couple à deux dimensions.
+
+### Formes — la seconde dimension d'une destination
+
+`disc` · `square` · `diamond` · `ring` · `capsule`
+
+Huit teintes ne suffisaient pas à un nombre de projets non plafonné, et en inventer une neuvième aurait produit des couleurs qu'on ne distingue pas. La **forme** coûte 8 px et se lit **sans couleur** — donc aussi en mode sombre, où les teintes se rapprochent, et pour un œil daltonien.
+
+**8 teintes × 5 formes = 40 destinations distinguables** avant la moindre répétition. Au-delà, la teinte cycle et la forme change, jamais les deux en même temps.
+
+Attribution : teinte et forme explicites pour les projets d'amorçage, sinon dérivées d'un **hachage stable de l'`id`** — la teinte au rang bas, la forme au rang supérieur, pour qu'elles ne changent jamais ensemble. Voir `skinFor()` et `shapeFor()` dans `src/lib/projects.ts`. Un projet garde son couple d'une session à l'autre : c'est le couple qu'on apprend à reconnaître, pas le libellé.
+
+### Le quatrième état : « en attente d'envoi »
+
+Un item dicté hors ligne n'est pas encore enregistré. Le sémantique n'a que `ok` / `warn` / `error` — et **on n'ajoute pas une quatrième couleur**. L'attente n'est pas un jugement, c'est une **absence** : la ligne n'a pas encore de fond parce qu'elle n'a pas encore de place sur le serveur.
+
+Trois signaux cumulés, dont deux survivent au daltonisme et au mode sombre :
+
+- **contour pointillé** (`1.5px dashed --ink-3`),
+- **pas de surface**,
+- **pas d'ombre**.
+
+Un bandeau en tête de l'écran Tâches ne disparaît qu'à l'**envoi confirmé par le serveur**. C'est la seule chose entre une note dictée et une note perdue : Safari peut évincer le stockage local sans prévenir.
+
+### `--error-on-ink: #E8836A`
+
+Identique dans les deux thèmes, et **jamais redéclaré**. `--error` (`#B23A22`) posé sur un bloc `--ink` donne 1,9:1 : illisible. Même piège que les touches du pavé PIN — une couleur pensée pour un fond clair, posée sur un fond sombre.
 
 ### Sémantique
 
@@ -165,19 +195,21 @@ L'icône est **l'état d'enregistrement de Brief** : les barres de niveau audio 
 - **Carré plein, sans transparence, sans coins pré-arrondis.** iOS applique son propre masque : un PNG déjà arrondi produit un liseré.
 - **Zone sûre maskable :** le contenu doit tenir dans un cercle de 80 % du canevas. La version `maskable` respecte cette contrainte, la version `any` non (et c'est normal).
 - **Sous 48 px, le signe se simplifie** en capsule unique. Trois barres à 16 px deviennent une tache.
-- Le fond encre est délibéré : il détache l'icône sur les fonds d'écran clairs comme sombres, et évite le doublon visuel avec le carré rouge de Todoist sur le même écran d'accueil.
+- **Justification réécrite le 10 août 2026.** L'ancienne — « évite le doublon visuel avec le carré rouge de Todoist sur le même écran d'accueil » — n'a plus d'objet. La nouvelle : le fond encre tient sur un fond d'écran clair comme sombre, et les trois barres restent le seul signe qui dit « niveau audio » plutôt que « dictaphone ». La forme ne change pas.
+- Dans l'app, le bloc de marque utilise `--brand-block` et **non** `--color-ink` : l'encre s'éclaircit en mode sombre, ce qui donnerait un carré blanc sur une page noire. Un filet `--line-2` lui rend sa silhouette en sombre, où le bloc et la page sont deux noirs voisins.
+
+## Deux pièges Tailwind v4 à ne pas réintroduire
+
+Constatés sur le CSS **compilé** le 10 août 2026, pas déduits de la source.
+
+1. **`@theme` ne fonctionne pas dans une media query.** Un `@theme` imbriqué dans `@media (prefers-color-scheme: dark)` est aplati : ses variables sont hissées dans l'unique `@layer theme :root`, la condition disparaît, et les valeurs sombres s'appliquent en permanence. L'app n'avait aucun thème clair compilé. Les surcharges sombres vivent donc dans un `:root` ordinaire, hors `@layer` — du CSS non-layered l'emporte sur toutes les couches.
+2. **`@theme static` est obligatoire.** Sans `static`, Tailwind n'émet que les variables qu'il voit référencées dans le source. Les teintes sont construites par interpolation — `var(--color-p${tint})` — invisible au scanner. Résultat mesuré : seules `p2`, `p3` et `p4` étaient émises, et la puce de l'Inbox (teinte 5) était transparente.
 
 ## Ce qu'il reste à faire côté code
 
-Ce fichier décrit la cible. L'app ne s'y conforme pas encore.
-
-- [ ] Remplacer les tokens de `src/app/globals.css` (palette actuelle terracotta/crème) par ceux de ce document, et ajouter le bloc mode sombre.
-- [ ] Passer de `Outfit` + `JetBrains_Mono` (`next/font/google`) à `General Sans` (`next/font/local`), dans `src/app/layout.tsx`.
-- [ ] Aligner `theme_color` et `background_color` de `src/app/manifest.ts` sur `#F5F3F0` (actuellement `#FAF8F5`), ainsi que `viewport.themeColor` dans `layout.tsx`.
-- [ ] Remplacer les tailles arbitraires inline des six écrans par l'échelle à huit crans.
-- [ ] Remplacer les rayons arbitraires (`13px`, `18px`, `22px`…) par les cinq tokens.
-- [ ] `ReviewScreen` : passer de la transcription en prose à la table de tri (chaque ligne = une destination).
 - [ ] `src/app/favicon.ico` date encore de l'ancienne identité — le régénérer depuis la capsule.
+- [ ] `docs/designs/preview-systeme.html` montre encore cinq teintes et pas de formes.
+- [ ] La Vision n'a pas d'état « une seule journée chargée » distinct : avec un seul projet, l'horizon reste lisible mais le bloc « ton mur » énonce une évidence.
 
 ## Journal des décisions
 
@@ -190,3 +222,10 @@ Ce fichier décrit la cible. L'app ne s'y conforme pas encore.
 | 2026-08-09 | Corail `#EC5230` de la famille Todoist | Dit la filiation sans texte |
 | 2026-08-09 | Icône = barres de niveau audio, pas pictogramme de micro | Le micro blanc sur carré coloré est l'icône générique de la catégorie ; les barres sont propres à Brief |
 | 2026-08-09 | Rayons hiérarchisés au lieu d'uniformes | Empêche le rendu « bonbon » des maquettes bento génériques |
+| 2026-08-10 | Brief quitte Todoist et possède ses données | Todoist a sorti la même chaîne en natif ; sans service tiers, plus aucun plafond de projets |
+| 2026-08-10 | Trois justifications réécrites (corail, icône, cinq teintes) | Elles étaient adossées à une maison mère qui n'existe plus. Deux valeurs survivent avec une meilleure raison, la troisième est remplacée |
+| 2026-08-10 | Destination = teinte **+ forme**, 8 × 5 = 40 couples | Cinq teintes venaient du plafond de cinq projets ; inventer des teintes supplémentaires les rendrait indistinctes |
+| 2026-08-10 | 4ᵉ état « en attente » sans couleur sémantique | Une 4ᵉ pastille aurait mis l'attente au même rang qu'« enregistré » ; l'attente est une absence, dite par le pointillé |
+| 2026-08-10 | Quatrième onglet : Vision | La charge inter-projets n'était nulle part, et c'est la seule raison d'ouvrir l'app après avoir dicté |
+| 2026-08-10 | Vision livre **deux** représentations (Charge / Horizon) | Elles répondent à deux questions distinctes et sortent du même appel ; Charge par défaut, la question du matin est « qu'est-ce que je laisse tomber » |
+| 2026-08-10 | Touche du pavé PIN : contour au lieu de surface | `--tile` sur `--page` en sombre donne 1,1:1 — les touches étaient invisibles |

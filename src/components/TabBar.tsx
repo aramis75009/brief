@@ -1,6 +1,6 @@
 "use client";
 
-import { MicIcon, SettingsIcon, TasksIcon } from "./icons";
+import { MicIcon, OverviewIcon, SettingsIcon, TasksIcon } from "./icons";
 import type { View } from "@/lib/types";
 
 const ACTIVE = "var(--color-action)";
@@ -14,9 +14,15 @@ type Tab = {
   matches: View[];
 };
 
+/**
+ * Quatre onglets, pas cinq. À 372 px de large, un libellé de 11 px tient encore
+ * à quatre ; à cinq il faut tronquer ou passer aux icônes seules, et une icône
+ * seule n'est pas une affordance sur mobile (pas de survol pour la révéler).
+ */
 const TABS: Tab[] = [
   { key: "capture", label: "Capture", Icon: MicIcon, matches: ["capture", "review"] },
   { key: "tasks", label: "Tâches", Icon: TasksIcon, matches: ["tasks"] },
+  { key: "overview", label: "Vision", Icon: OverviewIcon, matches: ["overview"] },
   { key: "settings", label: "Réglages", Icon: SettingsIcon, matches: ["settings"] },
 ];
 
@@ -28,7 +34,7 @@ export function TabBar({
   onNavigate: (v: View) => void;
 }) {
   return (
-    <div className="safe-bottom flex flex-none items-start border-t border-[var(--line)] bg-[rgba(250,248,245,0.94)] px-[18px] pt-2 pb-2 backdrop-blur-[12px] sm:h-[78px] sm:pb-0">
+    <div className="safe-bottom flex flex-none items-start border-t border-[var(--line)] bg-[var(--bar)] px-[18px] pt-2 pb-2 backdrop-blur-[12px] sm:h-[78px] sm:pb-0">
       {TABS.map(({ key, label, Icon, matches }) => {
         const on = matches.includes(view);
         return (

@@ -3,6 +3,8 @@
  * épaisseurs. Ne pas substituer une librairie d'icônes : la maquette fait foi.
  */
 
+import type { Shape } from "@/lib/types";
+
 type IconProps = {
   size?: number;
   className?: string;
@@ -117,6 +119,100 @@ export function ToastIcon({ kind, size = 17 }: { kind: "ok" | "err"; size?: numb
       />
     </svg>
   );
+}
+
+/** Onglet Vision — trois barres croissantes. « Ce qui monte », pas « une liste ». */
+export function OverviewIcon({ size = 22, className }: IconProps) {
+  return (
+    <svg {...base} width={size} height={size} strokeWidth={1.7} className={className}>
+      <path d="M6 15v4" />
+      <path d="M12 9v10" />
+      <path d="M18 5v14" />
+    </svg>
+  );
+}
+
+/**
+ * Marque de Brief : trois barres corail sur un bloc sombre — le même traitement
+ * que l'icône d'app posée sur l'écran d'accueil.
+ *
+ * Le bloc utilise `--brand-block` et non `--color-ink` : l'encre s'éclaircit en
+ * mode sombre, ce qui donnerait un carré blanc sur une page noire.
+ */
+export function BrandMark({ size = 72 }: { size?: number }) {
+  const bar = Math.round(size * 0.111);
+  const gap = Math.round(size * 0.083);
+  return (
+    <span
+      aria-hidden
+      className="inline-flex flex-none items-end justify-center"
+      style={{
+        width: size,
+        height: size,
+        gap,
+        background: "var(--brand-block)",
+        // En sombre le bloc vaut `--color-tile` (#1c1a19) sur une page #0f0e0d :
+        // 1,1:1, soit la silhouette invisible. Le filet la redonne. En clair il
+        // se pose sur l'encre et ne se voit pas — sans effet de bord.
+        border: "1px solid var(--line-2)",
+        borderRadius: Math.round(size * 0.389),
+      }}
+    >
+      {[0.25, 0.417, 0.167].map((ratio, i) => (
+        <i
+          key={i}
+          className="block rounded-full"
+          style={{ width: bar, height: Math.round(size * ratio), background: "var(--color-action)" }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Pastille de destination — la seconde moitié de l'identité d'un projet.
+ *
+ * Se lit SANS couleur, ce qui la rend utile en mode sombre (où les huit teintes
+ * se rapprochent) et pour un œil daltonien. La couleur vient de `currentColor` :
+ * la pastille hérite donc de l'encre de la puce qui la contient.
+ */
+export function ProjectDot({ shape, size = 8 }: { shape: Shape; size?: number }) {
+  const common = { display: "block", flex: "none", background: "currentColor" } as const;
+
+  if (shape === "square") {
+    return <i style={{ ...common, width: size, height: size, borderRadius: 2 }} />;
+  }
+  if (shape === "diamond") {
+    return (
+      <i
+        style={{
+          ...common,
+          width: size - 1,
+          height: size - 1,
+          borderRadius: 1,
+          transform: "rotate(45deg)",
+        }}
+      />
+    );
+  }
+  if (shape === "ring") {
+    return (
+      <i
+        style={{
+          display: "block",
+          flex: "none",
+          width: size,
+          height: size,
+          borderRadius: 999,
+          border: "2px solid currentColor",
+        }}
+      />
+    );
+  }
+  if (shape === "capsule") {
+    return <i style={{ ...common, width: size + 5, height: size - 3, borderRadius: 999 }} />;
+  }
+  return <i style={{ ...common, width: size, height: size, borderRadius: 999 }} />;
 }
 
 export function StopIcon({ size = 26, className }: IconProps) {

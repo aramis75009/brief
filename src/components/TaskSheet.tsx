@@ -1,8 +1,8 @@
 "use client";
 
-import { TrashIcon } from "./icons";
+import { ProjectDot, TrashIcon } from "./icons";
 import { formatDue } from "@/lib/due";
-import { PRIORITIES, skinFor } from "@/lib/projects";
+import { PRIORITIES, shapeFor, skinFor } from "@/lib/projects";
 import type { Project, Item } from "@/lib/types";
 
 function Row({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -49,9 +49,10 @@ export function TaskSheet({
       <div className="animate-br-sheet safe-bottom absolute right-0 bottom-0 left-0 rounded-t-[28px] bg-tile px-6 pt-2.5 pb-[26px] shadow-[var(--e2)] sm:rounded-b-[44px]">
         <div className="mx-auto mb-4 h-1 w-[38px] rounded-[2px] bg-ink-3" />
         <span
-          className="inline-flex h-[26px] items-center rounded-[9px] px-2.5 text-11 font-semibold"
+          className="inline-flex h-[26px] items-center gap-2 rounded-[9px] px-2.5 text-11 font-semibold"
           style={{ background: skin.bg, color: skin.fg }}
         >
+          <ProjectDot shape={shapeFor(project)} />
           {project.name}
         </span>
         <h3 className="mt-3 mb-0 text-21 leading-[1.3] font-semibold tracking-[-0.3px] text-pretty text-ink">

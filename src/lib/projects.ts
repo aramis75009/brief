@@ -1,4 +1,4 @@
-import type { Priority, Project, ProjectSkin, Tint } from "./types";
+import type { Priority, Project, ProjectSkin, Shape, Tint } from "./types";
 
 /**
  * Projets de Brief.
@@ -17,6 +17,7 @@ export const SEED_PROJECTS: Project[] = [
     id: "inbox",
     name: "Inbox",
     tint: 5,
+    shape: "disc",
     hints: [
       "tout le reste", "administratif", "URSSAF", "impôts", "banque", "santé", "médecin",
       "courses", "maison", "personnel",
@@ -26,6 +27,7 @@ export const SEED_PROJECTS: Project[] = [
     id: "frip-trend",
     name: "Frip & Trend",
     tint: 1,
+    shape: "square",
     hints: [
       "friperie", "fripe", "vêtements", "textile", "polos", "Ralph Lauren", "Tommy Hilfiger",
       "Vinted", "Vestiaire Collective", "sourcing", "dépôt-vente", "cintres", "étiquettes",
@@ -36,6 +38,7 @@ export const SEED_PROJECTS: Project[] = [
     id: "my-flip",
     name: "My Flip",
     tint: 2,
+    shape: "diamond",
     hints: [
       "revente", "flip", "sneakers", "consoles", "Leboncoin", "colis", "poste", "expédition",
       "stock", "rachat", "acheteur", "négociation",
@@ -45,6 +48,7 @@ export const SEED_PROJECTS: Project[] = [
     id: "webacademie",
     name: "Web@cadémie",
     tint: 3,
+    shape: "ring",
     hints: [
       "école", "Epitech", "Web@cadémie", "cours", "exercice", "React", "JavaScript", "code",
       "bug", "API", "déploiement", "git", "soutenance", "formateur", "dossier scolaire", "TP",
@@ -54,6 +58,7 @@ export const SEED_PROJECTS: Project[] = [
     id: "table-de-paupy",
     name: "La Table de Paupy",
     tint: 4,
+    shape: "capsule",
     hints: [
       "restaurant", "resto", "menu", "carte", "service", "fournisseur", "réservation",
       "cuisine", "dessert", "plat", "fiche technique", "salle",
@@ -81,14 +86,46 @@ export function skinFor(project: { id: string; tint?: Tint }): ProjectSkin {
 }
 
 /**
+ * Forme d'un projet — la seconde moitié de son identité visuelle.
+ *
+ * Elle existe parce que la teinte seule ne suffisait plus une fois le plafond de
+ * cinq projets disparu : inventer une neuvième ou dixième teinte aurait produit
+ * des couleurs qu'on ne distingue pas. La forme, elle, se lit sans couleur —
+ * donc aussi en mode sombre, où les teintes se rapprochent, et pour un œil
+ * daltonien.
+ */
+export function shapeFor(project: { id: string; shape?: Shape }): Shape {
+  return project.shape ?? shapeFromId(project.id);
+}
+
+const SHAPES: Shape[] = ["disc", "square", "diamond", "ring", "capsule"];
+
+/** Hachage stable de l'id. Une seule source pour la teinte ET la forme. */
+function hashOf(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/**
  * Teinte stable dérivée de l'id, pour un projet créé sans teinte explicite.
  * Le même projet garde sa couleur d'une session à l'autre — c'est ce qui rend
  * l'écran Tâches lisible sans lire les libellés.
  */
 export function tintFromId(id: string): Tint {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return ((h % 5) + 1) as Tint;
+  return ((hashOf(id) % 8) + 1) as Tint;
+}
+
+/**
+ * Forme stable dérivée du MÊME hachage que la teinte, mais d'un rang plus haut.
+ *
+ * Conséquence voulue : quand on parcourt des ids, c'est la teinte qui cycle
+ * vite et la forme qui ne bouge qu'une fois les huit teintes épuisées. Les deux
+ * ne changent jamais ensemble, donc deux projets voisins ne peuvent pas se
+ * retrouver avec le même couple avant 40 destinations.
+ */
+export function shapeFromId(id: string): Shape {
+  return SHAPES[Math.floor(hashOf(id) / 8) % SHAPES.length];
 }
 
 /* ---------------------------------------------------------------------------

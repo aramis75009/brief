@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CaptureScreen, type AppError } from "./CaptureScreen";
+import { OverviewScreen } from "./OverviewScreen";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
 import { PinGate } from "./PinGate";
 import { ReviewScreen } from "./ReviewScreen";
@@ -14,16 +15,24 @@ import {
   ApiError,
   fetchProjects,
   fetchItems,
+  fetchOverview,
   parseNote,
   saveItems,
   transcribeAudio,
 } from "@/lib/api";
-import { uid } from "@/lib/demo";
-import { enqueue, flushQueue, queueDepth } from "@/lib/queue";
+import { uid } from "@/lib/ids";
+import {
+  enqueue,
+  flushQueue,
+  queueDepth,
+  queueServerSnapshot,
+  queueSnapshot,
+  subscribeQueue,
+} from "@/lib/queue";
 import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
 import { SEED_PROJECTS, inboxIdOf } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
-import type { DraftItem, Item, Phase, Project, ToastKind, View } from "@/lib/types";
+import type { DraftItem, Item, Overview, Phase, Project, ToastKind, View } from "@/lib/types";
 
 /** La transcription brute survit au rechargement — elle ne doit jamais être perdue. */
 const TRANSCRIPT_KEY = "brief:transcript";
@@ -45,6 +54,19 @@ export function BriefApp() {
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   /** Les items enregistrés, relus depuis le serveur : Brief en est la source. */
   const [sent, setSent] = useState<Item[]>([]);
+  /**
+   * Les items encore EN FILE, dictés sans réseau. Ils ne viennent pas du serveur
+   * et ne doivent jamais être comptés comme enregistrés — d'où une liste
+   * séparée plutôt qu'un mélange dans `sent`.
+   *
+   * Branchés directement sur le stockage local : toute écriture de la file
+   * rafraîchit l'écran, sans resynchronisation manuelle à ne pas oublier.
+   */
+  const pending = useSyncExternalStore(subscribeQueue, queueSnapshot, queueServerSnapshot);
+
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<Project[]>(SEED_PROJECTS);
   const [reloading, setReloading] = useState(false);
@@ -106,6 +128,26 @@ export function BriefApp() {
     setWorkPhase("idle");
   }, []);
 
+  /* --- Vision globale ------------------------------------------------------ */
+  const refreshOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    setOverviewError(null);
+    try {
+      setOverview(await fetchOverview());
+    } catch (e) {
+      if (e instanceof UnauthorizedError) {
+        clearPin();
+        setUnlocked(false);
+      } else {
+        setOverviewError(
+          e instanceof ApiError ? e.message : "La charge n'a pas pu être calculée.",
+        );
+      }
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, []);
+
   /* --- Items enregistrés --------------------------------------------------- */
   const refreshItems = useCallback(async () => {
     try {
@@ -117,11 +159,14 @@ export function BriefApp() {
         if (remaining) flash(`${remaining} toujours en attente.`, "err");
       }
       setSent(await fetchItems());
+      // La vision se recalcule sur le serveur : la relire ici évite un écran
+      // Vision qui contredit l'écran Tâches d'un item.
+      void refreshOverview();
     } catch {
       // Une lecture qui échoue ne casse pas la capture : l'écran Tâches
       // affichera simplement ce qu'il avait, la dictée reste possible.
     }
-  }, [flash]);
+  }, [flash, refreshOverview]);
 
   /* --- Projets ------------------------------------------------------------ */
   const loadProjects = useCallback(
@@ -285,6 +330,26 @@ export function BriefApp() {
     sendRef.current = () => void send();
   }, [send]);
 
+  /**
+   * Premier chargement, une fois déverrouillé.
+   *
+   * Sans ça, Tâches et Vision restaient vides jusqu'au premier enregistrement de
+   * la session : l'app donnait l'impression d'avoir tout perdu à chaque
+   * ouverture, alors que le serveur avait bien les items.
+   */
+  useEffect(() => {
+    if (!hydrated || !unlocked) return;
+    // Drapeau d'abandon : un verrouillage puis déverrouillage rapide lancerait
+    // deux chargements, et le plus lent écraserait le plus récent.
+    let alive = true;
+    void (async () => {
+      if (alive) await refreshItems();
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [hydrated, unlocked, refreshItems]);
+
   /* --- Rendu -------------------------------------------------------------- */
   if (!hydrated) {
     return (
@@ -323,7 +388,8 @@ export function BriefApp() {
           onToggleMic={toggleMic}
           onClear={() => setTranscript("")}
           onStructure={() => void structure(transcript)}
-          onLoadDemo={setTranscript}
+          overview={overview}
+          onOpenOverview={() => setView("overview")}
           onDismissError={() => {
             recorder.dismissError();
             dismissError();
@@ -348,10 +414,20 @@ export function BriefApp() {
       {view === "tasks" && (
         <TasksScreen
           sent={sent}
+          pending={pending}
           projects={projects}
           filter={filter}
           onFilter={setFilter}
           onOpen={setSheetId}
+        />
+      )}
+
+      {view === "overview" && (
+        <OverviewScreen
+          overview={overview}
+          loading={overviewLoading}
+          error={overviewError}
+          onRetry={() => void refreshOverview()}
         />
       )}
 

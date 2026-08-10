@@ -9,8 +9,17 @@
  * est un bug de design, pas une variation.
  *
  * Ne pas ajouter de valeur ici sans l'ajouter d'abord à DESIGN.md.
+ *
+ * ⚠️ `static` N'EST PAS DÉCORATIF. Sans lui, Tailwind v4 n'émet que les
+ * variables de thème qu'il VOIT référencées dans le source. Or les teintes de
+ * destination sont construites par interpolation — `var(--color-p${tint})` dans
+ * `skinFor()` — que le scanner ne peut pas lire. Résultat mesuré sur le CSS
+ * compilé avant correction : seules p2, p3 et p4 survivaient (les seules
+ * écrites littéralement quelque part), et p1 comme p5 étaient absentes. La puce
+ * de l'Inbox, teinte 5, était donc transparente. `static` force l'émission de
+ * toutes les variables déclarées ici.
  * ------------------------------------------------------------------------ */
-@theme {
+@theme static {
   /* Fonds */
   --color-page: #f5f3f0;
   --color-tile: #ffffff;
@@ -24,7 +33,11 @@
   --color-action: #ec5230;
   --color-action-lo: #fdeae4;
 
-  /* Destinations — une teinte = un projet */
+  /* Destinations — une teinte = un projet.
+     Huit teintes, pas cinq : le plafond de cinq projets venait du service tiers
+     dont Brief s'est détaché. Le couple teinte + forme (voir `shapeFor`) donne
+     40 combinaisons uniques, ce qui repousse la répétition bien au-delà de
+     l'usage réel. Ajouter une neuvième teinte les rendrait indistinctes. */
   --color-p1: #e6e0f2;
   --color-p1-ink: #4a3f63;
   --color-p2: #dce4ef;
@@ -35,11 +48,23 @@
   --color-p4-ink: #5a4830;
   --color-p5: #f3e1da;
   --color-p5-ink: #6b4034;
+  --color-p6: #e3e6eb;
+  --color-p6-ink: #414a54;
+  --color-p7: #ede6e0;
+  --color-p7-ink: #5b4c42;
+  --color-p8: #e0e9ec;
+  --color-p8-ink: #33505a;
 
   /* Sémantique */
   --color-ok: #3f6b4a;
   --color-warn: #9c6f22;
   --color-error: #b23a22;
+
+  /* Rouge posé SUR un bloc encre — identique dans les deux thèmes, donc jamais
+     redéclaré plus bas. `--color-error` (#b23a22) sur `--color-ink` donne 1,9:1 :
+     illisible. C'est le même piège que les touches du pavé PIN, une couleur
+     pensée pour un fond clair posée sur un fond sombre. */
+  --color-error-on-ink: #e8836a;
 
   /* Rayons — le rayon grandit avec l'élément. C'est ce qui évite le rendu
      « tout est un bonbon » des maquettes bento génériques. */
@@ -73,8 +98,25 @@
 /* Lignes et ombres : hors @theme, ces valeurs portent une transparence qui
    dépend du thème. Elles vivent donc dans :root et basculent en mode sombre. */
 :root {
+  /* Déclare que la page gère ELLE-MÊME les deux thèmes. Sans ça, Chrome peut
+     appliquer son assombrissement automatique par-dessus et repeindre des
+     couleurs déjà pensées pour le sombre. Aligne aussi les contrôles natifs et
+     les barres de défilement sur le thème courant. */
+  color-scheme: light dark;
   --line: rgba(19, 18, 17, 0.08);
   --line-2: rgba(19, 18, 17, 0.14);
+  /* Bloc d'encre du logo — le même traitement que l'icône d'app. Il doit rester
+     SOMBRE dans les deux thèmes, ce qui interdit `--color-ink` (qui s'éclaircit
+     en sombre) : sur la page #0F0E0D, l'encre claire donnerait un carré blanc.
+     En sombre c'est donc la surface qui joue le rôle du bloc. */
+  --brand-block: var(--color-ink);
+  /* Fond de la barre d'onglets : translucide pour laisser deviner le contenu qui
+     passe dessous, donc porteur d'une alpha — ce qui l'exclut de `@theme`. */
+  --bar: rgba(250, 248, 245, 0.94);
+  /* Voile posé SUR un bloc d'encre (bouton discret, filet séparateur). Il doit
+     s'inverser avec le thème : le bloc encre est sombre en clair et clair en
+     sombre, donc un voile clair en dur disparaîtrait dans un des deux cas. */
+  --on-ink-soft: rgba(245, 243, 240, 0.1);
   --e1: 0 1px 2px rgba(19, 18, 17, 0.06), 0 4px 12px -8px rgba(19, 18, 17, 0.18);
   --e2: 0 12px 32px -16px rgba(19, 18, 17, 0.35);
   --e-mic: 0 12px 28px -12px rgba(236, 82, 48, 0.55);
@@ -84,9 +126,20 @@
  * Mode sombre — on redessine les surfaces, on n'inverse pas. Les teintes de
  * destination sont désaturées et assombries ; le corail d'action ne bouge pas,
  * il tient sur les deux fonds.
+ *
+ * ⚠️ SURTOUT PAS de `@theme` ici. Un `@theme` imbriqué dans une media query est
+ * APLATI par Tailwind v4 : ses variables sont hissées dans l'unique
+ * `@layer theme :root` global, la condition `prefers-color-scheme` disparaît, et
+ * les valeurs sombres s'appliquent alors en permanence. Constaté sur le CSS
+ * compilé : le thème clair n'existait tout simplement pas, l'app était sombre
+ * quel que soit le réglage système.
+ *
+ * La forme correcte est celle-ci — un `:root` ordinaire, hors `@layer`. Du CSS
+ * non-layered l'emporte sur toutes les couches, donc sur `@layer theme` : les
+ * surcharges gagnent sans avoir besoin de spécificité.
  * ------------------------------------------------------------------------ */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  :root {
     --color-page: #0f0e0d;
     --color-tile: #1c1a19;
     --color-ink: #f2f0ed;
@@ -104,15 +157,25 @@
     --color-p4-ink: #dcc69e;
     --color-p5: #3a281f;
     --color-p5-ink: #e0b7a5;
+    --color-p6: #2a2e33;
+    --color-p6-ink: #c0c7d0;
+    --color-p7: #302823;
+    --color-p7-ink: #d6c4b8;
+    --color-p8: #223034;
+    --color-p8-ink: #afcbd3;
 
+    /* `--color-error-on-ink` n'est pas redéclaré : il est posé sur un bloc
+       encre, qui reste sombre dans les deux thèmes. Le redéclarer casserait le
+       contraste dans un des deux. */
     --color-ok: #7fae87;
     --color-warn: #c9a055;
     --color-error: #e07c5e;
-  }
 
-  :root {
     --line: rgba(242, 240, 237, 0.1);
     --line-2: rgba(242, 240, 237, 0.18);
+    --brand-block: var(--color-tile);
+    --bar: rgba(20, 19, 18, 0.94);
+    --on-ink-soft: rgba(15, 14, 13, 0.12);
     --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px -8px rgba(0, 0, 0, 0.6);
     --e2: 0 14px 34px -16px rgba(0, 0, 0, 0.75);
   }
@@ -142,8 +205,13 @@
  * en cherchant la classe dans le CSS compilé : absente. Ne pas « simplifier »
  * ces classes en utilitaires Tailwind, le padding disparaîtrait silencieusement.
  * ------------------------------------------------------------------------ */
+/* Le plancher de 22px compte autant que l'`env()` : sur un appareil sans encoche
+   — ou quand iOS renvoie 0 au premier rendu d'une PWA installée — le contenu se
+   collait au bord haut de l'écran. Les 12px du bas sont la respiration sous la
+   barre d'état, pour qu'aucun titre ne vienne la toucher. */
 .safe-top {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: max(env(safe-area-inset-top, 0px), 22px);
+  padding-bottom: 12px;
 }
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);

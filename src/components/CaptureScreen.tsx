@@ -1,9 +1,8 @@
 "use client";
 
 import { ArrowRightIcon, CloseIcon, MicIcon, StopIcon } from "./icons";
-import { DEMO_NOTES } from "@/lib/demo";
 import { MAX_SECONDS, type RecorderError } from "@/lib/useRecorder";
-import type { Phase } from "@/lib/types";
+import type { Overview, Phase } from "@/lib/types";
 
 const fmtClock = (s: number) =>
   Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
@@ -26,9 +25,122 @@ export type CaptureProps = {
   onToggleMic: () => void;
   onClear: () => void;
   onStructure: () => void;
-  onLoadDemo: (text: string) => void;
+  /** Relevé du jour — le MÊME `GET /api/overview` que l'onglet Vision. */
+  overview: Overview | null;
+  onOpenOverview: () => void;
   onDismissError: () => void;
 };
+
+/**
+ * Le relevé du jour, à la place des anciennes notes de démo.
+ *
+ * Les notes de démo disaient « ceci est une démo » : elles occupaient le seul
+ * espace où l'on regarde avant de parler, pour ne rien apprendre. À leur place,
+ * les deux chiffres qui décident de ce qu'on va dicter.
+ */
+function DaySummary({
+  overview,
+  onOpenOverview,
+}: {
+  overview: Overview;
+  onOpenOverview: () => void;
+}) {
+  const { totals, byProject } = overview;
+  const top = [...byProject].sort((a, b) => b.overdue - a.overdue)[0];
+
+  const sentence =
+    totals.overdue > 0 && top && top.overdue > 0
+      ? `${top.name} concentre ${top.overdue} des ${totals.overdue} retards.`
+      : totals.today > 0
+        ? `Rien en retard. ${totals.today} item${totals.today > 1 ? "s" : ""} pour aujourd'hui.`
+        : "Rien en retard, rien pour aujourd'hui.";
+
+  const open = Math.max(1, totals.open);
+  const pct = (n: number) => `${(n / open) * 100}%`;
+  const events = byProject.reduce((n, p) => n + p.events, 0);
+  const rest = totals.open - totals.overdue - totals.today - totals.week;
+
+  return (
+    <div className="animate-br-in w-full pb-2">
+      <div
+        className="rounded-tile px-5 pt-[18px] pb-5"
+        style={{ background: "var(--color-ink)", color: "var(--color-page)" }}
+      >
+        <div className="flex items-end gap-5">
+          <div>
+            <div
+              className="tnum text-40 leading-[0.95] font-semibold tracking-[-1.1px]"
+              // `--color-error` (#b23a22) sur ce bloc donne 1,9:1 — illisible.
+              // `--color-error-on-ink` existe pour ce cas précis.
+              style={{ color: "var(--color-error-on-ink)" }}
+            >
+              {totals.overdue}
+            </div>
+            <div className="mt-1 text-11 font-semibold tracking-[1.2px] uppercase opacity-60">
+              en retard
+            </div>
+          </div>
+          <span
+            className="block h-11 w-px"
+            style={{ background: "currentColor", opacity: 0.18 }}
+          />
+          <div>
+            <div className="tnum text-40 leading-[0.95] font-semibold tracking-[-1.1px]">
+              {totals.today}
+            </div>
+            <div className="mt-1 text-11 font-semibold tracking-[1.2px] uppercase opacity-60">
+              aujourd&apos;hui
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 mb-0 text-15 leading-[1.4] font-medium">{sentence}</p>
+
+        <div className="mt-4 flex h-2 gap-[3px]">
+          {totals.overdue > 0 && (
+            <span
+              className="block rounded-full"
+              style={{ width: pct(totals.overdue), background: "var(--color-error-on-ink)" }}
+            />
+          )}
+          {totals.today > 0 && (
+            <span
+              className="block rounded-full"
+              style={{ width: pct(totals.today), background: "var(--color-page)" }}
+            />
+          )}
+          {totals.week > 0 && (
+            <span
+              className="block rounded-full"
+              style={{ width: pct(totals.week), background: "currentColor", opacity: 0.34 }}
+            />
+          )}
+          {rest > 0 && (
+            <span
+              className="block flex-1 rounded-full"
+              style={{ background: "currentColor", opacity: 0.14 }}
+            />
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpenOverview}
+          className="mt-[18px] flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-field border-none text-13 font-semibold transition-all duration-200 active:scale-[0.985]"
+          style={{ background: "var(--on-ink-soft)", color: "currentColor" }}
+        >
+          Ouvrir la vision globale
+          <ArrowRightIcon size={15} />
+        </button>
+      </div>
+
+      <p className="mx-1 mt-3.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
+        {totals.open} item{totals.open > 1 ? "s" : ""} ouvert{totals.open > 1 ? "s" : ""} ·{" "}
+        {events} rendez-vous · {byProject.length} projet{byProject.length > 1 ? "s" : ""}
+      </p>
+    </div>
+  );
+}
 
 export function CaptureScreen({
   phase,
@@ -40,7 +152,8 @@ export function CaptureScreen({
   onToggleMic,
   onClear,
   onStructure,
-  onLoadDemo,
+  overview,
+  onOpenOverview,
   onDismissError,
 }: CaptureProps) {
   const hasTranscript = !!transcript.trim();
@@ -145,23 +258,16 @@ export function CaptureScreen({
           </div>
         )}
 
-        {showEmptyHint && (
-          <div className="animate-br-in">
-            <p className="mt-0.5 mb-3 text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
-              Notes de démo
+        {showEmptyHint && overview && overview.totals.open > 0 && (
+          <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
+        )}
+
+        {showEmptyHint && overview && overview.totals.open === 0 && (
+          <div className="animate-br-in px-1 pt-2">
+            <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
+            <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
+              Appuie sur le micro et dis ce que tu as à faire.
             </p>
-            <div className="flex flex-col gap-[9px]">
-              {DEMO_NOTES.map((text) => (
-                <button
-                  key={text}
-                  type="button"
-                  onClick={() => onLoadDemo(text)}
-                  className="cursor-pointer rounded-row border border-[var(--line)] bg-tile px-[15px] py-[13px] text-left text-13 leading-[1.5] text-ink-2 shadow-[var(--e1)] transition-all duration-200 hover:-translate-y-px hover:border-[var(--color-action)] hover:text-ink"
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
           </div>
         )}
       </div>

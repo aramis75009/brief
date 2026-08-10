@@ -1,7 +1,8 @@
 "use client";
 
+import { ProjectDot } from "./icons";
 import { formatDue } from "@/lib/due";
-import { PRIORITIES, skinFor } from "@/lib/projects";
+import { PRIORITIES, shapeFor, skinFor } from "@/lib/projects";
 import type { Project, Item } from "@/lib/types";
 
 const FILTERS = [
@@ -14,18 +15,24 @@ export type FilterKey = (typeof FILTERS)[number]["key"];
 
 export function TasksScreen({
   sent,
+  pending,
   projects,
   filter,
   onFilter,
   onOpen,
 }: {
   sent: Item[];
+  /** Dictées encore en file locale — visibles, mais jamais dites enregistrées. */
+  pending: Item[];
   projects: Project[];
   filter: FilterKey;
   onFilter: (f: FilterKey) => void;
   onOpen: (id: string) => void;
 }) {
-  const visible = sent.filter((t) => (filter === "all" ? true : t.kind === filter));
+  // Les items en attente passent devant : ce sont les seuls qui peuvent encore
+  // être perdus, donc les seuls qui demandent une action.
+  const all = [...pending, ...sent];
+  const visible = all.filter((t) => (filter === "all" ? true : t.kind === filter));
 
   const groups = projects
     .map((p) => {
@@ -42,6 +49,28 @@ export function TasksScreen({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-none px-[26px] pt-2.5 pb-3">
         <h1 className="mt-0 mb-3 text-27 font-semibold tracking-[-0.5px] text-ink">Tâches</h1>
+
+        {/* Bandeau persistant : il ne disparaît qu'à l'envoi CONFIRMÉ par le
+            serveur. C'est la seule chose qui sépare une note dictée d'une note
+            perdue — Safari peut évincer le stockage local sans prévenir. Pas de
+            couleur sémantique ici : « en attente » n'est pas un jugement, c'est
+            une absence, et le pointillé la dit sans ajouter un 4ᵉ rouge. */}
+        {pending.length > 0 && (
+          <div
+            className="mb-3 rounded-row px-3.5 py-2.5"
+            style={{ border: "1.5px dashed var(--color-ink-3)" }}
+            role="status"
+          >
+            <p className="m-0 text-13 leading-[1.45] font-semibold text-ink">
+              {pending.length} note{pending.length > 1 ? "s" : ""} en attente d&apos;envoi
+            </p>
+            <p className="mt-1 mb-0 text-11 leading-[1.45] font-normal text-ink-2">
+              Pas encore enregistrée{pending.length > 1 ? "s" : ""} sur le serveur. Ça repart à la
+              prochaine ouverture avec du réseau.
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-1 rounded-field bg-page p-1">
           {FILTERS.map((f) => {
             const on = filter === f.key;
@@ -74,26 +103,42 @@ export function TasksScreen({
               <div key={project.id} className="mb-5">
                 <div className="mx-1 mt-0 mb-[9px] flex items-center gap-2">
                   <span
-                    className="inline-flex h-6 items-center rounded-chip px-[9px] text-11 font-semibold"
+                    className="inline-flex h-6 items-center gap-2 rounded-chip px-[9px] text-11 font-semibold"
                     style={{ background: skin.bg, color: skin.fg }}
                   >
+                    <ProjectDot shape={shapeFor(project)} />
                     {project.name}
                   </span>
                   <span className="text-11 font-medium text-ink-3">
-                    {items.length} {items.length > 1 ? "tâches" : "tâche"}
+                    {items.length} {items.length > 1 ? "items" : "item"}
                   </span>
                 </div>
                 <div className="flex flex-col gap-2">
                   {items.map((t) => {
                     const done = !!t.doneAt;
                     const isEvent = t.kind === "event";
+                    const waiting = !!t.pendingAt;
                     return (
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => onOpen(t.id)}
-                        className="w-full cursor-pointer rounded-row border bg-tile px-[15px] py-[13px] text-left shadow-[var(--e1)] transition-all duration-200 hover:-translate-y-px hover:shadow-[var(--e1)]"
-                        style={{ borderColor: "var(--line)" }}
+                        onClick={() => !waiting && onOpen(t.id)}
+                        disabled={waiting}
+                        className={
+                          "w-full rounded-row px-[15px] py-[13px] text-left transition-all duration-200 " +
+                          (waiting
+                            ? "cursor-default"
+                            : "cursor-pointer border bg-tile shadow-[var(--e1)] hover:-translate-y-px")
+                        }
+                        // Trois signaux cumulés, dont deux survivent au
+                        // daltonisme ET au mode sombre : contour pointillé,
+                        // pas de surface, pas d'ombre. Un item en attente ne
+                        // doit JAMAIS pouvoir se lire comme « enregistré ».
+                        style={
+                          waiting
+                            ? { border: "1.5px dashed var(--color-ink-3)", background: "transparent" }
+                            : { borderColor: "var(--line)" }
+                        }
                       >
                         <div className="flex items-start gap-2.5">
                           <span className="flex-1 text-15 leading-[1.4] font-medium text-pretty text-ink">
@@ -101,9 +146,15 @@ export function TasksScreen({
                           </span>
                           <span
                             className="mt-px flex-none text-11 font-semibold"
-                            style={{ color: done ? "var(--color-ok)" : "var(--color-ink-3)" }}
+                            style={{
+                              color: waiting
+                                ? "var(--color-ink-2)"
+                                : done
+                                  ? "var(--color-ok)"
+                                  : "var(--color-ink-3)",
+                            }}
                           >
-                            {done ? "✓ fait" : isEvent ? "rendez-vous" : "tâche"}
+                            {waiting ? "en attente" : done ? "✓ fait" : isEvent ? "rendez-vous" : "tâche"}
                           </span>
                         </div>
                         <div className="mt-[7px] flex items-center gap-2">
@@ -137,9 +188,9 @@ export function TasksScreen({
         {!visible.length && (
           <div className="px-5 py-16 text-center">
             <p className="m-0 text-13 leading-[1.5] font-medium text-ink-3">
-              {sent.length ? "Rien dans ce filtre." : "Aucune tâche envoyée pour l'instant."}
+              {all.length ? "Rien dans ce filtre." : "Aucun item enregistré pour l'instant."}
               <br />
-              {!sent.length && "Dicte une note pour commencer."}
+              {!all.length && "Dicte une note pour commencer."}
             </p>
           </div>
         )}

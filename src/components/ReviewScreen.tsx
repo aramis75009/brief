@@ -1,9 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ArrowLeftIcon, ChevronDownIcon, ClockIcon, CloseIcon, PlusIcon, TrashIcon } from "./icons";
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  CloseIcon,
+  PlusIcon,
+  ProjectDot,
+  TrashIcon,
+} from "./icons";
 import { formatDue, resolveDue } from "@/lib/due";
-import { DUE_SUGGESTIONS, PRIORITIES, PRIORITY_VALUES, skinFor } from "@/lib/projects";
+import { DUE_SUGGESTIONS, PRIORITIES, PRIORITY_VALUES, shapeFor, skinFor } from "@/lib/projects";
 import type { DraftItem, Priority, Project } from "@/lib/types";
 
 const SWIPE_DELETE_PX = -95;
@@ -154,9 +162,10 @@ export function ReviewScreen({
 
                 <div className="mt-2.5 flex flex-wrap items-center gap-[7px]">
                   <span
-                    className="relative inline-flex h-8 items-center rounded-chip pr-[26px] pl-[11px] text-13 font-semibold"
+                    className="relative inline-flex h-8 items-center gap-2 rounded-chip pr-[26px] pl-[11px] text-13 font-semibold"
                     style={{ background: skin.bg, color: skin.fg }}
                   >
+                    <ProjectDot shape={shapeFor(project ?? { id: d.projectId })} />
                     {project?.name ?? "Projet"}
                     <ChevronDownIcon className="absolute right-[9px] opacity-55" />
                     <select

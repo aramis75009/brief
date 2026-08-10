@@ -1,7 +1,7 @@
 "use client";
 
 import { PIN_HEADER, UnauthorizedError, clearPin, getPin } from "./pin";
-import type { DraftItem, Item, Project, SaveResult } from "./types";
+import type { DraftItem, Item, Overview, Project, SaveResult } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -17,6 +17,7 @@ const TIMEOUTS = {
   parse: 50_000,
   save: 30_000,
   items: 15_000,
+  overview: 15_000,
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
@@ -56,6 +57,17 @@ export async function fetchProjects(): Promise<Project[]> {
 export async function fetchItems(): Promise<Item[]> {
   const data = await jsonFetch<{ items: Item[] }>("/api/items", {}, TIMEOUTS.items);
   return data.items ?? [];
+}
+
+/**
+ * La vision globale, calculée par le serveur.
+ *
+ * Un seul appel sert les deux représentations de l'onglet Vision ET le relevé
+ * du jour de l'écran Capture. Agréger côté client obligerait à télécharger tous
+ * les items pour n'en afficher que des totaux.
+ */
+export async function fetchOverview(): Promise<Overview> {
+  return jsonFetch<Overview>("/api/overview", {}, TIMEOUTS.overview);
 }
 
 /** Les projets ne transitent plus par le client : le serveur les possède. */

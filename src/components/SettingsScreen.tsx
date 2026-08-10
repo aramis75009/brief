@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ProjectDot } from "./icons";
 import {
   disablePush,
   enablePush,
@@ -8,7 +9,7 @@ import {
   sendTestPush,
   type PushState,
 } from "@/lib/push-client";
-import { skinFor } from "@/lib/projects";
+import { shapeFor, skinFor } from "@/lib/projects";
 import type { Project } from "@/lib/types";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -225,9 +226,10 @@ export function SettingsScreen({
               return (
                 <span
                   key={p.id}
-                  className="inline-flex h-8 items-center rounded-chip px-3 text-13 font-semibold"
+                  className="inline-flex h-8 items-center gap-2 rounded-chip px-3 text-13 font-semibold"
                   style={{ background: skin.bg, color: skin.fg }}
                 >
+                  <ProjectDot shape={shapeFor(p)} />
                   {p.name}
                 </span>
               );
