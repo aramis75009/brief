@@ -150,6 +150,9 @@ export function BrandMark({ size = 72 }: { size?: number }) {
         width: size,
         height: size,
         gap,
+        // 20px sur un bloc de 72, comme la maquette. Sans ce retrait, `items-end`
+        // colle les barres au bord bas du bloc : elles paraissent coupées.
+        padding: Math.round(size * 0.278),
         background: "var(--brand-block)",
         // En sombre le bloc vaut `--color-tile` (#1c1a19) sur une page #0f0e0d :
         // 1,1:1, soit la silhouette invisible. Le filet la redonne. En clair il

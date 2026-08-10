@@ -324,7 +324,10 @@ export function CaptureScreen({
             "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-row border-none " +
             "text-15 font-semibold tracking-[0.1px] transition-all duration-200 " +
             (ctaDisabled
-              ? "cursor-default bg-page text-ink-2"
+              // Filet intérieur OBLIGATOIRE : le bouton est en `bg-page`, donc
+              // de la même couleur que la coque depuis qu'elle est passée en
+              // `page`. Sans ce trait, il disparaît purement et simplement.
+              ? "cursor-default bg-page text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
               : recording
                 ? "cursor-pointer bg-tile text-ink shadow-[inset_0_0_0_1px_var(--line-2)] hover:bg-page active:scale-[0.985]"
                 : "cursor-pointer bg-ink text-page hover:bg-ink active:scale-[0.985]")
@@ -340,11 +343,15 @@ export function CaptureScreen({
               <StopIcon size={18} />
               Arrêter l&apos;enregistrement
             </>
-          ) : (
+          ) : hasTranscript ? (
             <>
               Structurer la note
               <ArrowRightIcon />
             </>
+          ) : (
+            // Le libellé dit l'état réel. « Structurer la note » sur un bouton
+            // inerte promet une action qui ne peut pas avoir lieu.
+            "Rien à structurer"
           )}
         </button>
       </div>

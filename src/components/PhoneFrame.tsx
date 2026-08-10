@@ -9,9 +9,16 @@
 export function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh items-center justify-center sm:px-4 sm:py-7">
+      {/* `bg-page` et NON `bg-tile`.
+          `tile` est la couleur d'une CARTE posée sur la page ; l'employer pour la
+          coque entière contredisait DESIGN.md et surtout le `theme-color` du
+          manifeste, qui peint la zone de la barre d'état en `--color-page`. Deux
+          couleurs voisines mais différentes qui se touchent en haut de l'écran :
+          d'où la couture visible sur iPhone, là où une app bien intégrée ne
+          montre aucune limite entre la barre d'état et son contenu. */}
       <div
         className="
-          safe-x relative flex h-dvh w-full flex-col overflow-hidden bg-tile
+          safe-x relative flex h-dvh w-full flex-col overflow-hidden bg-page
           sm:h-[844px] sm:w-[390px] sm:rounded-[44px]
           sm:shadow-[0_30px_70px_-20px_rgba(19,18,17,0.38),0_0_0_1px_rgba(19,18,17,0.06)]
         "
