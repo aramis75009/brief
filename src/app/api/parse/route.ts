@@ -1,6 +1,6 @@
 import { TIMEZONE, resolveDue, toIsoWithOffset } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
-import { inboxIdOf, isPriority } from "@/lib/projects";
+import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { readProjects } from "@/lib/store";
 import type { DraftItem, ItemKind, Priority, Project } from "@/lib/types";
 
@@ -65,8 +65,9 @@ Règles :
 - allDay : true si aucune heure n'est dite. Mets alors une heure à 09:00.
 - priority : 1 = urgent, 2 = important, 3 = normal, 4 = par défaut. ATTENTION : 1 est
   la priorité la PLUS HAUTE.
-- projectId : le projet dont le domaine correspond au contenu. N'utilise l'Inbox que
-  si aucun autre ne colle.
+- projectId : l'identifiant EXACT d'un projet de la liste ci-dessus, jamais un
+  identifiant inventé. Si aucun ne correspond vraiment, prends le plus proche —
+  l'utilisateur corrigera à la revue, alors qu'un identifiant inconnu se perdrait.
 - rrule : règle de récurrence RFC 5545 si la note en décrit une ("tous les mardis"
   donne "FREQ=WEEKLY;BYDAY=TU"), sinon null.
 - Un item par intention distincte. N'invente rien qui ne soit pas dans la note.
@@ -75,8 +76,8 @@ Exemple, si nous étions le lundi 10 août 2026 :
 Note : "ce soir trier les cintres, déjeuner avec Paul jeudi midi, et tous les mardis sortir les poubelles"
 Réponse : {"items":[
 {"kind":"task","title":"Trier les cintres du dépôt-vente","due":"2026-08-10T19:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet friperie>","rrule":null},
-{"kind":"event","title":"Déjeuner avec Paul","due":"2026-08-13T12:00:00+02:00","allDay":false,"priority":3,"projectId":"inbox","rrule":null},
-{"kind":"task","title":"Sortir les poubelles","due":"2026-08-11T09:00:00+02:00","allDay":true,"priority":4,"projectId":"inbox","rrule":"FREQ=WEEKLY;BYDAY=TU"}]}`;
+{"kind":"event","title":"Déjeuner avec Paul","due":"2026-08-13T12:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet le plus proche>","rrule":null},
+{"kind":"task","title":"Sortir les poubelles","due":"2026-08-11T09:00:00+02:00","allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":"FREQ=WEEKLY;BYDAY=TU"}]}`;
 }
 
 /** Le modèle encadre parfois sa réponse de ```json … ``` malgré la consigne. */
@@ -151,7 +152,7 @@ function alignToRrule(due: string, rrule: string): string {
  */
 function coerce(rows: RawItem[], projects: Project[], now: Date): DraftItem[] {
   const known = new Set(projects.map((p) => p.id));
-  const inbox = inboxIdOf(projects);
+  const fallback = fallbackProjectId(projects);
 
   return rows
     .map((r): DraftItem | null => {
@@ -162,7 +163,7 @@ function coerce(rows: RawItem[], projects: Project[], now: Date): DraftItem[] {
       const priority: Priority = isPriority(r.priority) ? r.priority : 4;
 
       const rawProject = r.projectId == null ? "" : String(r.projectId);
-      const projectId = known.has(rawProject) ? rawProject : inbox;
+      const projectId = known.has(rawProject) ? rawProject : fallback;
 
       let due: string | null = null;
       let allDay = r.allDay === true;

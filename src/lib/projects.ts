@@ -14,16 +14,6 @@ import type { Priority, Project, ProjectSkin, Shape, Tint } from "./types";
 
 export const SEED_PROJECTS: Project[] = [
   {
-    id: "inbox",
-    name: "Inbox",
-    tint: 5,
-    shape: "disc",
-    hints: [
-      "tout le reste", "administratif", "URSSAF", "impôts", "banque", "santé", "médecin",
-      "courses", "maison", "personnel",
-    ],
-  },
-  {
     id: "frip-trend",
     name: "Frip & Trend",
     tint: 1,
@@ -54,23 +44,80 @@ export const SEED_PROJECTS: Project[] = [
       "bug", "API", "déploiement", "git", "soutenance", "formateur", "dossier scolaire", "TP",
     ],
   },
-  {
-    id: "table-de-paupy",
-    name: "La Table de Paupy",
-    tint: 4,
-    shape: "capsule",
-    hints: [
-      "restaurant", "resto", "menu", "carte", "service", "fournisseur", "réservation",
-      "cuisine", "dessert", "plat", "fiche technique", "salle",
-    ],
-  },
 ];
 
-export const INBOX_ID = "inbox";
+/**
+ * Projet de repli, quand la destination est inconnue ou illisible.
+ *
+ * ⚠️ Remplace l'ancien `inboxIdOf`. Il existait une Inbox neutre qui servait de
+ * fond de panier ; elle a été supprimée. Sans elle, le repli est le PREMIER
+ * projet de la liste, ce qui veut dire qu'un item non routable atterrit dans un
+ * vrai projet plutôt que dans une case à trier.
+ *
+ * Ce que ça reste acceptable : la destination est toujours visible et
+ * modifiable sur l'écran de revue avant enregistrement, donc un mauvais routage
+ * se voit. La seule voie sans revue est `/api/capture`, qui enregistre
+ * directement — c'est là que le repli est réellement silencieux.
+ *
+ * Renvoie une chaîne vide si aucun projet n'existe : l'item devient orphelin et
+ * s'affiche sous « Autre » dans l'écran Tâches. Inventer un identifiant serait
+ * pire, il pointerait vers un projet fantôme.
+ */
+export function fallbackProjectId(projects: Project[]): string {
+  return projects[0]?.id ?? "";
+}
 
-/** Projet de repli : l'Inbox si elle existe, sinon le premier de la liste. */
-export function inboxIdOf(projects: Project[]): string {
-  return projects.find((p) => p.id === INBOX_ID)?.id ?? projects[0]?.id ?? INBOX_ID;
+/* ---------------------------------------------------------------------------
+ * Création d'un projet depuis l'écran Réglages.
+ * ------------------------------------------------------------------------ */
+
+/** Identifiant lisible dérivé du nom. Jamais réutilisé tel quel s'il existe. */
+export function slugify(name: string): string {
+  const base = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  // Un nom entièrement non latin (ex. « 日本 ») produirait une chaîne vide :
+  // on retombe sur un identifiant horodaté plutôt que sur "".
+  return base || `projet-${Date.now().toString(36)}`;
+}
+
+export function uniqueProjectId(name: string, taken: Set<string>): string {
+  const base = slugify(name);
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 1000; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+const ALL_TINTS: Tint[] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+/**
+ * Teinte et forme d'un nouveau projet : on prend le couple le MOINS utilisé.
+ *
+ * Dériver du hachage de l'identifiant, comme pour les projets sans teinte
+ * explicite, donnerait des collisions dès le troisième ou quatrième projet. Ici
+ * on regarde ce qui existe déjà, donc deux projets créés à la suite ne peuvent
+ * pas se ressembler.
+ */
+export function nextSkin(existing: { tint?: Tint; shape?: Shape }[]): {
+  tint: Tint;
+  shape: Shape;
+} {
+  const count = <T,>(all: T[], used: (T | undefined)[]) => {
+    const tally = new Map<T, number>(all.map((v) => [v, 0]));
+    for (const u of used) if (u !== undefined && tally.has(u)) tally.set(u, tally.get(u)! + 1);
+    return all.reduce((best, v) => (tally.get(v)! < tally.get(best)! ? v : best), all[0]);
+  };
+  return {
+    tint: count(ALL_TINTS, existing.map((p) => p.tint)),
+    shape: count(SHAPES, existing.map((p) => p.shape)),
+  };
 }
 
 /**

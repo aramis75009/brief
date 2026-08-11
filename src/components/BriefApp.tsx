@@ -13,6 +13,8 @@ import { TasksScreen, type FilterKey } from "./TasksScreen";
 import { Toast } from "./Toast";
 import {
   ApiError,
+  createProject,
+  deleteProject,
   fetchProjects,
   fetchItems,
   fetchOverview,
@@ -30,7 +32,7 @@ import {
   subscribeQueue,
 } from "@/lib/queue";
 import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
-import { SEED_PROJECTS, inboxIdOf } from "@/lib/projects";
+import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
 import type { DraftItem, Item, Overview, Phase, Project, ToastKind, View } from "@/lib/types";
 
@@ -190,6 +192,55 @@ export function BriefApp() {
     [flash],
   );
 
+  /* --- Gestion des projets ------------------------------------------------- */
+  // Renvoient un message d'erreur à afficher SUR PLACE, ou null si c'est passé.
+  // Une erreur de formulaire doit se lire à côté du champ, pas dans un toast qui
+  // s'efface au bout de trois secondes.
+  const addProject = useCallback(
+    async (name: string): Promise<string | null> => {
+      try {
+        const created = await createProject(name);
+        setProjects((ps) => [...ps, created]);
+        flash(`Projet « ${created.name} » créé.`);
+        return null;
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          clearPin();
+          setUnlocked(false);
+          return null;
+        }
+        return e instanceof ApiError ? e.message : "Création impossible.";
+      }
+    },
+    [flash],
+  );
+
+  const removeProject = useCallback(
+    async (id: string): Promise<string | null> => {
+      try {
+        const { orphaned } = await deleteProject(id);
+        setProjects((ps) => ps.filter((p) => p.id !== id));
+        // On NOMME les orphelins. Supprimer un projet sans le dire donnerait
+        // l'impression que ses tâches sont parties avec lui.
+        flash(
+          orphaned
+            ? `Projet supprimé — ${orphaned} item${orphaned > 1 ? "s" : ""} sous « Autre ».`
+            : "Projet supprimé.",
+        );
+        void refreshOverview();
+        return null;
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          clearPin();
+          setUnlocked(false);
+          return null;
+        }
+        return e instanceof ApiError ? e.message : "Suppression impossible.";
+      }
+    },
+    [flash, refreshOverview],
+  );
+
   /* --- Structuration ------------------------------------------------------ */
   // Le bouton « Réessayer » doit rappeler structure() : on passe par une ref
   // pour ne pas référencer la callback avant sa déclaration.
@@ -273,7 +324,7 @@ export function BriefApp() {
         id: uid(),
         kind: "task",
         title: "",
-        projectId: inboxIdOf(projectsRef.current),
+        projectId: fallbackProjectId(projectsRef.current),
         due: null,
         allDay: true,
         priority: 4,
@@ -434,8 +485,11 @@ export function BriefApp() {
       {view === "settings" && (
         <SettingsScreen
           projects={projects}
+          items={sent}
           reloading={reloading}
           onReloadProjects={() => void loadProjects()}
+          onCreateProject={addProject}
+          onDeleteProject={removeProject}
           onClearSession={() => {
             setTranscript("");
             setDrafts([]);

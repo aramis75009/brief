@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   PRIORITIES,
   PRIORITY_VALUES,
-  inboxIdOf,
+  fallbackProjectId,
   isPriority,
+  nextSkin,
   shapeFor,
   shapeFromId,
   skinFor,
+  slugify,
   tintFromId,
+  uniqueProjectId,
 } from "./projects";
 import { SEED_PROJECTS } from "./projects";
+import type { Tint } from "./types";
 
 describe("priorités", () => {
   it("1 est la plus haute — l'inverse de l'échelle d'où vient ce projet", () => {
@@ -80,17 +84,53 @@ describe("formes de projet", () => {
   });
 });
 
-describe("inboxIdOf", () => {
-  it("trouve l'inbox", () => {
-    expect(inboxIdOf(SEED_PROJECTS)).toBe("inbox");
+describe("fallbackProjectId", () => {
+  it("se rabat sur le premier projet de la liste", () => {
+    expect(fallbackProjectId(SEED_PROJECTS)).toBe(SEED_PROJECTS[0].id);
   });
 
-  it("se rabat sur le premier projet si l'inbox a disparu", () => {
-    expect(inboxIdOf([{ id: "autre", name: "Autre", tint: 1 }])).toBe("autre");
+  it("renvoie une chaîne vide sans aucun projet, jamais un id inventé", () => {
+    // Un identifiant fabriqué pointerait vers un projet fantôme : l'item
+    // paraîtrait rangé alors qu'il n'existe nulle part. Vide = orphelin, et un
+    // orphelin s'affiche sous « Autre » dans l'écran Tâches.
+    expect(fallbackProjectId([])).toBe("");
+  });
+});
+
+describe("création d'un projet", () => {
+  it("dérive un identifiant lisible et sans accents", () => {
+    expect(slugify("Web@cadémie")).toBe("web-cademie");
+    expect(slugify("  La Table de Paupy  ")).toBe("la-table-de-paupy");
   });
 
-  it("ne renvoie jamais undefined, même sans aucun projet", () => {
-    // L'appelant range l'item quelque part : un id vide perdrait la tâche.
-    expect(inboxIdOf([])).toBe("inbox");
+  it("ne rend jamais un identifiant vide, même sans caractère latin", () => {
+    // Un id vide entrerait en collision avec le repli « aucun projet ».
+    expect(slugify("日本")).not.toBe("");
+  });
+
+  it("désambiguïse un identifiant déjà pris", () => {
+    const taken = new Set(["sport"]);
+    expect(uniqueProjectId("Sport", taken)).toBe("sport-2");
+  });
+
+  it("attribue la teinte et la forme les MOINS utilisées", () => {
+    // Sans ça, deux projets créés à la suite se ressembleraient, ce qui ruine
+    // la lecture de l'écran Tâches — on reconnaît le couple, pas le libellé.
+    const existing = [
+      { tint: 1 as const, shape: "square" as const },
+      { tint: 2 as const, shape: "diamond" as const },
+    ];
+    const skin = nextSkin(existing);
+    expect(skin.tint).not.toBe(1);
+    expect(skin.tint).not.toBe(2);
+    expect(skin.shape).not.toBe("square");
+    expect(skin.shape).not.toBe("diamond");
+  });
+
+  it("reste défini quand les huit teintes sont déjà prises", () => {
+    const full = [1, 2, 3, 4, 5, 6, 7, 8].map((t) => ({ tint: t as Tint }));
+    const skin = nextSkin(full);
+    expect(skin.tint).toBeGreaterThanOrEqual(1);
+    expect(skin.tint).toBeLessThanOrEqual(8);
   });
 });

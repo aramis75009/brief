@@ -61,10 +61,19 @@ async function writeJson(name: string, value: unknown): Promise<void> {
 
 /* --- Projets ------------------------------------------------------------- */
 
-/** Les projets stockés, ou la liste d'amorçage au premier démarrage. */
+/**
+ * Les projets stockés, ou la liste d'amorçage au PREMIER démarrage seulement.
+ *
+ * ⚠️ Le sentinelle `null` n'est pas une coquetterie : il distingue « le fichier
+ * n'existe pas encore » de « l'utilisateur a supprimé tous ses projets ». Avec
+ * un tableau vide comme défaut, ces deux cas étaient confondus, et supprimer le
+ * dernier projet depuis les Réglages faisait RÉAPPARAÎTRE la liste d'amorçage
+ * au rechargement suivant.
+ */
 export async function readProjects(): Promise<Project[]> {
-  const stored = await readJson<Project[]>("projects.json", []);
-  return stored.length ? stored.filter((p) => !p.archived) : SEED_PROJECTS;
+  const stored = await readJson<Project[] | null>("projects.json", null);
+  if (stored === null) return SEED_PROJECTS;
+  return stored.filter((p) => !p.archived);
 }
 
 export async function writeProjects(projects: Project[]): Promise<void> {

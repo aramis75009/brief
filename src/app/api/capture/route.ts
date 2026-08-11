@@ -1,5 +1,5 @@
 import { requireMachineToken } from "@/lib/cron-auth";
-import { inboxIdOf } from "@/lib/projects";
+import { fallbackProjectId } from "@/lib/projects";
 import { readProjects, saveItems } from "@/lib/store";
 import type { Item } from "@/lib/types";
 
@@ -46,7 +46,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const projects = await readProjects();
-  const inbox = inboxIdOf(projects);
+  const fallback = fallbackProjectId(projects);
   const now = new Date().toISOString();
 
   // Chemin court : pas de structuration, l'item atterrit tel quel dans l'Inbox.
@@ -55,7 +55,7 @@ export async function POST(req: Request): Promise<Response> {
       id: `cap_${Date.now().toString(36)}`,
       kind: "task",
       title: text.slice(0, 300),
-      projectId: inbox,
+      projectId: fallback,
       due: null,
       allDay: true,
       priority: 4,
@@ -108,7 +108,7 @@ export async function POST(req: Request): Promise<Response> {
     id: String(r.id),
     kind: r.kind === "event" ? "event" : "task",
     title: String(r.title),
-    projectId: String(r.projectId ?? inbox),
+    projectId: String(r.projectId ?? fallback),
     due: typeof r.due === "string" ? r.due : null,
     allDay: r.allDay === true,
     priority: (r.priority as Item["priority"]) ?? 4,

@@ -1,6 +1,6 @@
 import { isRealCalendarDate } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
-import { inboxIdOf, isPriority } from "@/lib/projects";
+import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
 
@@ -13,7 +13,7 @@ import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
  * déduplication à maintenir.
  */
 
-function coerce(input: unknown, knownProjects: Set<string>, inbox: string): DraftItem | null {
+function coerce(input: unknown, knownProjects: Set<string>, fallback: string): DraftItem | null {
   if (typeof input !== "object" || input === null) return null;
   const v = input as Record<string, unknown>;
 
@@ -22,7 +22,7 @@ function coerce(input: unknown, knownProjects: Set<string>, inbox: string): Draf
   if (!title || !id) return null;
 
   const kind: ItemKind = v.kind === "event" ? "event" : "task";
-  const projectId = knownProjects.has(String(v.projectId ?? "")) ? String(v.projectId) : inbox;
+  const projectId = knownProjects.has(String(v.projectId ?? "")) ? String(v.projectId) : fallback;
 
   // Une date illisible devient « pas d'échéance » : mieux vaut un rappel absent
   // et visible qu'un rappel programmé au mauvais moment.
@@ -71,14 +71,14 @@ export async function POST(req: Request): Promise<Response> {
 
   const projects = await readProjects();
   const known = new Set(projects.map((p) => p.id));
-  const inbox = inboxIdOf(projects);
+  const fallback = fallbackProjectId(projects);
   const now = new Date().toISOString();
 
   const results: SaveResult[] = [];
   const toSave: Item[] = [];
 
   for (const row of rows) {
-    const draft = coerce(row, known, inbox);
+    const draft = coerce(row, known, fallback);
     if (!draft) {
       const id = String((row as { id?: unknown })?.id ?? "?");
       results.push({ ok: false, id, error: "Item invalide : titre ou identifiant manquant." });

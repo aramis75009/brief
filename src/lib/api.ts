@@ -53,6 +53,30 @@ export async function fetchProjects(): Promise<Project[]> {
   return jsonFetch<Project[]>("/api/projects", {}, TIMEOUTS.projects);
 }
 
+/** Crée un projet. La teinte et la forme sont choisies par le serveur. */
+export async function createProject(name: string): Promise<Project> {
+  return jsonFetch<Project>(
+    "/api/projects",
+    { method: "POST", body: JSON.stringify({ name }) },
+    TIMEOUTS.projects,
+  );
+}
+
+/**
+ * Supprime un projet. `orphaned` compte les items ouverts qui pointaient dessus.
+ *
+ * Ces items ne sont PAS supprimés : ils basculent sous « Autre » dans l'écran
+ * Tâches. L'appelant doit le dire à l'utilisateur, sinon la suppression donne
+ * l'impression d'avoir emporté des tâches avec elle.
+ */
+export async function deleteProject(id: string): Promise<{ ok: boolean; orphaned: number }> {
+  return jsonFetch(
+    "/api/projects",
+    { method: "DELETE", body: JSON.stringify({ id }) },
+    TIMEOUTS.projects,
+  );
+}
+
 /** Les items déjà enregistrés, pour l'écran Tâches et la vision globale. */
 export async function fetchItems(): Promise<Item[]> {
   const data = await jsonFetch<{ items: Item[] }>("/api/items", {}, TIMEOUTS.items);
