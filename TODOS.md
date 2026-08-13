@@ -47,6 +47,7 @@ Voir la section « Décisions à trancher » plus bas.
   l'onglet Safari), autoriser les notifications, puis programmer un rappel à
   +3 minutes, verrouiller le téléphone et le poser. `/api/push/test` permet de
   vérifier l'aller-retour avant de faire confiance au planificateur.
+- **Statut :** ✅ **VALIDÉ LE 2026-08-13** (Notification reçue avec succès sur écran verrouillé).
 
 ### ~~Déployer sur le VPS avec un vrai domaine et TLS~~ — FAIT le 2026-08-13
 En ligne sur **https://brief.srv1899780.hstgr.cloud**, PIN d'accès actif.
