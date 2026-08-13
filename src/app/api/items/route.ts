@@ -1,7 +1,8 @@
+import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
-import { readItems, readProjects, saveItems } from "@/lib/store";
+import { deleteItem, patchItem, readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
 
 /**
@@ -109,4 +110,93 @@ export async function POST(req: Request): Promise<Response> {
   const saved = results.filter((r) => r.ok).length;
   const status = saved === 0 ? 400 : saved === rows.length ? 200 : 207;
   return Response.json({ results, saved, total: rows.length }, { status });
+}
+
+/**
+ * Coche « fait » d'un item — `{ id, done }`.
+ *
+ * Route séparée de POST à dessein : POST remplace un item entier et remet
+ * `doneAt` à `null` par construction, ce qui rend impossible d'enregistrer une
+ * complétion par ce chemin. Deux intentions différentes, deux verbes.
+ *
+ * L'écriture passe par `patchItem`, qui sérialise et renomme atomiquement : le
+ * cron des rappels écrit le même fichier toutes les 60 secondes, et une
+ * lecture-modification-écriture concurrente perdrait l'une des deux.
+ */
+export async function PATCH(req: Request): Promise<Response> {
+  const denied = requirePin(req);
+  if (denied) return denied;
+
+  let body: { id?: unknown; done?: unknown };
+  try {
+    body = (await req.json()) as { id?: unknown; done?: unknown };
+  } catch {
+    return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
+  }
+
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
+  if (typeof body.done !== "boolean") {
+    return Response.json({ error: "`done` doit être un booléen." }, { status: 400 });
+  }
+
+  const item = (await readItems()).find((i) => i.id === id);
+  if (!item) return Response.json({ error: "Item introuvable." }, { status: 404 });
+
+  const { kind, patch } = completionPatch(item, body.done, new Date());
+
+  try {
+    const updated = await patchItem(id, patch);
+    if (!updated) return Response.json({ error: "Item introuvable." }, { status: 404 });
+    // `kind` permet au client de dire « repoussé à mardi » plutôt que « fait »
+    // sur une récurrence — sans ça, cocher paraîtrait ne rien faire.
+    return Response.json({ item: updated, outcome: kind });
+  } catch (e) {
+    return Response.json(
+      {
+        error: "Modification non enregistrée côté serveur.",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 503 },
+    );
+  }
+}
+
+/**
+ * Suppression définitive d'un item — `{ id }`.
+ *
+ * Jusqu'ici la corbeille de la fiche ne retirait la ligne que de l'état React :
+ * l'item revenait au rechargement suivant, sans que rien ne le signale. Une
+ * suppression qui ne supprime pas est pire qu'un bouton absent — on croit avoir
+ * rangé.
+ *
+ * Distinct de la coche : cocher garde une trace, supprimer n'en garde aucune.
+ */
+export async function DELETE(req: Request): Promise<Response> {
+  const denied = requirePin(req);
+  if (denied) return denied;
+
+  let body: { id?: unknown };
+  try {
+    body = (await req.json()) as { id?: unknown };
+  } catch {
+    return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
+  }
+
+  const id = String(body.id ?? "").trim();
+  if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
+
+  try {
+    const removed = await deleteItem(id);
+    if (!removed) return Response.json({ error: "Item introuvable." }, { status: 404 });
+    return Response.json({ ok: true, id });
+  } catch (e) {
+    return Response.json(
+      {
+        error: "Suppression non enregistrée côté serveur.",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 503 },
+    );
+  }
 }

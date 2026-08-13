@@ -68,6 +68,14 @@ export function TrashIcon({ size = 20, className }: IconProps) {
   );
 }
 
+export function CheckIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg {...base} width={size} height={size} strokeWidth={3} className={className}>
+      <path d="M5 12.5l4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
 export function ChevronDownIcon({ size = 12, className }: IconProps) {
   return (
     <svg {...base} width={size} height={size} strokeWidth={2.4} className={className}>

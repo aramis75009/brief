@@ -14,14 +14,17 @@ import { Toast } from "./Toast";
 import {
   ApiError,
   createProject,
+  deleteItem,
   deleteProject,
   fetchProjects,
   fetchItems,
   fetchOverview,
   parseNote,
   saveItems,
+  setItemDone,
   transcribeAudio,
 } from "@/lib/api";
+import { formatDue } from "@/lib/due";
 import { uid } from "@/lib/ids";
 import {
   enqueue,
@@ -56,6 +59,8 @@ export function BriefApp() {
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   /** Les items enregistrés, relus depuis le serveur : Brief en est la source. */
   const [sent, setSent] = useState<Item[]>([]);
+  /** Item dont la coche attend le serveur — empêche le double appui. */
+  const [doneBusyId, setDoneBusyId] = useState<string | null>(null);
   /**
    * Les items encore EN FILE, dictés sans réseau. Ils ne viennent pas du serveur
    * et ne doivent jamais être comptés comme enregistrés — d'où une liste
@@ -149,6 +154,82 @@ export function BriefApp() {
       setOverviewLoading(false);
     }
   }, []);
+
+  /* --- Coche « fait » ------------------------------------------------------ */
+
+  /**
+   * La coche répond au doigt, pas au réseau : on peint l'état tout de suite et
+   * on le remplace par la réponse du serveur, qui fait foi. Sur une tâche
+   * récurrente c'est LUI qui recalcule l'échéance — la reconstruire ici
+   * dupliquerait la règle et les deux finiraient par diverger.
+   *
+   * En cas d'échec on remet exactement l'état d'avant. Une coche qui reste
+   * peinte alors que rien n'est enregistré est le pire des deux mondes : la
+   * tâche paraît faite et ressuscite au prochain chargement.
+   */
+  const toggleDone = useCallback(
+    async (id: string, done: boolean) => {
+      const before = sent.find((t) => t.id === id);
+      if (!before) return;
+
+      setDoneBusyId(id);
+      setSent((s) =>
+        s.map((t) => (t.id === id ? { ...t, doneAt: done ? new Date().toISOString() : null } : t)),
+      );
+
+      try {
+        const { item, outcome } = await setItemDone(id, done);
+        setSent((s) => s.map((t) => (t.id === id ? item : t)));
+        // Sans ce message, cocher une récurrence donnerait l'impression de
+        // n'avoir rien fait : la tâche reste dans la liste, à une autre date.
+        if (outcome === "advanced") {
+          flash(`Repoussé au ${formatDue(item.due, item.allDay)}.`);
+        }
+        void refreshOverview();
+      } catch (e) {
+        setSent((s) => s.map((t) => (t.id === id ? before : t)));
+        // Pas d'écran d'erreur qui prend toute l'app : la case redevient vide
+        // sous le doigt et la retenter coûte un appui. Un toast suffit à dire
+        // pourquoi. La déconnexion, elle, reste du ressort de `fail`.
+        if (e instanceof UnauthorizedError) {
+          fail(e, "");
+          return;
+        }
+        flash(e instanceof ApiError ? e.message : "La coche n'a pas été enregistrée.", "err");
+      } finally {
+        setDoneBusyId(null);
+      }
+    },
+    [sent, flash, refreshOverview, fail],
+  );
+
+  /**
+   * Suppression définitive d'un item.
+   *
+   * ⚠️ Jusqu'au 2026-08-13 ce geste ne filtrait QUE l'état React : la ligne
+   * disparaissait, la fiche se refermait, et l'item revenait au rechargement
+   * suivant sans un mot. On remet la ligne en place si le serveur refuse —
+   * mieux vaut une suppression qui échoue visiblement qu'une qui ment.
+   */
+  const removeItem = useCallback(
+    async (id: string) => {
+      const before = sent;
+      setSheetId(null);
+      setSent((s) => s.filter((t) => t.id !== id));
+      try {
+        await deleteItem(id);
+        void refreshOverview();
+      } catch (e) {
+        setSent(before);
+        if (e instanceof UnauthorizedError) {
+          fail(e, "");
+          return;
+        }
+        flash(e instanceof ApiError ? e.message : "La suppression n'a pas été enregistrée.", "err");
+      }
+    },
+    [sent, flash, refreshOverview, fail],
+  );
 
   /* --- Items enregistrés --------------------------------------------------- */
   const refreshItems = useCallback(async () => {
@@ -470,6 +551,8 @@ export function BriefApp() {
           filter={filter}
           onFilter={setFilter}
           onOpen={setSheetId}
+          onToggleDone={(id, done) => void toggleDone(id, done)}
+          busyId={doneBusyId}
         />
       )}
 
@@ -511,10 +594,9 @@ export function BriefApp() {
           task={sheetTask}
           projects={projects}
           onClose={() => setSheetId(null)}
-          onDelete={() => {
-            setSent((s) => s.filter((t) => t.id !== sheetTask.id));
-            setSheetId(null);
-          }}
+          onToggleDone={(done) => void toggleDone(sheetTask.id, done)}
+          busy={doneBusyId === sheetTask.id}
+          onDelete={() => void removeItem(sheetTask.id)}
         />
       )}
 

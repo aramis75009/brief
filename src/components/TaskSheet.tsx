@@ -1,5 +1,6 @@
 "use client";
 
+import { DoneBox } from "./DoneBox";
 import { ProjectDot, TrashIcon } from "./icons";
 import { formatDue } from "@/lib/due";
 import { PRIORITIES, shapeFor, skinFor } from "@/lib/projects";
@@ -24,11 +25,15 @@ export function TaskSheet({
   projects,
   onClose,
   onDelete,
-  }: {
+  onToggleDone,
+  busy = false,
+}: {
   task: Item;
   projects: Project[];
   onClose: () => void;
   onDelete: () => void;
+  onToggleDone: (done: boolean) => void;
+  busy?: boolean;
 }) {
   const project = projects.find((p) => p.id === task.projectId) ?? {
     id: task.projectId,
@@ -55,9 +60,24 @@ export function TaskSheet({
           <ProjectDot shape={shapeFor(project)} />
           {project.name}
         </span>
-        <h3 className="mt-3 mb-0 text-21 leading-[1.3] font-semibold tracking-[-0.3px] text-pretty text-ink">
-          {task.title}
-        </h3>
+        <div className="mt-3 flex items-start gap-3">
+          <span className="mt-[3px] ml-[9px] flex-none">
+            <DoneBox
+              done={done}
+              busy={busy}
+              label={done ? "Rouvrir cette tâche" : "Marquer comme fait"}
+              onToggle={() => onToggleDone(!done)}
+            />
+          </span>
+          <h3
+            className={
+              "m-0 min-w-0 flex-1 text-21 leading-[1.3] font-semibold tracking-[-0.3px] text-pretty " +
+              (done ? "text-ink-3 line-through" : "text-ink")
+            }
+          >
+            {task.title}
+          </h3>
+        </div>
 
         <div className="mt-4 mb-5 flex flex-col gap-px overflow-hidden rounded-row bg-[var(--line)]">
           <Row label="Échéance" value={formatDue(task.due, task.allDay)} />

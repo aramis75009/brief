@@ -1,5 +1,6 @@
 "use client";
 
+import { DoneBox } from "./DoneBox";
 import { ProjectDot } from "./icons";
 import { formatDue } from "@/lib/due";
 import { PRIORITIES, shapeFor, skinFor } from "@/lib/projects";
@@ -20,6 +21,8 @@ export function TasksScreen({
   filter,
   onFilter,
   onOpen,
+  onToggleDone,
+  busyId,
 }: {
   sent: Item[];
   /** Dictées encore en file locale — visibles, mais jamais dites enregistrées. */
@@ -28,6 +31,9 @@ export function TasksScreen({
   filter: FilterKey;
   onFilter: (f: FilterKey) => void;
   onOpen: (id: string) => void;
+  onToggleDone: (id: string, done: boolean) => void;
+  /** Item dont la coche attend le serveur — empêche le double appui. */
+  busyId: string | null;
 }) {
   // Les items en attente passent devant : ce sont les seuls qui peuvent encore
   // être perdus, donc les seuls qui demandent une action.
@@ -119,16 +125,11 @@ export function TasksScreen({
                     const isEvent = t.kind === "event";
                     const waiting = !!t.pendingAt;
                     return (
-                      <button
+                      <div
                         key={t.id}
-                        type="button"
-                        onClick={() => !waiting && onOpen(t.id)}
-                        disabled={waiting}
                         className={
-                          "w-full rounded-row px-[15px] py-[13px] text-left transition-all duration-200 " +
-                          (waiting
-                            ? "cursor-default"
-                            : "cursor-pointer border bg-tile shadow-[var(--e1)] hover:-translate-y-px")
+                          "flex w-full items-start gap-3 rounded-row px-[15px] py-[13px] transition-all duration-200 " +
+                          (waiting ? "" : "border bg-tile shadow-[var(--e1)] hover:-translate-y-px")
                         }
                         // Trois signaux cumulés, dont deux survivent au
                         // daltonisme ET au mode sombre : contour pointillé,
@@ -140,8 +141,35 @@ export function TasksScreen({
                             : { borderColor: "var(--line)" }
                         }
                       >
+                        {/* Un item encore en file n'existe pas côté serveur :
+                            il n'y a rien à cocher, et proposer la coche
+                            laisserait croire l'inverse. */}
+                        {!waiting && (
+                          <span className="mt-[1px] ml-[9px] flex-none">
+                            <DoneBox
+                              done={done}
+                              busy={busyId === t.id}
+                              label={done ? `Rouvrir « ${t.title} »` : `Marquer « ${t.title} » comme fait`}
+                              onToggle={() => onToggleDone(t.id, !done)}
+                            />
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => !waiting && onOpen(t.id)}
+                          disabled={waiting}
+                          className={
+                            "min-w-0 flex-1 border-none bg-transparent p-0 text-left " +
+                            (waiting ? "cursor-default" : "cursor-pointer")
+                          }
+                        >
                         <div className="flex items-start gap-2.5">
-                          <span className="flex-1 text-15 leading-[1.4] font-medium text-pretty text-ink">
+                          <span
+                            className={
+                              "flex-1 text-15 leading-[1.4] font-medium text-pretty " +
+                              (done ? "text-ink-3 line-through" : "text-ink")
+                            }
+                          >
                             {t.title}
                           </span>
                           <span
@@ -176,7 +204,8 @@ export function TasksScreen({
                             se répète
                           </p>
                         )}
-                      </button>
+                        </button>
+                      </div>
                     );
                   })}
                 </div>

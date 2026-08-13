@@ -278,7 +278,7 @@ export function ReviewScreen({
           {saving && (
             <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[rgba(255,255,255,0.35)] border-t-white" />
           )}
-          {saving ? "Envoi en cours…" : `Enregistrer ()`}
+          {saving ? "Envoi en cours…" : "Enregistrer"}
         </button>
       </div>
     </div>
