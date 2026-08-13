@@ -108,12 +108,41 @@ code que tu tapes, et doit pouvoir être révoqué seul.
 C'est la cible réelle. Vercel ne convient pas : le stockage y est éphémère et
 aucun cron à la minute n'y tourne.
 
+Prérequis, **dans cet ordre** — l'inverse fait échouer l'obtention du
+certificat en boucle :
+
+1. Un domaine avec un enregistrement **A** vers l'IP du VPS, propagé
+   (`dig +short <domaine>` doit renvoyer l'IP).
+
+   **Pas besoin d'en acheter un.** Hostinger attribue à chaque VPS un hostname
+   public gratuit `srvXXXXXX.hstgr.cloud`, **avec un wildcard** : n'importe quel
+   sous-domaine (`brief.srvXXXXXX.hstgr.cloud`) résout déjà vers l'IP, en A et
+   en AAAA, sans rien créer. Et `hstgr.cloud` figure sur la
+   [Public Suffix List](https://publicsuffix.org/list/), donc chaque
+   `srvXXXXXX.hstgr.cloud` compte comme un domaine enregistré distinct pour
+   Let's Encrypt : quota propre, aucune concurrence avec les autres clients.
+   Passer à un domaine acheté plus tard ne coûte qu'une ligne de
+   `.env.production` et un `docker compose up -d`.
+2. Les ports **80 et 443** ouverts. Le 80 porte le défi HTTP-01 de Let's
+   Encrypt : le fermer casse aussi le renouvellement.
+3. **Un reverse proxy.** Le VPS actuel en a déjà un — un Traefik en réseau host
+   (`/docker/traefik`) qui sert aussi n8n. Brief s'y branche par les labels de
+   `app` ; il n'y a pas de proxy dans ce dépôt. Sur une machine nue, prendre
+   `deploy/Caddyfile`.
+
 ```bash
-cp .env.production.example .env.production   # puis remplir
-docker compose up -d --build
+cp .env.production.example .env.production   # puis remplir, BRIEF_DOMAIN inclus
+docker compose --env-file .env.production up -d --build
 ```
 
-Trois choses à ne pas rater :
+Quatre choses à ne pas rater :
+
+**`--env-file .env.production` n'est pas facultatif.** `env_file:` injecte des
+variables dans un conteneur au démarrage ; il n'alimente pas l'interpolation
+`${...}` du `docker-compose.yml`, que Compose ne lit que depuis le shell ou un
+fichier nommé `.env`. Sans le drapeau, la clé VAPID publique arrive vide au
+build. Le fichier contient désormais des gardes `:?` qui font échouer Compose
+plutôt que de produire une image silencieusement cassée.
 
 **Le volume.** `brief-data` est l'**unique** copie de ton organisation —
 contrairement à une synchronisation CalDAV, aucun téléphone n'en garde de
@@ -126,8 +155,22 @@ notifications échoue sans que le serveur ne voie rien. Le `docker-compose.yml`
 la passe en `args`, pas seulement en `env_file`.
 
 **Le HTTPS n'est pas optionnel.** Le micro et les notifications exigent un
-contexte sécurisé. Le conteneur n'écoute que sur `127.0.0.1:3000` : un reverse
-proxy (Caddy, nginx) doit le publier en TLS.
+contexte sécurisé. Le conteneur `app` n'écoute que sur `127.0.0.1:3000` — utile
+pour diagnostiquer depuis le VPS, jamais joignable de l'extérieur. C'est Traefik
+qui termine le TLS, via les labels de `app`, et qui renouvelle seul.
+
+⚠️ Traefik tourne en `exposedbydefault=false`. Sans les labels, le conteneur
+démarre parfaitement et reste **invisible depuis Internet** : aucune erreur,
+juste un 404 du proxy. C'est le premier endroit à regarder si le domaine ne
+répond pas.
+
+Vérifier après le premier `up` — le certificat prend quelques secondes :
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://<domaine>/
+# attendu : 200 0   (ssl_verify_result=0 = chaîne valide)
+docker compose ps        # app doit être « healthy », pas seulement « running »
+```
 
 ### Le cron
 
@@ -141,13 +184,26 @@ depuis trois jours ».
 
 ### Sauvegardes
 
-```bash
-0 3 * * *  /opt/brief/deploy/backup.sh >> /var/log/brief-backup.log 2>&1
+Installé sur le VPS en `/etc/cron.d/brief` (déclaratif, contrairement à
+`crontab -e`, et versionnable) :
+
+```cron
+0 3 * * * root BRIEF_VOLUME=brief_brief-data /docker/brief/deploy/backup.sh >> /var/log/brief-backup.log 2>&1
 ```
 
+⚠️ Un fichier de `/etc/cron.d` est **ignoré en silence** si son nom contient un
+point ou si ses permissions ne sont pas 644 root:root. Aucune erreur nulle part.
+
 Le script vérifie l'archive juste après l'avoir écrite. **Une sauvegarde jamais
-restaurée n'est pas une sauvegarde** : teste la restauration dans un volume
-jetable au moins une fois.
+restaurée n'est pas une sauvegarde.** Le cycle complet a été exercé le
+2026-08-13 — sauvegarde, suppression de `items.json`, restauration, donnée
+revenue :
+
+```bash
+ARCH=$(ls -t /var/backups/brief/brief-*.tar.gz | head -1)
+docker run --rm -v brief_brief-data:/data -v /var/backups/brief:/backup:ro \
+  alpine:3.20 tar -xzf "/backup/$(basename $ARCH)" -C /data
+```
 
 ### Le raccourci iOS
 

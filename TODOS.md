@@ -40,33 +40,46 @@ Voir la section « Décisions à trancher » plus bas.
 - **Si ça échoue :** le produit n'a plus de raison d'être sous cette forme. À
   faire AVANT toute autre fonctionnalité.
 - **Effort :** S (humain) → S (CC) · **Priorité :** P0
-- **Dépend de :** VPS en ligne, clés VAPID posées.
+- **Dépend de :** ~~VPS en ligne, clés VAPID posées~~ — **les deux sont faits
+  depuis le 2026-08-13. Ne dépend plus que de ton iPhone.** Marche à suivre :
+  installer la PWA depuis Safari sur `https://brief.srv1899780.hstgr.cloud`
+  (Partager → Sur l'écran d'accueil — l'abonnement push est impossible depuis
+  l'onglet Safari), autoriser les notifications, puis programmer un rappel à
+  +3 minutes, verrouiller le téléphone et le poser. `/api/push/test` permet de
+  vérifier l'aller-retour avant de faire confiance au planificateur.
 
-### Déployer sur le VPS avec un vrai domaine et TLS
-- **Quoi :** `docker compose up`, domaine, certificat, sauvegardes vérifiées.
-- **Pourquoi :** sur Vercel le disque est en lecture seule, donc `POST /api/items`
-  échoue : on peut dicter, structurer, relire, et rien ne se sauvegarde.
-- **Piège :** `getUserMedia` exige un **contexte sécurisé**. Servi en `http://`
-  sur une IP nue, le micro ne fonctionnera pas du tout, l'API n'existera même
-  pas. Il faut un domaine et un certificat réel (Caddy le fait seul).
-- **Contexte :** `BRIEF_DATA_DIR=/app/data`, qui est le point de montage du volume
-  `brief-data` — jamais `/tmp`, qui s'efface. Le conteneur `cron` appelle
-  `/api/cron/reminders` toutes les 60 s avec `BRIEF_CRON_TOKEN`. Vérifier que
-  `deploy/backup.sh` tourne ET qu'une restauration fonctionne : une sauvegarde
-  jamais restaurée n'est pas une sauvegarde.
-- **Effort :** M (humain) → S (CC) · **Priorité :** P0
-- **Dépend de :** VPS Hostinger actif.
+### ~~Déployer sur le VPS avec un vrai domaine et TLS~~ — FAIT le 2026-08-13
+En ligne sur **https://brief.srv1899780.hstgr.cloud**, PIN d'accès actif.
 
-### Variables d'environnement absentes en production
-- **Quoi :** `BRIEF_DATA_DIR`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
-  `BRIEF_CRON_TOKEN`, `BRIEF_CAPTURE_TOKEN`.
-- **Pourquoi :** constaté le 2026-08-11 sur Vercel — `BRIEF_DATA_DIR` n'est posé
-  que sur Preview, les clés VAPID manquent en Production, `BRIEF_CAPTURE_TOKEN`
-  n'existe nulle part et `/api/capture` répond donc 503.
-- **Contexte :** `NEXT_PUBLIC_*` doit être **non-sensitive**, sinon Vercel ne
-  l'expose pas au build et la valeur est inlinée à `undefined`.
-- **Effort :** S (humain) → S (CC) · **Priorité :** P0
-- **Dépend de :** cible d'hébergement arrêtée.
+Ce qui a été vérifié, pas supposé : certificat Let's Encrypt valide (chaîne
+`ssl_verify=0`, expire le 2026-11-11), redirection HTTP→HTTPS, garde PIN
+(401 sans, 200 avec), écriture d'un item **survivant à un `docker compose down`**,
+conteneur `app` *healthy*, cron des rappels journalisant chaque minute, et le
+cycle sauvegarde → destruction → restauration exercé en entier.
+
+Le VPS avait déjà un **Traefik** en réseau host tenant 80/443 et servant n8n :
+Brief s'y branche par labels. Pas de Caddy — il aurait échoué sur « port already
+allocated », et sortir Traefik aurait cassé n8n. `deploy/Caddyfile` reste pour
+une machine nue. Aucun domaine acheté : `*.srv1899780.hstgr.cloud` est un
+wildcard, et `hstgr.cloud` est sur la Public Suffix List.
+
+Trois pannes silencieuses corrigées au passage, toutes dans le dépôt :
+- `command: >` avec des `\` dans le service `cron` — Compose consommait
+  l'antislash, curl partait sans URL. **Aucun rappel n'aurait jamais sonné**,
+  conteneur « up » compris.
+- La sonde de vie visait `GET /api/session`, qui répond 405 : la route n'expose
+  que POST. Le conteneur restait *unhealthy* et le cron ne démarrait pas.
+- `docker compose up` sans `--env-file .env.production` construisait l'image
+  avec une clé VAPID vide, inlinée à `undefined`. Des gardes `:?` bloquent
+  désormais le build.
+
+### ~~Variables d'environnement absentes en production~~ — SANS OBJET
+La cible d'hébergement est le VPS, plus Vercel. Les cinq variables sont dans
+`/docker/brief/.env.production` et vérifiées chargées : `BRIEF_DATA_DIR=/app/data`
+pointe sur le volume, la clé VAPID publique est confirmée présente **dans le
+bundle** (`.next/static/chunks/`), et `/api/capture` a son jeton.
+
+Vercel reste utilisable pour regarder l'interface, sans plus.
 
 ---
 
