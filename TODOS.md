@@ -40,6 +40,7 @@ Voir la section « Décisions à trancher » plus bas.
 - **Si ça échoue :** le produit n'a plus de raison d'être sous cette forme. À
   faire AVANT toute autre fonctionnalité.
 - **Effort :** S (humain) → S (CC) · **Priorité :** P0
+- **Statut :** ✅ **VALIDÉ LE 2026-08-13** (Notification reçue avec succès sur écran verrouillé).
 - **Dépend de :** VPS en ligne, clés VAPID posées.
 
 ### Déployer sur le VPS avec un vrai domaine et TLS
