@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { resolveDue } from "./due";
 import {
+  DUE_CLEAR,
+  DUE_SUGGESTIONS,
   PRIORITIES,
   PRIORITY_VALUES,
   fallbackProjectId,
@@ -132,5 +135,34 @@ describe("création d'un projet", () => {
     const skin = nextSkin(full);
     expect(skin.tint).toBeGreaterThanOrEqual(1);
     expect(skin.tint).toBeLessThanOrEqual(8);
+  });
+});
+
+describe("sélecteurs d'échéance", () => {
+  /**
+   * Non-régression du 2026-08-14 : « Pas d'échéance » était injouable.
+   *
+   * Les deux `<select>` d'échéance (fiche et revue) sont verrouillés sur
+   * `value=""` — c'est ce qui permet de rejouer deux fois de suite le même
+   * choix. Une option portant elle aussi `""` ne déclenche donc jamais
+   * `change` : effacer une échéance devenait impossible, et une échéance posée
+   * par erreur était définitive.
+   *
+   * Le défaut n'est pas testable sans DOM ; sa cause, si.
+   */
+  it("aucune suggestion ne porte la chaîne vide", () => {
+    expect(DUE_SUGGESTIONS).not.toContain("");
+    expect(DUE_SUGGESTIONS.every((s) => s.trim().length > 0)).toBe(true);
+  });
+
+  it("la valeur d'effacement est distincte de toute suggestion", () => {
+    expect(DUE_CLEAR).not.toBe("");
+    expect(DUE_SUGGESTIONS).not.toContain(DUE_CLEAR);
+  });
+
+  it("la valeur d'effacement n'est pas une échéance lisible", () => {
+    // Si `DUE_CLEAR` devenait un libellé reconnu, le choix « Pas d'échéance »
+    // poserait une date au lieu de l'effacer.
+    expect(resolveDue(DUE_CLEAR)).toBeNull();
   });
 });

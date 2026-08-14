@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ArrowRightIcon, CloseIcon, MicIcon, StopIcon } from "./icons";
 import { MAX_SECONDS, type RecorderError } from "@/lib/useRecorder";
 import type { Overview, Phase } from "@/lib/types";
@@ -24,6 +25,7 @@ export type CaptureProps = {
   appError: AppError | null;
   onToggleMic: () => void;
   onClear: () => void;
+  onTranscriptChange: (text: string) => void;
   onStructure: () => void;
   /** Relevé du jour — le MÊME `GET /api/overview` que l'onglet Vision. */
   overview: Overview | null;
@@ -151,6 +153,7 @@ export function CaptureScreen({
   appError,
   onToggleMic,
   onClear,
+  onTranscriptChange,
   onStructure,
   overview,
   onOpenOverview,
@@ -175,6 +178,24 @@ export function CaptureScreen({
 
   const ctaDisabled = working || phase === "saving" || (!recording && !hasTranscript);
 
+  // Cmd/Ctrl+Entrée doit obéir aux MÊMES gardes que le CTA, plus une : pendant
+  // l'enregistrement, le bouton arrête le micro, il ne structure pas. Sans
+  // cette condition le raccourci basculait sur l'écran Revue micro ouvert, et
+  // des appuis répétés pendant `parsing` lançaient plusieurs `/api/parse`
+  // concurrents.
+  const canStructure = !ctaDisabled && !recording;
+
+  // La note grandit avec son contenu. Compter les `\n` ne suffit pas : une
+  // dictée transcrite est une seule ligne sans retour, qu'un textarea de deux
+  // lignes en `resize-none` tronquait — alors que l'ancien `<p>` montrait tout.
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = noteRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [transcript]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-none px-[26px] pt-2.5 pb-1.5">
@@ -183,32 +204,65 @@ export function CaptureScreen({
           <span className="text-11 font-medium text-ink-2">FR</span>
         </div>
         <p className="mt-1 mb-0 text-13 leading-[1.45] font-normal text-ink-2">
-          Dicte ta note, Brief la range.
+          Écris ta note ou dicte-la, Brief la range.
         </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-3.5 pb-1.5">
-        {hasTranscript && (
-          <div className="animate-br-in rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
-            <div className="mb-[9px] flex items-center gap-[7px]">
-              <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
-                Transcription
-              </span>
+        {/* Le relevé du jour d'abord : c'est ce qu'on regarde avant de savoir
+            quoi écrire ou dicter. Il s'affiche dès que la charge existe,
+            qu'il y ait déjà une note ou non. */}
+        {overview && overview.totals.open > 0 && (
+          <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
+        )}
+
+        {showEmptyHint && overview && overview.totals.open === 0 && (
+          <div className="animate-br-in px-1 pt-2">
+            <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
+            <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
+              Écris ta note ci-dessous, ou appuie sur le micro et dis ce que tu as à faire.
+            </p>
+          </div>
+        )}
+
+        {/* Zone de note : éditable au clavier, qu'il y ait ou non une dictée.
+            Juste sous le relevé du jour : on voit la charge, on écrit, on
+            structure. L'état « en attente » (pointillé) n'existe qu'en revue,
+            pas ici. */}
+        <div className="animate-br-in mt-3 rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
+          <div className="mb-[9px] flex items-center gap-[7px]">
+            <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
+              Note
+            </span>
+            {hasTranscript && (
               <button
                 type="button"
                 onClick={onClear}
                 title="Effacer"
-                aria-label="Effacer la transcription"
+                aria-label="Effacer la note"
                 className="-mt-1.5 -mr-1.5 -mb-1.5 ml-auto cursor-pointer border-none bg-transparent p-1.5 text-ink-3 transition-colors duration-200 hover:text-ink"
               >
                 <CloseIcon />
               </button>
-            </div>
-            <p className="m-0 text-17 leading-[1.55] font-normal text-pretty text-ink whitespace-pre-wrap">
-              {transcript}
-            </p>
+            )}
           </div>
-        )}
+          <textarea
+            ref={noteRef}
+            value={transcript}
+            onChange={(e) => onTranscriptChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Cmd/Ctrl+Entrée structure directement depuis le clavier.
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canStructure) {
+                e.preventDefault();
+                onStructure();
+              }
+            }}
+            placeholder="Dicte ta note, ou écris-la ici…"
+            aria-label="Note à structurer"
+            rows={2}
+            className="m-0 max-h-[45vh] w-full resize-none overflow-y-auto border-none bg-transparent p-0 text-17 leading-[1.55] font-normal text-ink outline-none placeholder:text-ink-3"
+          />
+        </div>
 
         {working && !hasTranscript && (
           <div className="animate-br-in flex items-center gap-3 rounded-tile border border-[var(--line)] bg-tile px-[18px] py-4">
@@ -257,19 +311,6 @@ export function CaptureScreen({
             )}
           </div>
         )}
-
-        {showEmptyHint && overview && overview.totals.open > 0 && (
-          <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
-        )}
-
-        {showEmptyHint && overview && overview.totals.open === 0 && (
-          <div className="animate-br-in px-1 pt-2">
-            <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
-            <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
-              Appuie sur le micro et dis ce que tu as à faire.
-            </p>
-          </div>
-        )}
       </div>
 
       <div className="flex flex-none flex-col items-center gap-3 px-[26px] pt-1.5 pb-3">
@@ -314,46 +355,47 @@ export function CaptureScreen({
           {hint[phase]}
         </span>
 
-        {/* CTA toujours monté : hauteur de bloc constante, jamais rogné. */}
-        <button
-          type="button"
-          onClick={recording ? onToggleMic : onStructure}
-          disabled={ctaDisabled}
-          aria-busy={working}
-          className={
-            "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-row border-none " +
-            "text-15 font-semibold tracking-[0.1px] transition-all duration-200 " +
-            (ctaDisabled
-              // Filet intérieur OBLIGATOIRE : le bouton est en `bg-page`, donc
-              // de la même couleur que la coque depuis qu'elle est passée en
-              // `page`. Sans ce trait, il disparaît purement et simplement.
-              ? "cursor-default bg-page text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
-              : recording
-                ? "cursor-pointer bg-tile text-ink shadow-[inset_0_0_0_1px_var(--line-2)] hover:bg-page active:scale-[0.985]"
-                : "cursor-pointer bg-ink text-page hover:bg-ink active:scale-[0.985]")
-          }
-        >
-          {working ? (
-            <>
-              <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[var(--line-2)] border-t-ink-soft" />
-              {phase === "uploading" ? "Envoi…" : phase === "parsing" ? "Structuration…" : "Transcription…"}
-            </>
-          ) : recording ? (
-            <>
-              <StopIcon size={18} />
-              Arrêter l&apos;enregistrement
-            </>
-          ) : hasTranscript ? (
-            <>
-              Structurer la note
-              <ArrowRightIcon />
-            </>
-          ) : (
-            // Le libellé dit l'état réel. « Structurer la note » sur un bouton
-            // inerte promet une action qui ne peut pas avoir lieu.
-            "Rien à structurer"
-          )}
-        </button>
+        {/* CTA : masqué tant qu'il n'y a RIEN à structurer — un bouton inerte
+            qui dit « Rien à structurer » ne fait que voler de la place en bas
+            de l'écran. Il apparaît dès qu'une note existe, qu'on enregistre ou
+            qu'on travaille. */}
+        {(recording || working || phase === "saving" || hasTranscript) && (
+          <button
+            type="button"
+            onClick={recording ? onToggleMic : onStructure}
+            disabled={ctaDisabled}
+            aria-busy={working}
+            className={
+              "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-row border-none " +
+              "text-15 font-semibold tracking-[0.1px] transition-all duration-200 " +
+              (ctaDisabled
+                // Filet intérieur OBLIGATOIRE : le bouton est en `bg-page`, donc
+                // de la même couleur que la coque depuis qu'elle est passée en
+                // `page`. Sans ce trait, il disparaît purement et simplement.
+                ? "cursor-default bg-page text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
+                : recording
+                  ? "cursor-pointer bg-tile text-ink shadow-[inset_0_0_0_1px_var(--line-2)] hover:bg-page active:scale-[0.985]"
+                  : "cursor-pointer bg-ink text-page hover:bg-ink active:scale-[0.985]")
+            }
+          >
+            {working ? (
+              <>
+                <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[var(--line-2)] border-t-ink-soft" />
+                {phase === "uploading" ? "Envoi…" : phase === "parsing" ? "Structuration…" : "Transcription…"}
+              </>
+            ) : recording ? (
+              <>
+                <StopIcon size={18} />
+                Arrêter l&apos;enregistrement
+              </>
+            ) : (
+              <>
+                Structurer la note
+                <ArrowRightIcon />
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

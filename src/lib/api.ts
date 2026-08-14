@@ -135,10 +135,27 @@ export async function setItemDone(
 /** Suppression définitive. Rien n'en garde de trace — contrairement à la coche. */
 export async function deleteItem(id: string): Promise<{ ok: boolean; id: string }> {
   return jsonFetch(
-    "/api/items",
-    { method: "DELETE", body: JSON.stringify({ id }) },
+    `/api/items/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
     TIMEOUTS.save,
   );
+}
+
+/**
+ * Modifie un item déjà enregistré. Renvoie l'item mis à jour tel que le serveur
+ * l'a persisté. Une échéance/titre vide côté client aboutit ici soit à un
+ * 400 (titre), soit à « pas d'échéance » (résolu par le serveur).
+ */
+export async function updateItem(
+  id: string,
+  patch: Partial<DraftItem>,
+): Promise<Item> {
+  const data = await jsonFetch<{ item: Item }>(
+    `/api/items/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+    TIMEOUTS.save,
+  );
+  return data.item;
 }
 
 /**

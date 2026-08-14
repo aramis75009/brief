@@ -23,6 +23,7 @@ import {
   saveItems,
   setItemDone,
   transcribeAudio,
+  updateItem,
 } from "@/lib/api";
 import { formatDue } from "@/lib/due";
 import { uid } from "@/lib/ids";
@@ -364,15 +365,23 @@ export function BriefApp() {
           flash("Rien n'a été entendu.", "err");
           return;
         }
-        // On AJOUTE à l'existant : une nouvelle dictée n'écrase jamais la précédente.
-        const merged = transcript.trim() ? `${transcript.trim()} ${text}` : text;
-        setTranscript(merged);
+        // On AJOUTE à l'existant : une nouvelle dictée n'écrase jamais la
+        // précédente.
+        //
+        // ⚠️ Forme fonctionnelle obligatoire. Lire `transcript` depuis la
+        // closure donnerait sa valeur au moment où l'enregistrement s'arrête,
+        // alors que `transcribeAudio` peut mettre jusqu'à 90 s à répondre.
+        // Depuis que la note est un `<textarea>` éditable en permanence, tout
+        // ce qui est tapé pendant « Transcription en cours… » serait effacé au
+        // retour. `setTranscript((prev) => …)` lit l'état au moment de
+        // l'écriture, pas au moment de la capture.
+        setTranscript((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
         setWorkPhase("idle");
       } catch (e) {
         fail(e, "La transcription a échoué.");
       }
     },
-    [transcript, flash, fail],
+    [flash, fail],
   );
 
   const recorder = useRecorder(onRecorded);
@@ -519,6 +528,7 @@ export function BriefApp() {
           appError={appError}
           onToggleMic={toggleMic}
           onClear={() => setTranscript("")}
+          onTranscriptChange={setTranscript}
           onStructure={() => void structure(transcript)}
           overview={overview}
           onOpenOverview={() => setView("overview")}
@@ -593,10 +603,35 @@ export function BriefApp() {
         <TaskSheet
           task={sheetTask}
           projects={projects}
+          saving={phase === "saving"}
           onClose={() => setSheetId(null)}
           onToggleDone={(done) => void toggleDone(sheetTask.id, done)}
           busy={doneBusyId === sheetTask.id}
           onDelete={() => void removeItem(sheetTask.id)}
+          onSave={(patch) => {
+            void (async () => {
+              setWorkPhase("saving");
+              try {
+                const updated = await updateItem(sheetTask.id, patch);
+                setSent((s) => s.map((t) => (t.id === sheetTask.id ? updated : t)));
+                setSheetId(null);
+                setWorkPhase("idle");
+                flash("Item modifié.");
+                void refreshOverview();
+              } catch (e) {
+                setWorkPhase("idle");
+                if (e instanceof UnauthorizedError) {
+                  clearPin();
+                  setUnlocked(false);
+                  return;
+                }
+                flash(
+                  e instanceof ApiError ? e.message : "Modification impossible.",
+                  "err",
+                );
+              }
+            })();
+          }}
         />
       )}
 
