@@ -68,6 +68,32 @@ describe("resolveDue", () => {
     expect(resolveDue("fin de mois", MONDAY)?.due).toBe("2026-08-31T09:00:00+02:00");
   });
 
+  it("calcule dans le fuseau de Paris, pas dans celui de la machine", () => {
+    // Non-régression du bug du 2026-08-14 : `atHour` posait l'heure avec
+    // `setHours()`, c'est-à-dire dans le fuseau de la MACHINE. Sur le VPS, qui
+    // tourne en UTC, « demain » sonnait à 11 h au lieu de 9 h. La suite est
+    // désormais forcée en UTC (voir `vitest.config.mts`), donc ce test échoue
+    // si quelqu'un réintroduit une méthode `Date` locale dans ce module.
+    expect(resolveDue("demain", WINTER)?.due).toBe("2026-01-14T09:00:00+01:00");
+    expect(resolveDue("vendredi", WINTER)?.due).toBe("2026-01-16T09:00:00+01:00");
+  });
+
+  it("suit le jour de Paris quand il diffère du jour UTC", () => {
+    // 00 h 30 à Paris le 11, mais encore le 10 en UTC. « Demain » doit viser le
+    // 12 : lire le calendrier dans le mauvais fuseau ferait perdre un jour
+    // entier à toute échéance saisie après minuit.
+    const nuit = new Date("2026-08-10T22:30:00Z");
+    expect(resolveDue("demain", nuit)?.due).toBe("2026-08-12T09:00:00+02:00");
+  });
+
+  it("traverse le changement d'heure sans décaler l'heure de rappel", () => {
+    // Le 10 mars est en heure d'hiver (+01:00), le 31 en heure d'été (+02:00) :
+    // la bascule 2026 tombe le 29 mars. L'échéance doit rester à 9 h locales,
+    // pas glisser à 8 h ou 10 h.
+    const mars = new Date("2026-03-10T10:00:00+01:00");
+    expect(resolveDue("fin de mois", mars)?.due).toBe("2026-03-31T09:00:00+02:00");
+  });
+
   it("laisse passer une date déjà absolue sans la retoucher", () => {
     const r = resolveDue("2026-12-24T18:30:00+01:00", MONDAY);
     expect(r?.due).toBe("2026-12-24T18:30:00+01:00");

@@ -30,6 +30,13 @@ services:
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Brief}
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      # Ceinture ET bretelles. Depuis le 2026-08-14, `src/lib/due.ts` calcule
+      # les échéances dans Europe/Paris quel que soit le fuseau de la machine,
+      # donc cette ligne ne corrige plus rien — elle protège le code qui serait
+      # écrit demain sans cette précaution, et rend les journaux du conteneur
+      # lisibles à l'heure d'Aramis. Ne pas la retirer en croyant simplifier.
+      TZ: Europe/Paris
     volumes:
       - brief-data:/app/data
     ports:
