@@ -14,8 +14,8 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 | | |
 |---|---|
 | **Agent** | Claude Code (Opus 5) |
-| **Branche** | `feat/task-completion` |
-| **Commits** | *(aucun — travail non commité, en attente de décision d'Aramis)* |
+| **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
+| **Commits** | `51e72f9` doc · `5d30257` fuseau · `0bf96bd` correctifs de revue · fusions `bec2363` et `f02e954` |
 
 ## Goal — l'objectif
 
@@ -60,8 +60,19 @@ le moindre signal**.
 Les trois derniers n'avaient **aucun test** et n'auraient pas été trouvés sans
 le balayage systématique.
 
-**Non fait :** rien n'est commité. Le travail attend une décision sur la
-stratégie de branches.
+### La branche d'Hermes, relue puis corrigée
+
+Sa revue a sorti 10 défauts, dont trois qui empêchaient la fonctionnalité de
+tenir sa promesse — l'échéance ne pouvait pas être effacée, la saisie clavier
+était écrasée par la dictée en vol, et un item orphelin changeait de projet en
+silence. Tous corrigés (`0bf96bd`), détail dans
+[sa fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md).
+
+Le tout est fusionné dans `feat/task-completion`. Un seul conflit, dans
+`TODOS.md` : les deux côtés consignaient la même validation du Web Push, l'un
+par réécriture, l'autre par une ligne de statut. La réécriture l'a emporté.
+
+**Non fait :** rien n'est poussé sur `origin`, et rien n'est déployé.
 
 ## Decisions — choix critiques ou irréversibles
 
@@ -116,7 +127,12 @@ d'Aramis.
 
 | Commande | Résultat |
 |---|---|
-| `npx vitest run` | ✅ **71 passent** (68 + 3 nouveaux) |
+Lancées **après la fusion**, parce que c'est là que deux chantiers séparés se
+contredisent s'ils doivent le faire :
+
+| Commande | Résultat |
+|---|---|
+| `npx vitest run` | ✅ **74 passent** (71 + les 3 d'Hermes) |
 | `npx tsc --noEmit` | ✅ aucune erreur |
 | `npx eslint .` | ✅ aucune erreur |
 | `npm run build` | ⏭️ **non lancé** — un `next dev` tourne sur un autre projet |
@@ -126,33 +142,35 @@ d'Aramis.
 ```
 UTC · Europe/Paris · America/Los_Angeles · Pacific/Kiritimati
 Asia/Kolkata (+05:30) · Pacific/Chatham (+12:45) · America/Sao_Paulo
-→ 71 passent dans les sept cas
+→ 74 passent partout
 ```
 
 Les décalages non entiers (Kolkata, Chatham) sont là exprès : ils cassent les
 implémentations qui supposent des heures pleines.
 
-**Non vérifié :** aucun rappel réel n'a été déclenché depuis le correctif. Le
-comportement en production ne sera prouvé que par un rappel qui sonne à
-l'heure attendue sur le VPS.
+**Non vérifié — et c'est ce qui reste à faire :**
+
+- Aucun rappel réel n'a été déclenché depuis le correctif de fuseau. Le
+  comportement en production ne sera prouvé que par un rappel qui sonne à
+  l'heure attendue sur le VPS.
+- Les correctifs d'interface (échéance effaçable, note qui grandit, saisie
+  préservée) n'ont pas été exercés dans un navigateur. Ils compilent, ils sont
+  testés à la racine, ils n'ont pas été *vus*.
 
 ## Blockers — ce qui bloque
 
-Rien de technique. Deux décisions appartiennent à Aramis :
-
-1. **La stratégie de commit.** Le travail mêle documentation et correctif de
-   fuseau ; ils méritent sans doute deux branches.
-2. **Le déploiement.** Le correctif ne vaut qu'une fois sur le VPS, qui tourne
-   sur `feat/task-completion`.
+Rien. Tout est commité et fusionné sur `feat/task-completion`, arbre propre.
 
 ## Next — la prochaine action
 
-1. Découper et commiter (doc / correctif de fuseau), puis déployer sur le VPS.
-2. **Commiter les correctifs de la branche d'Hermes** — relue *et corrigée* le
-   2026-08-14 (10 points, +205/−82, `tsc`/`eslint`/`vitest 71` verts). ⚠️ Le
-   travail est **non commité dans un worktree de scratchpad**, donc volatil :
-   `git worktree list` donne le chemin. Détail dans
-   [sa fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md).
+1. **Pousser et déployer.** `git push origin feat/task-completion`, puis sur le
+   VPS `git -C /docker/brief pull && docker compose --env-file .env.production
+   up -d --build`. Le correctif de fuseau ne vaut rien tant qu'il n'y tourne
+   pas — c'est précisément là que le bug vivait.
+2. **Vérifier sur le téléphone**, dans cet ordre : programmer un rappel avec un
+   libellé relatif (« demain »), confirmer qu'il sonne à 9 h et non à 11 h ;
+   puis effacer une échéance depuis la fiche, et taper dans la note pendant une
+   transcription pour voir qu'elle survit.
 3. Reprendre le P1 de `TODOS.md` : l'autorisation micro que Safari redemande à
    chaque ouverture.
 

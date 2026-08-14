@@ -95,13 +95,8 @@ passations existe pour boucher.
 
 ## Next — la prochaine action
 
-**Relue ET corrigée le 2026-08-14 par Claude Code.** Les correctifs sont **non
-commités**, dans un worktree :
-`…/scratchpad/wt-hermes`, sur la branche locale
-`feat/saisie-clavier-et-modification-items`.
-
-⚠️ Ce chemin est un scratchpad de session, donc volatil. **Commiter avant qu'il
-disparaisse.**
+**Relue ET corrigée le 2026-08-14 par Claude Code**, commit `0bf96bd`, puis
+fusionnée dans `feat/task-completion` par `f02e954`.
 
 ### Ce qui a été corrigé — 9 fichiers, +205/−82
 
