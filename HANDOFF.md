@@ -135,9 +135,11 @@ Rien de bloquant. Deux points d'attention :
   **comment ce bot est câblé**. S'il passe par la Cloud API de Meta, le
   credential se réutilise. Sinon, la fenêtre de 24 h impose un template
   pré-approuvé — affirmé de mémoire, **non vérifié**.
-- Un `npm run dev -- -p 3100` de Brief a été laissé tournant sur le Mac, et un
-  `BRIEF_DIGEST_TOKEN` de **dev** ajouté à `.env.local` (sans valeur en prod).
-  Le port 3000 appartient à MyFlip, pas à Brief.
+- Un `BRIEF_DIGEST_TOKEN` de **dev** a été ajouté au `.env.local` du Mac (sans
+  valeur en prod). Le dev server lancé pour les essais a été arrêté. À savoir
+  pour la prochaine session : **le port 3000 appartient à MyFlip**, lancer Brief
+  avec `-p 3100`, et Turbopack ne voit pas une route API créée pendant qu'il
+  tourne — il faut le redémarrer.
 
 ## Next — la prochaine action
 
