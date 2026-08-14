@@ -9,24 +9,24 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-14 · Brief parle à n8n, récap du matin
+# Passation — 2026-08-14 · Brief parle à n8n, récap du matin sur Telegram
 
 | | |
 |---|---|
 | **Agent** | Claude Code · Opus 5 |
 | **Branche** | `feat/task-completion` — la branche que sert le VPS |
-| **Commits** | `a58dcc0` route digest · `4670170` merge · (+ commit de doc suivant) |
+| **Commits** | `a58dcc0` route digest · `4670170` merge · `0754f7f` + `b51a512` doc |
 
 ## Goal — l'objectif
 
 Ouvrir un chemin de lecture pour une automatisation externe, et le prouver
 de bout en bout : n8n lit Brief chaque matin, trie ce qui pèse sur la journée,
-et met en forme un message de relance.
+met en forme un message de relance et l'envoie sur Telegram.
 
 ## Current state — ce qui a été fait
 
-**La chaîne complète tourne en production.** Le workflow n8n s'est déclenché
-pour de vrai, a lu la prod et produit le message :
+**La chaîne complète tourne en production**, de bout en bout, envoi compris. Le
+workflow n8n s'est déclenché pour de vrai, a lu la prod et produit le message :
 
 ```
 Ton brief du 14 août
@@ -44,14 +44,28 @@ Aujourd'hui (1)
 - **`src/lib/buckets.ts`** — `midnightAt` et `makeBucketOf` extraits de
   `api/overview/route.ts`. Les deux routes partagent désormais **une seule
   définition d'« aujourd'hui »**.
-- **Workflow n8n `Brief — récap du matin`** (`H9f6EWHUzUmi9JDV`), **ACTIF**,
-  cron `30 8 * * *` en fuseau `Europe/Paris`. Credential `THLHqJ0euzjzwBm7`
-  restreint au seul domaine `brief.srv1899780.hstgr.cloud`.
+- **Workflow n8n `Brief — récap du matin`** (`H9f6EWHUzUmi9JDV`), **ACTIF et
+  publié**, cron `30 8 * * *` en fuseau `Europe/Paris`. Credential
+  `THLHqJ0euzjzwBm7` restreint au seul domaine `brief.srv1899780.hstgr.cloud`.
+- **Le canal est Telegram**, et il envoie pour de vrai. Aramis a ajouté le nœud
+  `Send a text message` (chat `912003023`, credential `Telegram account`) et
+  reçu le message. **WhatsApp est abandonné** : Telegram évite le compte Meta,
+  le numéro dédié et le template à faire approuver.
 
-**Ce qui n'est PAS fait, et qu'il ne faut pas croire fait :** le workflow
-**n'envoie rien**. Il s'arrête sur le nœud de mise en forme. Demain 8h30 il
-tournera, produira le message, et personne ne le lira. Le canal (WhatsApp) est
-reporté dans `TODOS.md`, en P1 bis.
+**Deux corrections apportées après son test :**
+
+1. **Le nœud Telegram n'était pas dans la version publiée.** n8n sépare le
+   brouillon du graphe publié : « Execute step » teste le brouillon, le cron
+   exécute la version publiée. Le test réussissait pendant que le graphe publié
+   restait à 4 nœuds — le récap de 8h30 se serait calculé **sans jamais
+   partir**. Republié : `activeVersionId` `705d4ec1`, 5 nœuds. **Vérifier avec
+   `n8n_get_workflow mode='active'`, jamais `structure` ni `full`.**
+2. **`appendAttribution` était à `true`** (son défaut) : chaque récap portait
+   « This message was sent automatically with n8n ». Mis à `false`.
+
+**Ce qui n'est PAS fait :** le workflow n'a **aucun chemin d'erreur**. Si Brief
+répond 401 ou redémarre à 8h30, l'échec est muet et un récap absent ressemble à
+une journée vide. Reporté en P1 dans `TODOS.md`.
 
 ## Decisions — choix critiques ou irréversibles
 
@@ -117,7 +131,6 @@ classe « en retard » une tâche due à 1 h du matin. Vérifié en exécutant l
 
 **Non lancé / non vérifié :**
 
-- **Aucun message n'a été envoyé nulle part.** Le workflow s'arrête avant.
 - Le déclenchement a été prouvé à 23h48, **pas à 8h30**. Le cron a été remis à
   `30 8 * * *` et la version publiée vérifiée, mais la première exécution
   matinale reste à observer.
@@ -130,11 +143,10 @@ classe « en retard » une tâche due à 1 h du matin. Vérifié en exécutant l
 
 Rien de bloquant. Deux points d'attention :
 
-- **Le canal WhatsApp reste à établir.** Aramis a un WhatsApp Business et un bot
-  Hermes qui lui écrit depuis un numéro dédié : il faut d'abord découvrir
-  **comment ce bot est câblé**. S'il passe par la Cloud API de Meta, le
-  credential se réutilise. Sinon, la fenêtre de 24 h impose un template
-  pré-approuvé — affirmé de mémoire, **non vérifié**.
+- **Le jeton vit à deux endroits** — `/docker/brief/.env.production` et le
+  credential n8n `THLHqJ0euzjzwBm7`. Les changer d'un seul côté produit un 401 à
+  8h30, donc un récap absent, et **muet** tant que le chemin d'erreur n'existe
+  pas.
 - Un `BRIEF_DIGEST_TOKEN` de **dev** a été ajouté au `.env.local` du Mac (sans
   valeur en prod). Le dev server lancé pour les essais a été arrêté. À savoir
   pour la prochaine session : **le port 3000 appartient à MyFlip**, lancer Brief
@@ -143,11 +155,11 @@ Rien de bloquant. Deux points d'attention :
 
 ## Next — la prochaine action
 
-1. **Demain matin, lire l'exécution de 8h30** : `n8n_executions` sur
-   `H9f6EWHUzUmi9JDV`. C'est la preuve qui manque.
-2. **Établir comment le bot Hermes envoie sur WhatsApp**, puis brancher le nœud
-   d'envoi après « Mettre en forme le message » — avec son chemin d'erreur.
-3. Le P1 de `TODOS.md` reste ouvert : l'autorisation micro que Safari redemande.
+1. **Demain matin, vérifier que le récap arrive sur Telegram à 8h30.** C'est la
+   seule preuve qui manque — le déclenchement n'a été observé qu'à 23h48.
+2. **Brancher le chemin d'erreur** (P1 de `TODOS.md`) : sans lui, un échec à
+   8h30 ne se distingue pas d'une journée sans rien à faire.
+3. Le P1 historique reste ouvert : l'autorisation micro que Safari redemande.
 
 ---
 
@@ -155,7 +167,7 @@ Rien de bloquant. Deux points d'attention :
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| 2026-08-14 | Brief parle à n8n, récap du matin | Claude Code | *(cette passation)* |
+| 2026-08-14 | Brief parle à n8n, récap du matin sur Telegram | Claude Code | *(cette passation)* |
 | 2026-08-14 | Déploiement prod + correctif projets invisibles | **Hermes** | [fiche](docs/handoffs/2026-08-14-deploiement-et-correctif-projets.md) |
 | 2026-08-14 | Système de passation + correctif fuseau | Claude Code | [fiche](docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md) |
 | 2026-08-14 | Saisie clavier et modification des items | **Hermes** | [fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md) |

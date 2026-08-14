@@ -124,36 +124,33 @@ risque produit, pas une gêne cosmétique. Deux échappatoires, aucune construit
 
 ---
 
-## P1 bis — Le récap du matin n'a pas encore de canal
+## P1 bis — Le récap du matin sonne, mais son échec est muet
 
-`GET /api/digest` existe et est déployée (2026-08-14), et le workflow n8n
-**Brief — récap du matin** (`H9f6EWHUzUmi9JDV`) lit, filtre et met en forme le
-message. **Il ne l'envoie nulle part.** Le workflow s'arrête sur le nœud de mise
-en forme.
+`GET /api/digest` est déployée et le workflow n8n **Brief — récap du matin**
+(`H9f6EWHUzUmi9JDV`) est **complet et publié** : cron 8h30 Europe/Paris → lecture
+→ filtre → mise en forme → **Telegram**. Envoi prouvé le 2026-08-14.
 
-### Brancher WhatsApp au bout du workflow
-- **Quoi :** ajouter le nœud `WhatsApp Business Cloud` après « Mettre en forme
-  le message ».
-- **Contexte :** Aramis a déjà un WhatsApp Business et un bot Hermes qui lui
-  écrit depuis un numéro dédié, distinct du perso. **Reste à établir comment ce
-  bot est câblé** (API Meta directe ? via Hostinger ?) : s'il passe par la Cloud
-  API, le credential se réutilise et il n'y a presque rien à faire.
-- **Contre :** hors de la fenêtre de 24 h, Meta impose un **template
-  pré-approuvé** — texte figé, variables `{{1}}`, pas de saut de ligne dans un
-  paramètre. Un récap de longueur variable devra être aplati. À vérifier avant
-  de s'engager : c'est affirmé de mémoire, pas testé.
-- **Repli si le template coince :** Telegram (nœud natif, aucune approbation).
-- **Effort :** S (humain, côté Meta) → S (CC) · **Priorité :** P1
+**WhatsApp est abandonné pour ce besoin** — Telegram fait le travail sans compte
+Meta, sans numéro dédié et sans template à faire approuver. Ne pas y revenir sans
+raison nouvelle.
 
 ### Donner un chemin d'erreur au workflow
-- **Quoi :** brancher la sortie d'erreur du nœud HTTP, ou un Error Trigger.
-- **Pourquoi :** si Brief redémarre à 8h30, le workflow échoue et **rien ne le
-  dit** — c'est exactement la panne silencieuse que le projet combat ailleurs.
-  Un récap absent ressemble à une journée vide.
-- **Contexte :** différé volontairement — un chemin d'erreur n'a nulle part où
-  aller tant qu'aucun canal n'est branché. À faire en même temps que WhatsApp.
+- **Quoi :** brancher la sortie d'erreur du nœud « Lire le récap Brief » vers un
+  second envoi Telegram, ou poser un Error Workflow dans les réglages.
+- **Pourquoi :** si Brief redémarre ou répond 401 à 8h30, le workflow échoue et
+  **rien ne le dit**. Un récap absent est indiscernable d'une journée vide —
+  c'est exactement la panne silencieuse que le projet combat partout ailleurs,
+  et le nœud « Quelque chose à dire ? » rend justement le silence normal.
+- **Contexte :** le canal existe désormais, donc plus rien ne bloque.
 - **Effort :** S (humain) → S (CC) · **Priorité :** P1
-- **Dépend de :** le canal ci-dessus.
+
+### Surveiller la fraîcheur du jeton et du credential
+- **Quoi :** rien à construire, juste à savoir : `BRIEF_DIGEST_TOKEN` vit dans
+  `/docker/brief/.env.production` **et** dans le credential n8n
+  `THLHqJ0euzjzwBm7`. Les deux doivent rester identiques.
+- **Pourquoi :** les changer d'un seul côté produit un 401 à 8h30, donc un récap
+  absent — encore une fois silencieux tant que le point ci-dessus n'est pas fait.
+- **Priorité :** P2
 
 ---
 
