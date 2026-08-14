@@ -486,10 +486,18 @@ export function BriefApp() {
     void (async () => {
       if (alive) await refreshItems();
     })();
+    // Les projets aussi. Sans cet appel, la liste reste celle d'amorçage
+    // (SEED_PROJECTS) et les projets créés depuis — Perso, Sport — n'apparaissent
+    // qu'après un « Recharger les projets » manuel ou une structuration. C'était
+    // le même trou que pour les items : vidés au premier chargement, ils ne
+    // revenaient qu'à la première écriture.
+    void (async () => {
+      if (alive) await loadProjects({ silent: true });
+    })();
     return () => {
       alive = false;
     };
-  }, [hydrated, unlocked, refreshItems]);
+  }, [hydrated, unlocked, refreshItems, loadProjects]);
 
   /* --- Rendu -------------------------------------------------------------- */
   if (!hydrated) {
