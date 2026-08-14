@@ -9,169 +9,100 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-14 · Système de passation, et le fuseau horaire remis d'aplomb
+# Passation — 2026-08-14 · Déploiement en prod et correctif projets invisibles
 
 | | |
 |---|---|
-| **Agent** | Claude Code (Opus 5) |
+| **Agent** | Hermes Agent v0.20.0 · `deepseek/deepseek-v4-flash-0731` via OpenRouter |
 | **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits** | `51e72f9` doc · `5d30257` fuseau · `0bf96bd` correctifs de revue · fusions `bec2363` et `f02e954` |
+| **Commits** | `e7676db` fix projets au premier chargement (poussé et déployé) |
 
 ## Goal — l'objectif
 
-Donner au projet un système de passation lisible par tous les agents qui y
-travaillent. Objectif secondaire apparu en route, devenu le plus important :
-vérifier ce qu'Hermes avait livré la veille plutôt que le croire sur parole.
+Déployer en production la branche `feat/task-completion` (correctifs de fuseau
+de Claude + mes correctifs d'interface), et corriger un bug remonté par Aramis
+sur son téléphone : les projets créés depuis (Perso, Sport) ne s'affichaient
+pas dans Réglages.
 
 ## Current state — ce qui a été fait
 
-### Le système documentaire
+- **`feat/task-completion` a été poussée sur `origin` et déployée sur le VPS**
+  (`/docker/brief`), à la cible que sert Traefik. `brief-app` reconstruit,
+  **healthy**, HTTPS 200 sur `https://brief.srv1899780.hstgr.cloud`.
+- **Nouvelle passation consignée pour Claude (`docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md`)** —
+  la précédente passation a été archivée là, conformément au protocole.
+- **Bug correctif :** au premier déverrouillage, Brief ne chargeait que les
+  items et la vision (`refreshItems()`), jamais la liste des projets
+  (`loadProjects()`). La liste restait à `SEED_PROJECTS` et les projets créés
+  par Aramis — Perso, Sport — étaient invisibles jusqu'à un rechargement
+  manuel ou une structuration. Correctif `e7676db`.
 
-- **`HANDOFF.md`** (ce fichier) — la passation courante, une seule.
-- **`docs/handoffs/`** — 6 passations reconstruites depuis git, du 06 au 14 août.
-- **`AGENTS.md`** — le contrat commun. C'est le **seul** fichier qu'Hermes
-  charge automatiquement : une règle qui n'y est pas n'existe pas pour lui.
-- **`CLAUDE.md`** — le spécifique Claude.
-- **`HERMES.md`** — le spécifique Hermes, écrit à partir de ses réponses à 23
-  questions, dont une liste explicite de ce qu'il ne fait pas sans accord.
-
-Le tout est aussi packagé en skill réutilisable dans `~/.claude/skills/handoff/`,
-pour les autres projets d'Aramis.
-
-### Le bug de fuseau — corrigé, dans quatre fichiers
-
-Hermes rapportait 7 tests en échec sur `due.test.ts` et les classait en « faux
-positif d'environnement ». **C'était un vrai bug de production**, et il y en
-avait quatre foyers, pas un.
-
-Cause commune : les méthodes locales de `Date` (`setHours`, `getDay`, `setDate`,
-`getMonth`) lisent le fuseau de la **machine**. Le développement se fait sur un
-Mac réglé sur Europe/Paris ; les conteneurs n'ont pas de `TZ` et tournent en
-UTC. Tout calcul de date était donc juste en local et faux en production, **sans
-le moindre signal**.
-
-| Fichier | Ce qui était faux en production |
-|---|---|
-| `src/lib/due.ts` | « demain », « vendredi », « fin de mois » résolus **2 h trop tard** |
-| `src/lib/rrule.ts` | récurrence hebdo décalée d'un jour pour toute échéance entre 0 h et 2 h |
-| `src/app/api/parse/route.ts` | `alignToRrule` recalait sur le mauvais jour de la semaine |
-| `src/app/api/overview/route.ts` | journées de la Vision commençant à 2 h du matin |
-
-Les trois derniers n'avaient **aucun test** et n'auraient pas été trouvés sans
-le balayage systématique.
-
-### La branche d'Hermes, relue puis corrigée
-
-Sa revue a sorti 10 défauts, dont trois qui empêchaient la fonctionnalité de
-tenir sa promesse — l'échéance ne pouvait pas être effacée, la saisie clavier
-était écrasée par la dictée en vol, et un item orphelin changeait de projet en
-silence. Tous corrigés (`0bf96bd`), détail dans
-[sa fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md).
-
-Le tout est fusionné dans `feat/task-completion`. Un seul conflit, dans
-`TODOS.md` : les deux côtés consignaient la même validation du Web Push, l'un
-par réécriture, l'autre par une ligne de statut. La réécriture l'a emporté.
-
-**Non fait :** rien n'est poussé sur `origin`, et rien n'est déployé.
+**Données vérifiées en prod :** le serveur renvoie bien les 5 projets
+(frip-trend, my-flip, webacademie, perso, sport) via `GET /api/projects`. Le
+problème était purement côté chargement initial du client.
 
 ## Decisions — choix critiques ou irréversibles
 
-**Les règles projet vivent dans `AGENTS.md`, pas dans `CLAUDE.md`.** Hermes a
-confirmé ne charger automatiquement qu'`AGENTS.md`. Une règle écrite une fois
-s'applique aux trois agents.
+**Déployer directement sur `feat/task-completion`** (pas de branche `fix/`
+séparée) : la prod vit sur cette branche et Aramis développe dessus ; c'est
+elle qu'on déploie. Un aller-retour branche → merge → redeploy n'aurait rien
+déplacé de plus, à ce stade où rien d'autre n'est en cours.
 
-*Vérifié :* `upsertAgentRulesBlock()` (dans `node_modules/next/dist/server/lib/`)
-ne réécrit que ce qui est **entre** les marqueurs `nextjs-agent-rules` et
-préserve le reste. `hasCurrentAgentRules()` renvoie `true` sur le dépôt.
-
-**`HANDOFF.md` ne garde qu'une passation.** Un journal qui grossit sans fin
-coûte du contexte à chaque session et finit par ne plus être lu.
-
-**`HANDOFF.md` et `TODOS.md` ne disent pas la même chose.** L'un dit *où on en
-est*, l'autre *ce qu'on n'a pas fait*.
-
-**Un module dédié pour l'arithmétique de calendrier : `src/lib/zoned.ts`.**
-Plutôt que de corriger quatre fois le même calcul, les primitives sont
-centralisées (`zonedParts`, `zonedTime`, `shiftDays`, `shiftMonths`,
-`weekdayOf`, `lastDayOfMonth`). Sa règle est écrite en tête du fichier : **ne
-jamais appeler les méthodes locales de `Date`**. C'est le seul endroit à
-corriger le jour où le fuseau change.
-
-**La suite de tests tourne en UTC, pas dans le fuseau de la machine**
-(`vitest.config.mts`). Le vert local doit vouloir dire quelque chose sur la
-production. C'est la garde qui empêche ce bug de revenir — et elle a une
-histoire : les tests *voyaient* le bug, mais seulement sur une machine en UTC.
-
-**`TZ: Europe/Paris` posé dans `docker-compose.yml`** en ceinture et bretelles.
-Ne corrige plus rien depuis que le code est indépendant du fuseau ; protège le
-code écrit demain sans cette précaution, et rend les journaux lisibles à l'heure
-d'Aramis.
+**Poursuivre le disque `fetch` → `curl` propre pour le diagnostic** : l'accès
+aux données de prod passe par `docker exec brief-app-1 cat $BRIEF_DATA_DIR/…`
+pour lire `projects.json` et `items.json`, sans jamais recopier de secret.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/zoned.ts` | **créé** — primitives de calendrier en fuseau fixe |
-| `src/lib/due.ts` | refondu — s'appuie sur `zoned`, plus aucune méthode `Date` locale |
-| `src/lib/rrule.ts` | `nextOccurrence` recalculé sur le calendrier de Paris |
-| `src/app/api/parse/route.ts` | `alignToRrule` corrigé |
-| `src/app/api/overview/route.ts` | bornes de journée, libellés et jour de pic corrigés |
-| `src/lib/due.test.ts` | +3 tests de non-régression |
-| `vitest.config.mts` | force `TZ=UTC` |
-| `docker-compose.yml` | `TZ: Europe/Paris` sur `app` |
-| `HANDOFF.md`, `HERMES.md` | **créés** |
-| `docs/handoffs/*.md` | **créés** — 6 passations |
-| `AGENTS.md`, `CLAUDE.md` | réécrits |
+| `src/components/BriefApp.tsx` | +9/−1 (au déverrouillage) : charger aussi `loadProjects({ silent: true })` pendant l'amorce, pour que les projets créés depuis la recette apparaissent dès la première ouverture |
+| `HANDOFF.md` | réécrit — nouvelle passation (celle-ci) |
+| `docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md` | **créé** — archive de la passation de Claude (correctifs de fuseau) |
+| `docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md` | déjà présent (les 10 correctifs de revue) |
 
 ## Validations — passants / échoués / non lancés
 
-| Commande | Résultat |
-|---|---|
-Lancées **après la fusion**, parce que c'est là que deux chantiers séparés se
-contredisent s'ils doivent le faire :
+Lancées **après** le correctif, sur `src/components/BriefApp.tsx` :
 
 | Commande | Résultat |
 |---|---|
-| `npx vitest run` | ✅ **74 passent** (71 + les 3 d'Hermes) |
+| `npx eslint src/components/BriefApp.tsx` | ✅ aucune erreur |
 | `npx tsc --noEmit` | ✅ aucune erreur |
-| `npx eslint .` | ✅ aucune erreur |
-| `npm run build` | ⏭️ **non lancé** — un `next dev` tourne sur un autre projet |
+| `npx vitest run` | ✅ **74 passent** |
 
-**Indépendance au fuseau prouvée**, suite relancée sans la config forçant UTC :
+Déploiement vérifié :
 
-```
-UTC · Europe/Paris · America/Los_Angeles · Pacific/Kiritimati
-Asia/Kolkata (+05:30) · Pacific/Chatham (+12:45) · America/Sao_Paulo
-→ 74 passent partout
-```
-
-Les décalages non entiers (Kolkata, Chatham) sont là exprès : ils cassent les
-implémentations qui supposent des heures pleines.
+| Vérification | Résultat |
+|---|---|
+| `docker compose up -d --build` (VPS) | ✅ `brief-app` Built, Recreated, Started, Healthy |
+| `curl https://brief.srv1899780.hstgr.cloud` | ✅ HTTP 200 |
+| `GET /api/projects` (prod) | ✅ renvoie les 5 projets |
 
 **Non vérifié — et c'est ce qui reste à faire :**
 
-- Aucun rappel réel n'a été déclenché depuis le correctif de fuseau. Le
-  comportement en production ne sera prouvé que par un rappel qui sonne à
-  l'heure attendue sur le VPS.
+- Le correctif projets n'a **pas été vu sur le téléphone** depuis le déploiement.
+  À confirmer par Aramis : ouvrir l'app, aller dans Réglages → les projets
+  Perso et Sport doivent apparaître **dès la première ouverture**, sans cliquer
+  sur « Recharger les projets ».
+- Aucun rappel réel n'a été déclenché depuis le correctif de fuseau (le
+  comportement en production ne sera prouvé que par un rappel programmé qui
+  sonne à l'heure attendue sur le VPS — « demain » doit sonner à 9 h, pas 11 h).
 - Les correctifs d'interface (échéance effaçable, note qui grandit, saisie
-  préservée) n'ont pas été exercés dans un navigateur. Ils compilent, ils sont
-  testés à la racine, ils n'ont pas été *vus*.
+  préservée) n'ont toujours pas été exercés dans un navigateur.
 
 ## Blockers — ce qui bloque
 
-Rien. Tout est commité et fusionné sur `feat/task-completion`, arbre propre.
+Rien. `feat/task-completion` est poussée, déployée et saine sur le VPS ; arbre
+local propre.
 
 ## Next — la prochaine action
 
-1. **Pousser et déployer.** `git push origin feat/task-completion`, puis sur le
-   VPS `git -C /docker/brief pull && docker compose --env-file .env.production
-   up -d --build`. Le correctif de fuseau ne vaut rien tant qu'il n'y tourne
-   pas — c'est précisément là que le bug vivait.
-2. **Vérifier sur le téléphone**, dans cet ordre : programmer un rappel avec un
-   libellé relatif (« demain »), confirmer qu'il sonne à 9 h et non à 11 h ;
-   puis effacer une échéance depuis la fiche, et taper dans la note pendant une
-   transcription pour voir qu'elle survit.
-3. Reprendre le P1 de `TODOS.md` : l'autorisation micro que Safari redemande à
+1. **Aramis vérifie sur le téléphone** : (a) les projets Perso et Sport
+   apparaissent dans Réglages dès l'ouverture ; (b) un rappel « demain » sonne
+   à 9 h et non 11 h ; (c) effacer une échéance depuis la fiche, et taper
+   pendant une transcription sans que la frappe soit écrasée.
+2. Reprendre le P1 de `TODOS.md` : l'autorisation micro que Safari redemande à
    chaque ouverture.
 
 ---
@@ -180,6 +111,8 @@ Rien. Tout est commité et fusionné sur `feat/task-completion`, arbre propre.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
+| 2026-08-14 | Déploiement prod + correctif projets invisibles | **Hermes** | [fiche](docs/handoffs/2026-08-14-deploiement-et-correctif-projets.md) |
+| 2026-08-14 | Système de passation + correctif fuseau | Claude Code | [fiche](docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md) |
 | 2026-08-14 | Saisie clavier et modification des items | **Hermes** | [fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md) |
 | 2026-08-13 | En ligne, en TLS, et le Web Push sonne | Claude Code | [fiche](docs/handoffs/2026-08-13-vps-tls-et-web-push-prouve.md) |
 | 2026-08-11 | Projets gérés depuis Réglages | Claude Code | [fiche](docs/handoffs/2026-08-11-projets-en-reglages.md) |
@@ -187,5 +120,6 @@ Rien. Tout est commité et fusionné sur `feat/task-completion`, arbre propre.
 | 2026-08-07 | Chaîne dictée → Todoist, et PWA | Claude Code | [fiche](docs/handoffs/2026-08-07-chaine-complete-et-pwa.md) |
 | 2026-08-06 | Scaffold, UI, garde PIN et micro | Claude Code | [fiche](docs/handoffs/2026-08-06-scaffold-ui-et-garde-pin.md) |
 
-Les fiches du 06 au 14 août sont **reconstruites depuis git** et le disent en
-en-tête. Les passations écrites à chaud n'ont pas cet avertissement.
+Les fiches du 06 au 14 août sont **reconstruites depuis git** ou archivées à
+chaud et le disent en en-tête. Les passations écrites à chaud portent cet
+avertissement.
