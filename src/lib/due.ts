@@ -11,24 +11,25 @@
  *   1. le LLM reçoit `now` et rend directement une date ISO absolue ;
  *   2. l'écran Revue propose des libellés courts, résolus ici.
  *
- * Le fuseau est fixé à Europe/Paris : Brief a un utilisateur, dans un pays.
- * Le jour où ça change, ça change ici et nulle part ailleurs.
+ * ⚠️ Toute l'arithmétique de calendrier passe par `src/lib/zoned.ts`, jamais
+ * par les méthodes locales de `Date`. La raison y est expliquée en tête : ces
+ * méthodes lisent le fuseau de la machine, et la production tourne en UTC.
  */
 
-export const TIMEZONE = "Europe/Paris";
+import {
+  TIMEZONE,
+  lastDayOfMonth,
+  offsetMinutes,
+  shiftDays,
+  zonedParts,
+  zonedTime,
+} from "./zoned";
+
+export { TIMEZONE };
 
 /** Heure par défaut d'une échéance sans heure explicite. */
 const DEFAULT_HOUR = 9;
 const EVENING_HOUR = 19;
-
-/** Décalage d'Europe/Paris pour une date donnée, en minutes. Gère l'heure d'été. */
-function offsetMinutes(date: Date): number {
-  // On formate la même instant dans le fuseau cible et en UTC, puis on mesure
-  // l'écart. Plus fiable qu'une table de règles DST à maintenir à la main.
-  const asUtc = new Date(date.toLocaleString("en-US", { timeZone: "UTC" }));
-  const asLocal = new Date(date.toLocaleString("en-US", { timeZone: TIMEZONE }));
-  return Math.round((asLocal.getTime() - asUtc.getTime()) / 60_000);
-}
 
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -69,19 +70,25 @@ const WEEKDAYS: Record<string, number> = {
   lundi: 1, mardi: 2, mercredi: 3, jeudi: 4, vendredi: 5, samedi: 6, dimanche: 7,
 };
 
-function atHour(base: Date, hour: number): Date {
-  const d = new Date(base);
-  d.setHours(hour, 0, 0, 0);
-  return d;
+/** Le jour calendaire de `base` dans `TIMEZONE`, à l'heure demandée. */
+function atHour(base: Date, hour: number, minute = 0): Date {
+  const { y, m, d } = zonedParts(base);
+  return zonedTime(y, m, d, hour, minute);
+}
+
+/** `days` jours après le jour calendaire de `base`, à l'heure par défaut. */
+function atDayOffset(base: Date, days: number): Date {
+  const { y, m, d } = shiftDays(zonedParts(base), days);
+  return zonedTime(y, m, d, DEFAULT_HOUR, 0);
 }
 
 function nextWeekday(from: Date, target: number): Date {
-  const current = from.getDay() === 0 ? 7 : from.getDay();
+  const parts = zonedParts(from);
+  const current = parts.weekday === 0 ? 7 : parts.weekday;
   let delta = target - current;
   if (delta <= 0) delta += 7;
-  const d = new Date(from);
-  d.setDate(d.getDate() + delta);
-  return atHour(d, DEFAULT_HOUR);
+  const next = shiftDays(parts, delta);
+  return zonedTime(next.y, next.m, next.d, DEFAULT_HOUR, 0);
 }
 
 /**
@@ -117,9 +124,7 @@ export function resolveDue(
 
   const applyHour = (d: Date): Date => {
     if (explicitHour === null) return d;
-    const out = new Date(d);
-    out.setHours(explicitHour, explicitMinute, 0, 0);
-    return out;
+    return atHour(d, explicitHour, explicitMinute);
   };
 
   const today = atHour(now, DEFAULT_HOUR);
@@ -128,21 +133,17 @@ export function resolveDue(
   if (text.startsWith("ce soir")) return done(atHour(now, EVENING_HOUR), true);
 
   if (text.startsWith("après-demain") || text.startsWith("apres-demain")) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 2);
-    return done(applyHour(d), explicitHour !== null);
+    return done(applyHour(atDayOffset(now, 2)), explicitHour !== null);
   }
   if (text.startsWith("demain")) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 1);
-    return done(applyHour(d), explicitHour !== null);
+    return done(applyHour(atDayOffset(now, 1)), explicitHour !== null);
   }
   if (text.startsWith("semaine prochaine")) {
     return done(nextWeekday(now, 1), false);
   }
   if (text.startsWith("fin de mois")) {
-    const d = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return done(atHour(d, DEFAULT_HOUR), false);
+    const { y, m } = zonedParts(now);
+    return done(zonedTime(y, m, lastDayOfMonth({ y, m, d: 1 }), DEFAULT_HOUR, 0), false);
   }
 
   for (const [name, index] of Object.entries(WEEKDAYS)) {

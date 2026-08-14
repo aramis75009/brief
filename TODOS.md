@@ -26,27 +26,35 @@ Voir la section « Décisions à trancher » plus bas.
 
 ---
 
-## P0 — Bloquant : rien ne marche sans ça
+## P0 — ✅ Entièrement soldé le 2026-08-13
 
-### Prouver que le Web Push arrive sur un iPhone verrouillé
-- **Quoi :** un rappel programmé qui sonne réellement, téléphone verrouillé, app fermée.
-- **Pourquoi :** c'est **le risque numéro un du produit**. Toute la promesse des
-  rappels repose là-dessus, et seuls les chemins d'ÉCHEC ont été vérifiés en
-  conditions réelles. Le succès n'est couvert que par des tests unitaires.
-- **Contexte :** iOS ne donne aucune API de notification programmée à une PWA —
-  ni Notification Triggers, ni Background Sync, ni Periodic Background Sync, ni
-  Background Fetch. D'où le serveur qui possède l'horloge. Exige une PWA
-  installée depuis l'écran d'accueil (iOS 16.4+) et un abonnement push valide.
-- **Si ça échoue :** le produit n'a plus de raison d'être sous cette forme. À
-  faire AVANT toute autre fonctionnalité.
-- **Effort :** S (humain) → S (CC) · **Priorité :** P0
-- **Dépend de :** ~~VPS en ligne, clés VAPID posées~~ — **les deux sont faits
-  depuis le 2026-08-13. Ne dépend plus que de ton iPhone.** Marche à suivre :
-  installer la PWA depuis Safari sur `https://brief.srv1899780.hstgr.cloud`
-  (Partager → Sur l'écran d'accueil — l'abonnement push est impossible depuis
-  l'onglet Safari), autoriser les notifications, puis programmer un rappel à
-  +3 minutes, verrouiller le téléphone et le poser. `/api/push/test` permet de
-  vérifier l'aller-retour avant de faire confiance au planificateur.
+**Les trois blocages sont levés le même jour** : l'app est en ligne en HTTPS, elle
+garde ses données, et un rappel sonne réellement sur un iPhone verrouillé. Brief
+est désormais un produit utilisable, pas une maquette.
+
+**Le sujet le plus urgent est donc le P1 ci-dessous** — l'autorisation micro que
+Safari redemande à chaque ouverture. C'est ce qui décide si Aramis continue à
+s'en servir.
+
+Conservé ici plutôt qu'effacé : ces entrées disent *comment* ça a été prouvé, et
+ce qu'il ne faut pas casser.
+
+### ~~Prouver que le Web Push arrive sur un iPhone verrouillé~~ — RÉUSSI le 2026-08-13
+**Aramis a fait le test : téléphone verrouillé, la notification arrive.**
+
+C'était **le risque numéro un du produit** — toute la promesse des rappels
+reposait dessus, et seuls les chemins d'ÉCHEC avaient été vérifiés en conditions
+réelles. Le pari est gagné, en production, sur son matériel.
+
+Ce que ça valide et qu'il ne faut plus re-débattre : le choix du Web Push contre
+CalDAV, et le serveur qui possède l'horloge. iOS ne donne aucune API de
+notification programmée à une PWA — ni Notification Triggers, ni Background
+Sync, ni Periodic Background Sync, ni Background Fetch. C'est pour ça que le
+conteneur `cron` appelle `/api/cron/reminders` toutes les 60 s.
+
+⚠️ Conditions qui restent nécessaires, à ne pas casser par inadvertance : PWA
+installée depuis l'écran d'accueil (iOS 16.4+, l'abonnement est impossible
+depuis un onglet Safari), abonnement push valide, et HTTPS réel.
 
 ### ~~Déployer sur le VPS avec un vrai domaine et TLS~~ — FAIT le 2026-08-13
 En ligne sur **https://brief.srv1899780.hstgr.cloud**, PIN d'accès actif.

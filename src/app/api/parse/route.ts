@@ -1,4 +1,5 @@
 import { TIMEZONE, resolveDue, toIsoWithOffset } from "@/lib/due";
+import { shiftDays, weekdayOf, zonedParts, zonedTime } from "@/lib/zoned";
 import { requirePin } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { readProjects } from "@/lib/store";
@@ -132,13 +133,20 @@ function alignToRrule(due: string, rrule: string): string {
   if (!targets.length) return due;
 
   const date = new Date(due);
-  if (Number.isNaN(date.getTime()) || targets.includes(date.getDay())) return due;
+  if (Number.isNaN(date.getTime())) return due;
+
+  // ⚠️ Le jour de la semaine se lit dans TIMEZONE, pas sur la machine : une
+  // échéance entre minuit et 2 h à Paris tombe la veille en UTC, et le serveur
+  // recalerait alors sur le mauvais jour.
+  const start = zonedParts(date);
+  if (targets.includes(start.weekday)) return due;
 
   // Prochain jour correspondant, en avançant au plus de six jours.
   for (let shift = 1; shift <= 6; shift++) {
-    const candidate = new Date(date);
-    candidate.setDate(candidate.getDate() + shift);
-    if (targets.includes(candidate.getDay())) return toIsoWithOffset(candidate);
+    const cal = shiftDays(start, shift);
+    if (targets.includes(weekdayOf(cal))) {
+      return toIsoWithOffset(zonedTime(cal.y, cal.m, cal.d, start.hour, start.minute));
+    }
   }
   return due;
 }
