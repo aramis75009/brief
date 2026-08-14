@@ -5,9 +5,11 @@ import { DoneBox } from "./DoneBox";
 import { ChevronDownIcon, ClockIcon, ProjectDot, TrashIcon } from "./icons";
 import { formatDue, resolveDue } from "@/lib/due";
 import {
+  DUE_CLEAR,
   DUE_SUGGESTIONS,
   PRIORITIES,
   PRIORITY_VALUES,
+  fallbackProjectId,
   shapeFor,
   skinFor,
 } from "@/lib/projects";
@@ -51,32 +53,47 @@ export function TaskSheet({
     id: task.projectId,
     name: "Projet inconnu",
   };
-  const skin = skinFor(project);
   const prio = PRIORITIES[task.priority];
   const done = !!task.doneAt;
 
-  // Mode d'édition — on part de l'item réel, on ne travaille jamais sur un vide.
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({
+  /**
+   * Le projet à présélectionner dans le `<select>`.
+   *
+   * ⚠️ Un item dont le projet a été supprimé depuis Réglages n'a plus d'option
+   * qui lui corresponde. Le select affichait alors le premier projet tout en
+   * gardant l'identifiant mort dans `form`, et `sanitizePatch` le réécrivait
+   * côté serveur en `fallbackProjectId()` : corriger le titre d'un item
+   * orphelin le déplaçait donc de projet, sans un mot. On présélectionne le
+   * projet de repli — celui-là même que le serveur choisirait — pour que ce
+   * qui est affiché soit ce qui sera écrit.
+   */
+  const selectableProjectId = (id: string) =>
+    projects.some((p) => p.id === id) ? id : fallbackProjectId(projects);
+
+  const blank = () => ({
     title: task.title,
     kind: task.kind,
-    projectId: task.projectId,
+    projectId: selectableProjectId(task.projectId),
     due: task.due,
     allDay: task.allDay,
     priority: task.priority,
   });
 
+  // Mode d'édition — on part de l'item réel, on ne travaille jamais sur un vide.
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(blank);
+
   const startEdit = () => {
-    setForm({
-      title: task.title,
-      kind: task.kind,
-      projectId: task.projectId,
-      due: task.due,
-      allDay: task.allDay,
-      priority: task.priority,
-    });
+    setForm(blank());
     setEditing(true);
   };
+
+  // En édition, la pastille suit le select : elle annonce où l'item ira, pas
+  // d'où il vient.
+  const shownProject = editing
+    ? (projects.find((p) => p.id === form.projectId) ?? project)
+    : project;
+  const skin = skinFor(shownProject);
 
   const patch = (p: Partial<typeof form>) => setForm((f) => ({ ...f, ...p }));
 
@@ -106,8 +123,8 @@ export function TaskSheet({
           className="inline-flex h-[26px] items-center gap-2 rounded-[9px] px-2.5 text-11 font-semibold"
           style={{ background: skin.bg, color: skin.fg }}
         >
-          <ProjectDot shape={shapeFor(project)} />
-          {project.name}
+          <ProjectDot shape={shapeFor(shownProject)} />
+          {shownProject.name}
         </span>
 
         {editing ? (
@@ -117,7 +134,9 @@ export function TaskSheet({
               onChange={(e) => patch({ title: e.target.value })}
               placeholder="Intitulé"
               aria-label="Intitulé"
-              className="mt-3 w-full border-none border-b border-b-transparent bg-transparent pb-[5px] text-21 leading-[1.3] font-semibold tracking-[-0.3px] text-ink outline-none transition-colors duration-200 focus:border-b-action"
+              // `border-none` posait `border-style: none` et annulait le
+              // soulignement au focus, quelles que soient largeur et couleur.
+              className="mt-3 w-full border-0 border-b border-solid border-b-transparent bg-transparent pb-[5px] text-21 leading-[1.3] font-semibold tracking-[-0.3px] text-ink outline-none transition-colors duration-200 focus:border-b-action"
             />
 
             <div className="mt-4 mb-5 flex flex-col gap-2.5">
@@ -157,7 +176,7 @@ export function TaskSheet({
                 <select
                   value=""
                   onChange={(e) => {
-                    if (!e.target.value) {
+                    if (e.target.value === DUE_CLEAR) {
                       patch({ due: null, allDay: true });
                       return;
                     }
@@ -170,9 +189,11 @@ export function TaskSheet({
                   aria-label="Échéance"
                   className="absolute inset-0 h-full w-full cursor-pointer border-none opacity-0"
                 >
+                  {/* Aucune option ne porte `value=""` — voir DUE_CLEAR. */}
+                  <option value={DUE_CLEAR}>Pas d&apos;échéance</option>
                   {DUE_SUGGESTIONS.map((s) => (
-                    <option key={s || "none"} value={s}>
-                      {s || "Pas d'échéance"}
+                    <option key={s} value={s}>
+                      {s}
                     </option>
                   ))}
                 </select>

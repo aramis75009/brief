@@ -135,8 +135,8 @@ export async function setItemDone(
 /** Suppression définitive. Rien n'en garde de trace — contrairement à la coche. */
 export async function deleteItem(id: string): Promise<{ ok: boolean; id: string }> {
   return jsonFetch(
-    "/api/items",
-    { method: "DELETE", body: JSON.stringify({ id }) },
+    `/api/items/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
     TIMEOUTS.save,
   );
 }

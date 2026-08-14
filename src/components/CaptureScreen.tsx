@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ArrowRightIcon, CloseIcon, MicIcon, StopIcon } from "./icons";
 import { MAX_SECONDS, type RecorderError } from "@/lib/useRecorder";
 import type { Overview, Phase } from "@/lib/types";
@@ -177,6 +178,24 @@ export function CaptureScreen({
 
   const ctaDisabled = working || phase === "saving" || (!recording && !hasTranscript);
 
+  // Cmd/Ctrl+Entrée doit obéir aux MÊMES gardes que le CTA, plus une : pendant
+  // l'enregistrement, le bouton arrête le micro, il ne structure pas. Sans
+  // cette condition le raccourci basculait sur l'écran Revue micro ouvert, et
+  // des appuis répétés pendant `parsing` lançaient plusieurs `/api/parse`
+  // concurrents.
+  const canStructure = !ctaDisabled && !recording;
+
+  // La note grandit avec son contenu. Compter les `\n` ne suffit pas : une
+  // dictée transcrite est une seule ligne sans retour, qu'un textarea de deux
+  // lignes en `resize-none` tronquait — alors que l'ancien `<p>` montrait tout.
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = noteRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [transcript]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-none px-[26px] pt-2.5 pb-1.5">
@@ -228,19 +247,20 @@ export function CaptureScreen({
             )}
           </div>
           <textarea
+            ref={noteRef}
             value={transcript}
             onChange={(e) => onTranscriptChange(e.target.value)}
             onKeyDown={(e) => {
               // Cmd/Ctrl+Entrée structure directement depuis le clavier.
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && transcript.trim()) {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canStructure) {
                 e.preventDefault();
                 onStructure();
               }
             }}
             placeholder="Dicte ta note, ou écris-la ici…"
             aria-label="Note à structurer"
-            rows={hasTranscript ? Math.min(6, Math.max(2, transcript.split("\n").length)) : 2}
-            className="m-0 w-full resize-none border-none bg-transparent p-0 text-17 leading-[1.55] font-normal text-ink outline-none placeholder:text-ink-3"
+            rows={2}
+            className="m-0 max-h-[45vh] w-full resize-none overflow-y-auto border-none bg-transparent p-0 text-17 leading-[1.55] font-normal text-ink outline-none placeholder:text-ink-3"
           />
         </div>
 

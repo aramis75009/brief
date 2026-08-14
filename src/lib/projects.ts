@@ -194,14 +194,28 @@ export function isPriority(v: unknown): v is Priority {
 }
 
 /**
- * Suggestions d'échéance de l'écran Revue.
+ * Valeur de l'option « Pas d'échéance » des sélecteurs d'échéance.
+ *
+ * ⚠️ Surtout pas la chaîne vide. Ces `<select>` sont verrouillés sur `value=""`
+ * — c'est ce qui permet de rejouer deux fois de suite le même choix, puisque
+ * React les y ramène après chaque changement. Une option portant elle aussi
+ * `""` n'aurait donc jamais déclenché `change` : c'est exactement ce qui
+ * rendait « Pas d'échéance » inopérant, dans la fiche comme à la revue. Une
+ * échéance posée par erreur était définitive. Corrigé le 2026-08-14.
+ */
+export const DUE_CLEAR = "__clear";
+
+/**
+ * Suggestions d'échéance de l'écran Revue et de la fiche.
  *
  * Ce sont des libellés d'interface : c'est `resolveDue()` qui les convertit en
  * date absolue. Brief ne stocke jamais « vendredi » — la résolution du français
  * lui incombe désormais, elle n'est plus déléguée à un service tiers.
+ *
+ * L'option « Pas d'échéance » ne figure PAS dans cette liste : elle porte
+ * `DUE_CLEAR` et se rend à part, pour la raison ci-dessus.
  */
 export const DUE_SUGGESTIONS = [
-  "",
   "aujourd'hui",
   "ce soir",
   "demain",

@@ -2,7 +2,7 @@ import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
-import { deleteItem, patchItem, readItems, readProjects, saveItems } from "@/lib/store";
+import { patchItem, readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
 
 /**
@@ -162,41 +162,14 @@ export async function PATCH(req: Request): Promise<Response> {
   }
 }
 
-/**
- * Suppression définitive d'un item — `{ id }`.
+/*
+ * La suppression vit dans `/api/items/[id]`, pas ici.
  *
- * Jusqu'ici la corbeille de la fiche ne retirait la ligne que de l'état React :
- * l'item revenait au rechargement suivant, sans que rien ne le signale. Une
- * suppression qui ne supprime pas est pire qu'un bouton absent — on croit avoir
- * rangé.
+ * Un `DELETE` de collection portant l'id dans le corps a existé à cet endroit.
+ * Quand `DELETE /api/items/[id]` est arrivé, les deux ont coexisté sans que
+ * rien ne les départage — et c'est le nouveau que personne n'appelait. Un
+ * chemin d'écriture jamais exercé finit par diverger de celui qui sert.
  *
- * Distinct de la coche : cocher garde une trace, supprimer n'en garde aucune.
+ * `PATCH` reste ici parce qu'il fait autre chose : il coche et décoche, et
+ * c'est le serveur qui décide si une tâche récurrente avance ou se termine.
  */
-export async function DELETE(req: Request): Promise<Response> {
-  const denied = requirePin(req);
-  if (denied) return denied;
-
-  let body: { id?: unknown };
-  try {
-    body = (await req.json()) as { id?: unknown };
-  } catch {
-    return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
-  }
-
-  const id = String(body.id ?? "").trim();
-  if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
-
-  try {
-    const removed = await deleteItem(id);
-    if (!removed) return Response.json({ error: "Item introuvable." }, { status: 404 });
-    return Response.json({ ok: true, id });
-  } catch (e) {
-    return Response.json(
-      {
-        error: "Suppression non enregistrée côté serveur.",
-        detail: e instanceof Error ? e.message : String(e),
-      },
-      { status: 503 },
-    );
-  }
-}

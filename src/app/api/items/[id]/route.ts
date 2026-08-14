@@ -30,10 +30,10 @@ function sanitizePatch(
   const v = input as Record<string, unknown>;
   const out: Partial<Item> = {};
 
-  if (typeof v.title === "string") {
-    const t = v.title.trim();
-    if (t) out.title = t;
-  }
+  // Un titre présent mais blanc est conservé tel quel (chaîne vide) pour que
+  // l'appelant puisse le REFUSER en 400. L'écraser ici rendrait le contrôle
+  // inatteignable et `PATCH {"title":"   "}` répondrait 200 sans rien changer.
+  if (typeof v.title === "string") out.title = v.title.trim();
   if (v.kind === "event" || v.kind === "task") out.kind = v.kind as ItemKind;
   if (typeof v.projectId === "string") {
     out.projectId = knownProjects.has(v.projectId) ? v.projectId : fallback;
@@ -46,6 +46,14 @@ function sanitizePatch(
     const parsed = new Date(v.due);
     if (isRealCalendarDate(v.due) && !Number.isNaN(parsed.getTime())) {
       out.due = v.due;
+    } else {
+      // Une date illisible devient « pas d'échéance », comme partout ailleurs
+      // dans Brief — surtout pas « on ignore et on garde l'ancienne ». Sinon le
+      // client croit avoir déplacé l'échéance, et l'ancien rappel sonne quand
+      // même. Un rappel absent se voit ; un rappel au mauvais moment ne se voit
+      // pas.
+      out.due = null;
+      out.allDay = true;
     }
   }
   if (typeof v.allDay === "boolean") out.allDay = v.allDay;
@@ -86,13 +94,41 @@ export async function PATCH(
     return Response.json({ error: "Le titre ne peut pas être vide." }, { status: 400 });
   }
 
-  const updated = await patchItem(id, patch);
-  if (!updated) {
-    return Response.json({ error: "Item introuvable." }, { status: 404 });
+  // Même traitement d'erreur que `/api/items` : un disque en lecture seule ou
+  // une écriture qui échoue doit produire un 503 en français, pas le 500
+  // générique de Next — le client affiche le message tel quel.
+  try {
+    const updated = await patchItem(id, patch);
+    if (!updated) {
+      return Response.json({ error: "Item introuvable." }, { status: 404 });
+    }
+    return Response.json({ item: updated });
+  } catch (e) {
+    return Response.json(
+      {
+        error: "Modification non enregistrée côté serveur.",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 503 },
+    );
   }
-  return Response.json({ item: updated });
 }
 
+/**
+ * Suppression définitive d'un item.
+ *
+ * Jusqu'ici la corbeille de la fiche ne retirait la ligne que de l'état React :
+ * l'item revenait au rechargement suivant, sans que rien ne le signale. Une
+ * suppression qui ne supprime pas est pire qu'un bouton absent — on croit avoir
+ * rangé.
+ *
+ * Distinct de la coche : cocher garde une trace, supprimer n'en garde aucune.
+ *
+ * ⚠️ C'est l'UNIQUE chemin de suppression. Un second existait sur la
+ * collection (`DELETE /api/items` avec l'id dans le corps) ; les deux ont
+ * cohabité le temps d'un commit, dont un que personne n'appelait. Ne pas en
+ * réintroduire un troisième.
+ */
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -105,9 +141,19 @@ export async function DELETE(
     return Response.json({ error: "Identifiant manquant." }, { status: 400 });
   }
 
-  const deleted = await deleteItem(id);
-  if (!deleted) {
-    return Response.json({ error: "Item introuvable." }, { status: 404 });
+  try {
+    const deleted = await deleteItem(id);
+    if (!deleted) {
+      return Response.json({ error: "Item introuvable." }, { status: 404 });
+    }
+    return Response.json({ ok: true, id });
+  } catch (e) {
+    return Response.json(
+      {
+        error: "Suppression non enregistrée côté serveur.",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 503 },
+    );
   }
-  return Response.json({ ok: true });
 }

@@ -11,7 +11,14 @@ import {
   TrashIcon,
 } from "./icons";
 import { formatDue, resolveDue } from "@/lib/due";
-import { DUE_SUGGESTIONS, PRIORITIES, PRIORITY_VALUES, shapeFor, skinFor } from "@/lib/projects";
+import {
+  DUE_CLEAR,
+  DUE_SUGGESTIONS,
+  PRIORITIES,
+  PRIORITY_VALUES,
+  shapeFor,
+  skinFor,
+} from "@/lib/projects";
 import type { DraftItem, Priority, Project } from "@/lib/types";
 
 const SWIPE_DELETE_PX = -95;
@@ -213,9 +220,11 @@ export function ReviewScreen({
                       aria-label="Échéance"
                       className="absolute inset-0 h-full w-full cursor-pointer border-none opacity-0"
                     >
+                      {/* Aucune option ne porte `value=""` — voir DUE_CLEAR. */}
+                      <option value={DUE_CLEAR}>Pas d&apos;échéance</option>
                       {DUE_SUGGESTIONS.map((s) => (
-                        <option key={s || "none"} value={s}>
-                          {s || "Pas d'échéance"}
+                        <option key={s} value={s}>
+                          {s}
                         </option>
                       ))}
                     </select>
