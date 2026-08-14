@@ -44,6 +44,7 @@ Le micro exige un contexte sécurisé : `localhost` convient, une IP de LAN non.
 | `BRIEF_DATA_DIR` | Dossier des données serveur (projets, items, abonnements). **Éphémère sur Vercel.** | `.data` |
 | `BRIEF_CRON_TOKEN` | Jeton du planificateur de rappels. Distinct du PIN. | — |
 | `BRIEF_CAPTURE_TOKEN` | Jeton du raccourci iOS. Distinct du PIN. | — |
+| `BRIEF_DIGEST_TOKEN` | Jeton de lecture du récap du matin (n8n). Distinct du PIN. | — |
 | `VOICEBOX_URL` | Base d'un Voicebox local. Implémenté, non testé. | — |
 
 `VOICEBOX_URL` n'est **pas** posée sur Vercel : le service tourne sur le LAN,
@@ -78,10 +79,38 @@ L'écran PIN et le `sessionStorage` ne sont que de l'UX — ils ne protègent ri
 | `POST /api/push/test` | `{ title, body, subscription? }` | envoi immédiat |
 | `GET /api/cron/reminders` | `Authorization: Bearer $BRIEF_CRON_TOKEN` | passage du planificateur |
 | `POST /api/capture` | `Authorization: Bearer $BRIEF_CAPTURE_TOKEN`, `{ text, structure? }` | raccourci iOS |
+| `GET /api/digest` | `Authorization: Bearer $BRIEF_DIGEST_TOKEN` | récap du jour : retard + échéances du jour |
 
-Les deux dernières portent un **jeton machine**, pas le PIN : un secret déposé
-dans une crontab ou un raccourci iOS ne doit pas ouvrir la même porte que le
-code que tu tapes, et doit pouvoir être révoqué seul.
+Les trois dernières portent un **jeton machine**, pas le PIN : un secret déposé
+dans une crontab, un raccourci iOS ou un automate ne doit pas ouvrir la même
+porte que le code que tu tapes, et doit pouvoir être révoqué seul. Chacune a le
+sien, pour que révoquer l'une n'éteigne pas les autres.
+
+### Le récap du matin — `GET /api/digest`
+
+Conçu pour un automate qui met en forme et envoie sur un canal que Brief n'a
+pas (WhatsApp, Telegram, un mail). Brief notifie déjà par Web Push item par
+item ; ceci répond à une autre question — « qu'est-ce qui pèse sur ma journée »
+— en un seul message.
+
+```json
+{ "generatedAt": "2026-08-15T06:30:00.000Z",
+  "counts":  { "overdue": 1, "today": 2 },
+  "overdue": [{ "id": "…", "title": "Relancer le fournisseur", "project": "My Flip",
+                "projectId": "my-flip", "kind": "task",
+                "due": "2026-08-12T09:00:00+02:00", "allDay": false, "priority": 1 }],
+  "today":   [ … ] }
+```
+
+Les deux listes sont triées : priorité 1 d'abord (la plus haute), puis échéance
+la plus ancienne. Les tâches terminées, sans échéance ou postérieures à
+aujourd'hui n'y figurent pas — un récap qui déverse l'Inbox chaque matin finit
+ignoré.
+
+**Le découpage se fait ici, pas chez l'appelant.** Un nœud Code n8n tourne dans
+le fuseau de son conteneur (UTC) et rejouerait le décalage de deux heures
+corrigé le 2026-08-14, cette fois hors de portée de la suite de tests. Voir
+[`src/lib/buckets.ts`](src/lib/buckets.ts).
 
 ## Pièges à connaître
 
