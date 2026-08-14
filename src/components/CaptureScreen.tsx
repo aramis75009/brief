@@ -335,46 +335,47 @@ export function CaptureScreen({
           {hint[phase]}
         </span>
 
-        {/* CTA toujours monté : hauteur de bloc constante, jamais rogné. */}
-        <button
-          type="button"
-          onClick={recording ? onToggleMic : onStructure}
-          disabled={ctaDisabled}
-          aria-busy={working}
-          className={
-            "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-row border-none " +
-            "text-15 font-semibold tracking-[0.1px] transition-all duration-200 " +
-            (ctaDisabled
-              // Filet intérieur OBLIGATOIRE : le bouton est en `bg-page`, donc
-              // de la même couleur que la coque depuis qu'elle est passée en
-              // `page`. Sans ce trait, il disparaît purement et simplement.
-              ? "cursor-default bg-page text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
-              : recording
-                ? "cursor-pointer bg-tile text-ink shadow-[inset_0_0_0_1px_var(--line-2)] hover:bg-page active:scale-[0.985]"
-                : "cursor-pointer bg-ink text-page hover:bg-ink active:scale-[0.985]")
-          }
-        >
-          {working ? (
-            <>
-              <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[var(--line-2)] border-t-ink-soft" />
-              {phase === "uploading" ? "Envoi…" : phase === "parsing" ? "Structuration…" : "Transcription…"}
-            </>
-          ) : recording ? (
-            <>
-              <StopIcon size={18} />
-              Arrêter l&apos;enregistrement
-            </>
-          ) : hasTranscript ? (
-            <>
-              Structurer la note
-              <ArrowRightIcon />
-            </>
-          ) : (
-            // Le libellé dit l'état réel. « Structurer la note » sur un bouton
-            // inerte promet une action qui ne peut pas avoir lieu.
-            "Rien à structurer"
-          )}
-        </button>
+        {/* CTA : masqué tant qu'il n'y a RIEN à structurer — un bouton inerte
+            qui dit « Rien à structurer » ne fait que voler de la place en bas
+            de l'écran. Il apparaît dès qu'une note existe, qu'on enregistre ou
+            qu'on travaille. */}
+        {(recording || working || phase === "saving" || hasTranscript) && (
+          <button
+            type="button"
+            onClick={recording ? onToggleMic : onStructure}
+            disabled={ctaDisabled}
+            aria-busy={working}
+            className={
+              "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-row border-none " +
+              "text-15 font-semibold tracking-[0.1px] transition-all duration-200 " +
+              (ctaDisabled
+                // Filet intérieur OBLIGATOIRE : le bouton est en `bg-page`, donc
+                // de la même couleur que la coque depuis qu'elle est passée en
+                // `page`. Sans ce trait, il disparaît purement et simplement.
+                ? "cursor-default bg-page text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
+                : recording
+                  ? "cursor-pointer bg-tile text-ink shadow-[inset_0_0_0_1px_var(--line-2)] hover:bg-page active:scale-[0.985]"
+                  : "cursor-pointer bg-ink text-page hover:bg-ink active:scale-[0.985]")
+            }
+          >
+            {working ? (
+              <>
+                <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[var(--line-2)] border-t-ink-soft" />
+                {phase === "uploading" ? "Envoi…" : phase === "parsing" ? "Structuration…" : "Transcription…"}
+              </>
+            ) : recording ? (
+              <>
+                <StopIcon size={18} />
+                Arrêter l&apos;enregistrement
+              </>
+            ) : (
+              <>
+                Structurer la note
+                <ArrowRightIcon />
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
