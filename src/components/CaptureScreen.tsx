@@ -24,6 +24,7 @@ export type CaptureProps = {
   appError: AppError | null;
   onToggleMic: () => void;
   onClear: () => void;
+  onTranscriptChange: (text: string) => void;
   onStructure: () => void;
   /** Relevé du jour — le MÊME `GET /api/overview` que l'onglet Vision. */
   overview: Overview | null;
@@ -151,6 +152,7 @@ export function CaptureScreen({
   appError,
   onToggleMic,
   onClear,
+  onTranscriptChange,
   onStructure,
   overview,
   onOpenOverview,
@@ -183,32 +185,48 @@ export function CaptureScreen({
           <span className="text-11 font-medium text-ink-2">FR</span>
         </div>
         <p className="mt-1 mb-0 text-13 leading-[1.45] font-normal text-ink-2">
-          Dicte ta note, Brief la range.
+          Écris ta note ou dicte-la, Brief la range.
         </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-3.5 pb-1.5">
-        {hasTranscript && (
-          <div className="animate-br-in rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
-            <div className="mb-[9px] flex items-center gap-[7px]">
-              <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
-                Transcription
-              </span>
+        {/* Zone de note : éditable au clavier, qu'il y ait ou non une dictée.
+            C'est elle qui permet d'ajouter un item sans passer par le micro :
+            on écrit la phrase, on structure. L'état « en attente » (pointillé)
+            n'existe qu'en revue, pas ici. */}
+        <div className="animate-br-in rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
+          <div className="mb-[9px] flex items-center gap-[7px]">
+            <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
+              Note
+            </span>
+            {hasTranscript && (
               <button
                 type="button"
                 onClick={onClear}
                 title="Effacer"
-                aria-label="Effacer la transcription"
+                aria-label="Effacer la note"
                 className="-mt-1.5 -mr-1.5 -mb-1.5 ml-auto cursor-pointer border-none bg-transparent p-1.5 text-ink-3 transition-colors duration-200 hover:text-ink"
               >
                 <CloseIcon />
               </button>
-            </div>
-            <p className="m-0 text-17 leading-[1.55] font-normal text-pretty text-ink whitespace-pre-wrap">
-              {transcript}
-            </p>
+            )}
           </div>
-        )}
+          <textarea
+            value={transcript}
+            onChange={(e) => onTranscriptChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Cmd/Ctrl+Entrée structure directement depuis le clavier.
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && transcript.trim()) {
+                e.preventDefault();
+                onStructure();
+              }
+            }}
+            placeholder="Dicte ta note, ou écris-la ici…"
+            aria-label="Note à structurer"
+            rows={hasTranscript ? Math.min(6, Math.max(2, transcript.split("\n").length)) : 2}
+            className="m-0 w-full resize-none border-none bg-transparent p-0 text-17 leading-[1.55] font-normal text-ink outline-none placeholder:text-ink-3"
+          />
+        </div>
 
         {working && !hasTranscript && (
           <div className="animate-br-in flex items-center gap-3 rounded-tile border border-[var(--line)] bg-tile px-[18px] py-4">
@@ -266,7 +284,7 @@ export function CaptureScreen({
           <div className="animate-br-in px-1 pt-2">
             <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
             <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
-              Appuie sur le micro et dis ce que tu as à faire.
+              Écris ta note ci-dessus, ou appuie sur le micro et dis ce que tu as à faire.
             </p>
           </div>
         )}

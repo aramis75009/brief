@@ -23,6 +23,7 @@ import {
   saveItems,
   setItemDone,
   transcribeAudio,
+  updateItem,
 } from "@/lib/api";
 import { formatDue } from "@/lib/due";
 import { uid } from "@/lib/ids";
@@ -519,6 +520,7 @@ export function BriefApp() {
           appError={appError}
           onToggleMic={toggleMic}
           onClear={() => setTranscript("")}
+          onTranscriptChange={setTranscript}
           onStructure={() => void structure(transcript)}
           overview={overview}
           onOpenOverview={() => setView("overview")}
@@ -593,10 +595,35 @@ export function BriefApp() {
         <TaskSheet
           task={sheetTask}
           projects={projects}
+          saving={phase === "saving"}
           onClose={() => setSheetId(null)}
           onToggleDone={(done) => void toggleDone(sheetTask.id, done)}
           busy={doneBusyId === sheetTask.id}
           onDelete={() => void removeItem(sheetTask.id)}
+          onSave={(patch) => {
+            void (async () => {
+              setWorkPhase("saving");
+              try {
+                const updated = await updateItem(sheetTask.id, patch);
+                setSent((s) => s.map((t) => (t.id === sheetTask.id ? updated : t)));
+                setSheetId(null);
+                setWorkPhase("idle");
+                flash("Item modifié.");
+                void refreshOverview();
+              } catch (e) {
+                setWorkPhase("idle");
+                if (e instanceof UnauthorizedError) {
+                  clearPin();
+                  setUnlocked(false);
+                  return;
+                }
+                flash(
+                  e instanceof ApiError ? e.message : "Modification impossible.",
+                  "err",
+                );
+              }
+            })();
+          }}
         />
       )}
 
