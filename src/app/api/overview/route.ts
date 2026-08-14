@@ -1,7 +1,8 @@
+import { makeBucketOf, midnightAt } from "@/lib/buckets";
 import { TIMEZONE } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
 import { readItems, readProjects } from "@/lib/store";
-import { shiftDays, zonedParts, zonedTime } from "@/lib/zoned";
+import { zonedParts } from "@/lib/zoned";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,18 +21,19 @@ export const dynamic = "force-dynamic";
  */
 
 /**
- * Minuit à Paris, `offset` jours après le jour courant de `base`.
+ * `midnightAt` et `makeBucketOf` vivent dans `src/lib/buckets.ts`.
  *
  * ⚠️ Surtout pas `setHours(0,0,0,0)` : ça donne minuit dans le fuseau de la
  * MACHINE. Les conteneurs tournent en UTC, donc les journées de la Vision
  * commençaient à 2 h du matin heure de Paris — une tâche due à 1 h passait pour
  * en retard, et l'horizon 7 jours était décalé d'un cran pour tout ce qui tombe
  * entre minuit et 2 h. Voir `src/lib/zoned.ts`.
+ *
+ * Ces deux fonctions étaient définies ici. `/api/digest` a eu besoin du même
+ * découpage : les partager évite deux définitions d'« aujourd'hui » capables de
+ * diverger en silence, la Vision et le récap du matin ne comptant alors pas
+ * pareil.
  */
-function midnightAt(base: Date, offset: number): Date {
-  const { y, m, d } = shiftDays(zonedParts(base), offset);
-  return zonedTime(y, m, d, 0, 0);
-}
 
 /** Clé du jour calendaire dans `TIMEZONE`, pour dire si deux instants tombent le même jour. */
 function dayKey(date: Date): string {
@@ -54,20 +56,9 @@ export async function GET(req: Request): Promise<Response> {
   const [items, projects] = await Promise.all([readItems(), readProjects()]);
   const now = new Date();
   const today = midnightAt(now, 0);
-  const tomorrow = midnightAt(now, 1);
-  const inSevenDays = midnightAt(now, 7);
 
   const open = items.filter((i) => !i.doneAt);
-
-  const bucketOf = (due: string | null): "overdue" | "today" | "week" | "later" | "none" => {
-    if (!due) return "none";
-    const d = new Date(due);
-    if (Number.isNaN(d.getTime())) return "none";
-    if (d < today) return "overdue";
-    if (d < tomorrow) return "today";
-    if (d < inSevenDays) return "week";
-    return "later";
-  };
+  const bucketOf = makeBucketOf(now);
 
   const byProject = projects.map((p) => {
     const mine = open.filter((i) => i.projectId === p.id);
