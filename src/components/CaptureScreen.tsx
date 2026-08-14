@@ -190,11 +190,27 @@ export function CaptureScreen({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-3.5 pb-1.5">
+        {/* Le relevé du jour d'abord : c'est ce qu'on regarde avant de savoir
+            quoi écrire ou dicter. Il s'affiche dès que la charge existe,
+            qu'il y ait déjà une note ou non. */}
+        {overview && overview.totals.open > 0 && (
+          <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
+        )}
+
+        {showEmptyHint && overview && overview.totals.open === 0 && (
+          <div className="animate-br-in px-1 pt-2">
+            <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
+            <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
+              Écris ta note ci-dessous, ou appuie sur le micro et dis ce que tu as à faire.
+            </p>
+          </div>
+        )}
+
         {/* Zone de note : éditable au clavier, qu'il y ait ou non une dictée.
-            C'est elle qui permet d'ajouter un item sans passer par le micro :
-            on écrit la phrase, on structure. L'état « en attente » (pointillé)
-            n'existe qu'en revue, pas ici. */}
-        <div className="animate-br-in rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
+            Juste sous le relevé du jour : on voit la charge, on écrit, on
+            structure. L'état « en attente » (pointillé) n'existe qu'en revue,
+            pas ici. */}
+        <div className="animate-br-in mt-3 rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
           <div className="mb-[9px] flex items-center gap-[7px]">
             <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
               Note
@@ -273,19 +289,6 @@ export function CaptureScreen({
                 {appError.retryLabel ?? "Réessayer"}
               </button>
             )}
-          </div>
-        )}
-
-        {showEmptyHint && overview && overview.totals.open > 0 && (
-          <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
-        )}
-
-        {showEmptyHint && overview && overview.totals.open === 0 && (
-          <div className="animate-br-in px-1 pt-2">
-            <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
-            <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
-              Écris ta note ci-dessus, ou appuie sur le micro et dis ce que tu as à faire.
-            </p>
           </div>
         )}
       </div>
