@@ -124,6 +124,39 @@ risque produit, pas une gêne cosmétique. Deux échappatoires, aucune construit
 
 ---
 
+## P1 bis — Le récap du matin n'a pas encore de canal
+
+`GET /api/digest` existe et est déployée (2026-08-14), et le workflow n8n
+**Brief — récap du matin** (`H9f6EWHUzUmi9JDV`) lit, filtre et met en forme le
+message. **Il ne l'envoie nulle part.** Le workflow s'arrête sur le nœud de mise
+en forme.
+
+### Brancher WhatsApp au bout du workflow
+- **Quoi :** ajouter le nœud `WhatsApp Business Cloud` après « Mettre en forme
+  le message ».
+- **Contexte :** Aramis a déjà un WhatsApp Business et un bot Hermes qui lui
+  écrit depuis un numéro dédié, distinct du perso. **Reste à établir comment ce
+  bot est câblé** (API Meta directe ? via Hostinger ?) : s'il passe par la Cloud
+  API, le credential se réutilise et il n'y a presque rien à faire.
+- **Contre :** hors de la fenêtre de 24 h, Meta impose un **template
+  pré-approuvé** — texte figé, variables `{{1}}`, pas de saut de ligne dans un
+  paramètre. Un récap de longueur variable devra être aplati. À vérifier avant
+  de s'engager : c'est affirmé de mémoire, pas testé.
+- **Repli si le template coince :** Telegram (nœud natif, aucune approbation).
+- **Effort :** S (humain, côté Meta) → S (CC) · **Priorité :** P1
+
+### Donner un chemin d'erreur au workflow
+- **Quoi :** brancher la sortie d'erreur du nœud HTTP, ou un Error Trigger.
+- **Pourquoi :** si Brief redémarre à 8h30, le workflow échoue et **rien ne le
+  dit** — c'est exactement la panne silencieuse que le projet combat ailleurs.
+  Un récap absent ressemble à une journée vide.
+- **Contexte :** différé volontairement — un chemin d'erreur n'a nulle part où
+  aller tant qu'aucun canal n'est branché. À faire en même temps que WhatsApp.
+- **Effort :** S (humain) → S (CC) · **Priorité :** P1
+- **Dépend de :** le canal ci-dessus.
+
+---
+
 ## P2 — Prévu, à faire plus tard
 
 **Tranché par Aramis le 2026-08-11 :** ces deux chantiers sont validés, ils

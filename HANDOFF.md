@@ -9,101 +9,143 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-14 · Déploiement en prod et correctif projets invisibles
+# Passation — 2026-08-14 · Brief parle à n8n, récap du matin
 
 | | |
 |---|---|
-| **Agent** | Hermes Agent v0.20.0 · `deepseek/deepseek-v4-flash-0731` via OpenRouter |
-| **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits** | `e7676db` fix projets au premier chargement (poussé et déployé) |
+| **Agent** | Claude Code · Opus 5 |
+| **Branche** | `feat/task-completion` — la branche que sert le VPS |
+| **Commits** | `a58dcc0` route digest · `4670170` merge · (+ commit de doc suivant) |
 
 ## Goal — l'objectif
 
-Déployer en production la branche `feat/task-completion` (correctifs de fuseau
-de Claude + mes correctifs d'interface), et corriger un bug remonté par Aramis
-sur son téléphone : les projets créés depuis (Perso, Sport) ne s'affichaient
-pas dans Réglages.
+Ouvrir un chemin de lecture pour une automatisation externe, et le prouver
+de bout en bout : n8n lit Brief chaque matin, trie ce qui pèse sur la journée,
+et met en forme un message de relance.
 
 ## Current state — ce qui a été fait
 
-- **`feat/task-completion` a été poussée sur `origin` et déployée sur le VPS**
-  (`/docker/brief`), à la cible que sert Traefik. `brief-app` reconstruit,
-  **healthy**, HTTPS 200 sur `https://brief.srv1899780.hstgr.cloud`.
-- **Nouvelle passation consignée pour Claude (`docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md`)** —
-  la précédente passation a été archivée là, conformément au protocole.
-- **Bug correctif :** au premier déverrouillage, Brief ne chargeait que les
-  items et la vision (`refreshItems()`), jamais la liste des projets
-  (`loadProjects()`). La liste restait à `SEED_PROJECTS` et les projets créés
-  par Aramis — Perso, Sport — étaient invisibles jusqu'à un rechargement
-  manuel ou une structuration. Correctif `e7676db`.
+**La chaîne complète tourne en production.** Le workflow n8n s'est déclenché
+pour de vrai, a lu la prod et produit le message :
 
-**Données vérifiées en prod :** le serveur renvoie bien les 5 projets
-(frip-trend, my-flip, webacademie, perso, sport) via `GET /api/projects`. Le
-problème était purement côté chargement initial du client.
+```
+Ton brief du 14 août
+
+Aujourd'hui (1)
+• Photographier 26 polos — Frip & Trend
+```
+
+- **`GET /api/digest`** (`src/app/api/digest/route.ts`) — déployée et vivante.
+  Renvoie `overdue` + `today`, triés par priorité puis échéance, noms de projets
+  résolus. Gardée par `BRIEF_DIGEST_TOKEN`, un **jeton machine distinct du PIN**.
+- **`BRIEF_DIGEST_TOKEN` posé** dans `/docker/brief/.env.production` sur le VPS.
+  Une sauvegarde horodatée du fichier a été faite avant écriture
+  (`.env.production.bak-2026-08-14-2142`).
+- **`src/lib/buckets.ts`** — `midnightAt` et `makeBucketOf` extraits de
+  `api/overview/route.ts`. Les deux routes partagent désormais **une seule
+  définition d'« aujourd'hui »**.
+- **Workflow n8n `Brief — récap du matin`** (`H9f6EWHUzUmi9JDV`), **ACTIF**,
+  cron `30 8 * * *` en fuseau `Europe/Paris`. Credential `THLHqJ0euzjzwBm7`
+  restreint au seul domaine `brief.srv1899780.hstgr.cloud`.
+
+**Ce qui n'est PAS fait, et qu'il ne faut pas croire fait :** le workflow
+**n'envoie rien**. Il s'arrête sur le nœud de mise en forme. Demain 8h30 il
+tournera, produira le message, et personne ne le lira. Le canal (WhatsApp) est
+reporté dans `TODOS.md`, en P1 bis.
 
 ## Decisions — choix critiques ou irréversibles
 
-**Déployer directement sur `feat/task-completion`** (pas de branche `fix/`
-séparée) : la prod vit sur cette branche et Aramis développe dessus ; c'est
-elle qu'on déploie. Un aller-retour branche → merge → redeploy n'aurait rien
-déplacé de plus, à ce stade où rien d'autre n'est en cours.
+**Une route dédiée plutôt que `GET /api/items` avec le PIN.** Aramis proposait
+d'envoyer `x-brief-pin` depuis n8n. Refusé : le PIN ouvre *toutes* les routes —
+création, complétion, suppression d'items, et `/api/transcribe` qui consomme la
+clé Groq. Un secret vivant dans un planificateur doit se révoquer seul, sans
+obliger à changer le code tapé sur le téléphone. Un jeton par usage, comme
+`/api/capture` et `/api/cron/reminders`.
 
-**Poursuivre le disque `fetch` → `curl` propre pour le diagnostic** : l'accès
-aux données de prod passe par `docker exec brief-app-1 cat $BRIEF_DATA_DIR/…`
-pour lire `projects.json` et `items.json`, sans jamais recopier de secret.
+**Le tri et le découpage se font côté serveur, pas dans un nœud Code n8n.** La
+raison que j'avais avancée était partiellement fausse et mérite d'être écrite
+correctement : le conteneur n8n **ne tourne pas en UTC**, il est en
+`Europe/Berlin` (`GENERIC_TIMEZONE`), donc au bon décalage — par accident. La
+vraie raison de garder le calcul côté Brief est que ce réglage vit **hors du
+dépôt** : personne ne le verrait changer, et `npx vitest run` ne pourrait pas
+l'attraper. Le serveur possède l'horloge, comme pour les rappels.
+
+**Le workflow reste actif malgré l'absence de canal.** Il tournera demain à 8h30
+sans rien envoyer. C'est voulu : l'exécution de demain matin sera une preuve de
+plus, sur les vraies données du matin, et elle ne coûte rien.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/components/BriefApp.tsx` | +9/−1 (au déverrouillage) : charger aussi `loadProjects({ silent: true })` pendant l'amorce, pour que les projets créés depuis la recette apparaissent dès la première ouverture |
-| `HANDOFF.md` | réécrit — nouvelle passation (celle-ci) |
-| `docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md` | **créé** — archive de la passation de Claude (correctifs de fuseau) |
-| `docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md` | déjà présent (les 10 correctifs de revue) |
+| `src/lib/digest.ts` | **créé** — `buildDigest()`, la forme de la réponse et le tri |
+| `src/lib/digest.test.ts` | **créé** — 12 tests, dont celui du fuseau (échéance à 1 h du matin) |
+| `src/lib/buckets.ts` | **créé** — `midnightAt`, `makeBucketOf`, extraits d'`overview` |
+| `src/app/api/digest/route.ts` | **créé** — enveloppe fine : garde du jeton, lecture, `buildDigest` |
+| `src/app/api/overview/route.ts` | −21 lignes : consomme `buckets.ts` au lieu de ses copies locales |
+| `README.md` | variable, route, forme de la réponse, et pourquoi le serveur trie |
+| `.env.example`, `.env.production.example` | `BRIEF_DIGEST_TOKEN` documenté |
+| `TODOS.md` | section **P1 bis** : le canal WhatsApp et le chemin d'erreur |
+
+Hors dépôt : `.env.production` du VPS (jeton ajouté), workflow et credential n8n.
 
 ## Validations — passants / échoués / non lancés
 
-Lancées **après** le correctif, sur `src/components/BriefApp.tsx` :
+**Passants :**
 
 | Commande | Résultat |
 |---|---|
-| `npx eslint src/components/BriefApp.tsx` | ✅ aucune erreur |
+| `npx vitest run` | ✅ **86 passent** (74 avant + 12 nouveaux) |
+| `TZ=Europe/Paris npx vitest run` | ✅ 86 passent — vert sous les deux fuseaux |
 | `npx tsc --noEmit` | ✅ aucune erreur |
-| `npx vitest run` | ✅ **74 passent** |
+| `npx eslint .` | ✅ aucune erreur |
+| `validate_workflow` (MCP n8n) | ✅ `valid: true`, 0 erreur, 0 avertissement |
 
-Déploiement vérifié :
+**Vérifié en production :**
 
 | Vérification | Résultat |
 |---|---|
-| `docker compose up -d --build` (VPS) | ✅ `brief-app` Built, Recreated, Started, Healthy |
-| `curl https://brief.srv1899780.hstgr.cloud` | ✅ HTTP 200 |
-| `GET /api/projects` (prod) | ✅ renvoie les 5 projets |
+| `docker compose --env-file .env.production up -d --build` | ✅ Built, Recreated, **Healthy** |
+| `GET /api/digest` sans jeton | ✅ `401 {"error":"Jeton invalide."}` |
+| `GET /api/digest` **avec le PIN** | ✅ `401` — le PIN n'ouvre pas cette porte |
+| `GET /api/digest` avec le jeton | ✅ `200` + les vraies données |
+| Depuis le conteneur n8n (`docker exec`) | ✅ `200` — la connectivité inter-conteneurs passe |
+| Exécution n8n n° 1 | ✅ déclenchée à **21:48:00 UTC = 23:48:00 Paris**, `success`, 817 ms |
 
-**Non vérifié — et c'est ce qui reste à faire :**
+Le test de fuseau a été prouvé **discriminant** : une implémentation `setHours`
+classe « en retard » une tâche due à 1 h du matin. Vérifié en exécutant les deux.
 
-- Le correctif projets n'a **pas été vu sur le téléphone** depuis le déploiement.
-  À confirmer par Aramis : ouvrir l'app, aller dans Réglages → les projets
-  Perso et Sport doivent apparaître **dès la première ouverture**, sans cliquer
-  sur « Recharger les projets ».
-- Aucun rappel réel n'a été déclenché depuis le correctif de fuseau (le
-  comportement en production ne sera prouvé que par un rappel programmé qui
-  sonne à l'heure attendue sur le VPS — « demain » doit sonner à 9 h, pas 11 h).
-- Les correctifs d'interface (échéance effaçable, note qui grandit, saisie
-  préservée) n'ont toujours pas été exercés dans un navigateur.
+**Non lancé / non vérifié :**
+
+- **Aucun message n'a été envoyé nulle part.** Le workflow s'arrête avant.
+- Le déclenchement a été prouvé à 23h48, **pas à 8h30**. Le cron a été remis à
+  `30 8 * * *` et la version publiée vérifiée, mais la première exécution
+  matinale reste à observer.
+- Le fuseau du workflow n'a pas pu être distingué de celui du conteneur :
+  `Europe/Paris` et `Europe/Berlin` ont le même décalage. Le test prouve que le
+  Schedule Trigger marche, pas que le réglage de fuseau est celui qui décide.
+- `npm run build` **non lancé** — un `next dev` tournait (règle du projet).
 
 ## Blockers — ce qui bloque
 
-Rien. `feat/task-completion` est poussée, déployée et saine sur le VPS ; arbre
-local propre.
+Rien de bloquant. Deux points d'attention :
+
+- **Le canal WhatsApp reste à établir.** Aramis a un WhatsApp Business et un bot
+  Hermes qui lui écrit depuis un numéro dédié : il faut d'abord découvrir
+  **comment ce bot est câblé**. S'il passe par la Cloud API de Meta, le
+  credential se réutilise. Sinon, la fenêtre de 24 h impose un template
+  pré-approuvé — affirmé de mémoire, **non vérifié**.
+- Un `npm run dev -- -p 3100` de Brief a été laissé tournant sur le Mac, et un
+  `BRIEF_DIGEST_TOKEN` de **dev** ajouté à `.env.local` (sans valeur en prod).
+  Le port 3000 appartient à MyFlip, pas à Brief.
 
 ## Next — la prochaine action
 
-1. **Aramis vérifie sur le téléphone** : (a) les projets Perso et Sport
-   apparaissent dans Réglages dès l'ouverture ; (b) un rappel « demain » sonne
-   à 9 h et non 11 h ; (c) effacer une échéance depuis la fiche, et taper
-   pendant une transcription sans que la frappe soit écrasée.
-2. Reprendre le P1 de `TODOS.md` : l'autorisation micro que Safari redemande à
-   chaque ouverture.
+1. **Demain matin, lire l'exécution de 8h30** : `n8n_executions` sur
+   `H9f6EWHUzUmi9JDV`. C'est la preuve qui manque.
+2. **Établir comment le bot Hermes envoie sur WhatsApp**, puis brancher le nœud
+   d'envoi après « Mettre en forme le message » — avec son chemin d'erreur.
+3. Le P1 de `TODOS.md` reste ouvert : l'autorisation micro que Safari redemande.
 
 ---
 
@@ -111,6 +153,7 @@ local propre.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
+| 2026-08-14 | Brief parle à n8n, récap du matin | Claude Code | *(cette passation)* |
 | 2026-08-14 | Déploiement prod + correctif projets invisibles | **Hermes** | [fiche](docs/handoffs/2026-08-14-deploiement-et-correctif-projets.md) |
 | 2026-08-14 | Système de passation + correctif fuseau | Claude Code | [fiche](docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md) |
 | 2026-08-14 | Saisie clavier et modification des items | **Hermes** | [fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md) |

@@ -7,11 +7,15 @@ import type { Item, ItemKind, Priority, Project } from "./types";
  * Il sert un appelant machine (n8n, un raccourci, un futur agent) qui met en
  * forme et envoie sur un canal que Brief n'a pas : WhatsApp, Telegram, un mail.
  *
- * **Le tri et le découpage se font ICI, pas chez l'appelant.** Un nœud Code
- * n8n tourne dans le fuseau de son conteneur — UTC — et rejouerait exactement
- * le décalage de deux heures corrigé le 2026-08-14, cette fois hors de portée
- * de la suite de tests. Le serveur possède l'horloge ; l'appelant ne fait que
- * de la mise en forme.
+ * **Le tri et le découpage se font ICI, pas chez l'appelant.** Un nœud Code n8n
+ * s'exécute dans le fuseau de son conteneur, réglé par `GENERIC_TIMEZONE` —
+ * `Europe/Berlin` sur le VPS au 2026-08-14, donc le bon décalage par accident,
+ * jusqu'au jour où quelqu'un touche à cette variable en configurant un tout
+ * autre workflow. Ce réglage vit hors du dépôt et hors de portée de
+ * `npx vitest run` : une régression n'y produirait aucun test rouge.
+ *
+ * Le serveur possède l'horloge — c'est déjà la règle des rappels — et
+ * l'appelant ne fait que de la mise en forme.
  */
 
 export type DigestEntry = {

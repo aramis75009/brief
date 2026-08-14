@@ -107,10 +107,10 @@ la plus ancienne. Les tâches terminées, sans échéance ou postérieures à
 aujourd'hui n'y figurent pas — un récap qui déverse l'Inbox chaque matin finit
 ignoré.
 
-**Le découpage se fait ici, pas chez l'appelant.** Un nœud Code n8n tourne dans
-le fuseau de son conteneur (UTC) et rejouerait le décalage de deux heures
-corrigé le 2026-08-14, cette fois hors de portée de la suite de tests. Voir
-[`src/lib/buckets.ts`](src/lib/buckets.ts).
+**Le découpage se fait ici, pas chez l'appelant.** Un nœud Code n8n s'exécute
+dans le fuseau de son conteneur (`GENERIC_TIMEZONE`, `Europe/Berlin` sur le VPS
+— le bon décalage par accident). Ce réglage vit hors du dépôt : une régression
+n'y produirait aucun test rouge. Voir [`src/lib/buckets.ts`](src/lib/buckets.ts).
 
 ## Pièges à connaître
 
