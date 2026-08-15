@@ -127,6 +127,15 @@ export async function GET(req: Request): Promise<Response> {
       total: dayItems.length,
       events: dayItems.filter((i) => i.kind === "event").length,
       stacks: stacksOf(dayItems),
+      items: dayItems.map((i) => ({
+        id: i.id,
+        title: i.title,
+        projectId: i.projectId,
+        kind: i.kind,
+        due: i.due,
+        allDay: i.allDay,
+        priority: i.priority,
+      })),
     });
   }
 

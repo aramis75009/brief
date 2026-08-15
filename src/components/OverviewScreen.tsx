@@ -1,38 +1,15 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { ProjectDot } from "./icons";
+import { formatRelativeDue } from "@/lib/due";
 import { PRIORITIES, shapeFor } from "@/lib/projects";
-import type { Overview, OverviewDay, OverviewProject, OverviewStack } from "@/lib/types";
-
-/**
- * Vision globale — la charge inter-projets.
- *
- * C'est le seul écran qui justifie d'ouvrir Brief après avoir dicté. Les listes
- * de tâches, Brief y compris, savent toutes montrer des tâches ; aucune ne
- * montre CE QUI DÉBORDE. Les deux représentations répondent à deux questions
- * différentes, et aucune ne rend l'autre inutile :
- *
- *   Charge  → « où ça coince » : un comparateur entre projets.
- *   Horizon → « quand ça va me tomber dessus » : un mur qu'on voit arriver.
- *
- * Charge est le mode par défaut : la question du matin est « qu'est-ce que je
- * laisse tomber », pas « quel jour ».
- */
+import type { Overview, OverviewProject, OverviewStack } from "@/lib/types";
 
 type Mode = "load" | "horizon";
 
-/**
- * Le mode vit en localStorage et NON dans l'URL : une PWA installée se rouvre
- * toujours sur sa page d'accueil, une URL ne survivrait donc pas à la fermeture.
- */
 const MODE_KEY = "brief:overview-mode";
 
-/**
- * Le mode est une source EXTERNE (localStorage), pas un état React : le lire
- * dans un effet déclencherait un rendu en cascade, et le lire pendant le rendu
- * casserait l'hydratation. `useSyncExternalStore` est fait pour ce cas exact.
- */
 const modeListeners = new Set<() => void>();
 let modeCache: Mode | null = null;
 
@@ -53,7 +30,6 @@ function subscribeMode(onChange: () => void): () => void {
   };
 }
 
-/** Rendu serveur : « Charge » par défaut. La question du matin est « où ça coince ». */
 function serverMode(): Mode {
   return "load";
 }
@@ -63,13 +39,12 @@ function writeMode(m: Mode): void {
   try {
     window.localStorage.setItem(MODE_KEY, m);
   } catch {
-    /* stockage refusé : le mode ne survivra pas, l'écran fonctionne quand même */
+    /* ignore */
   }
   for (const l of modeListeners) l();
 }
 
-/** Hauteur du graphe d'horizon, en px. Les empilements s'y répartissent. */
-const CHART_H = 180;
+const CHART_H = 170;
 
 function longDate(iso: string): string {
   const d = new Date(iso);
@@ -82,27 +57,13 @@ function longDate(iso: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function hourOf(iso: string | null, allDay: boolean): string | null {
-  if (!iso || allDay) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(d);
-}
-
 function tintVar(stack: { tint?: number }, ink = false): string {
-  // Un projet sans teinte connue retombe sur la ligne neutre plutôt que sur une
-  // teinte au hasard : une couleur inventée désignerait un projet inexistant.
   if (!stack.tint) return ink ? "var(--color-ink-3)" : "var(--line-2)";
   return ink ? `var(--color-p${stack.tint}-ink)` : `var(--color-p${stack.tint})`;
 }
 
-/* --- Charge par projet ----------------------------------------------------- */
+/* --- Barre de charge par projet ------------------------------------------ */
 
-/**
- * Une barre = un projet. Sa LONGUEUR est le volume, sa COMPOSITION l'urgence.
- * L'ordre de l'écran est déjà un jugement : le projet qui déborde remonte seul,
- * on n'a pas à lire les chiffres pour savoir par où commencer.
- */
 function ProjectLoadBar({ project, maxTotal }: { project: OverviewProject; maxTotal: number }) {
   const pct = (n: number) => `${(n / Math.max(1, project.total)) * 100}%`;
   const rest = project.total - project.overdue - project.today - project.week;
@@ -111,57 +72,59 @@ function ProjectLoadBar({ project, maxTotal }: { project: OverviewProject; maxTo
     project.overdue > 0
       ? { text: `${project.overdue} en retard`, color: "var(--color-error)" }
       : project.today > 0
-        ? { text: `${project.today} aujourd'hui`, color: "var(--color-ink-3)" }
+        ? { text: `${project.today} aujourd'hui`, color: "var(--color-action)" }
         : { text: `${project.total} ouvert${project.total > 1 ? "s" : ""}`, color: "var(--color-ink-3)" };
 
   return (
-    <div>
-      <div className="mb-[7px] flex items-center gap-2">
+    <div className="rounded-row border bg-tile p-3.5 shadow-[var(--e1)]" style={{ borderColor: "var(--line)" }}>
+      <div className="mb-2.5 flex items-center gap-2">
         <span className="flex-none" style={{ color: tintVar(project, true) }}>
           <ProjectDot shape={shapeFor(project)} />
         </span>
-        <span className="text-15 font-semibold tracking-[-0.2px]">{project.name}</span>
-        <span
-          className="tnum ml-auto text-13 font-medium"
-          style={{ color: label.color }}
-        >
+        <span className="text-15 font-semibold text-ink tracking-[-0.2px]">{project.name}</span>
+        <span className="ml-auto text-12 font-semibold" style={{ color: label.color }}>
           {label.text}
         </span>
       </div>
-      <div
-        className="flex h-3.5 gap-0.5"
-        style={{ width: `${(project.total / Math.max(1, maxTotal)) * 100}%` }}
-      >
-        {project.overdue > 0 && (
-          <span
-            className="block rounded-full"
-            style={{ width: pct(project.overdue), background: "var(--color-error)" }}
-          />
-        )}
-        {project.today > 0 && (
-          <span
-            className="block rounded-full"
-            style={{ width: pct(project.today), background: "var(--color-ink)" }}
-          />
-        )}
-        {project.week > 0 && (
-          <span
-            className="block rounded-full"
-            style={{ width: pct(project.week), background: tintVar(project) }}
-          />
-        )}
-        {rest > 0 && <span className="block flex-1 rounded-full" style={{ background: "var(--line)" }} />}
+
+      {/* Jauge segmentée */}
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-page gap-0.5">
+        <div
+          className="flex h-full gap-0.5"
+          style={{ width: `${(project.total / Math.max(1, maxTotal)) * 100}%` }}
+        >
+          {project.overdue > 0 && (
+            <span
+              className="block rounded-full"
+              title={`${project.overdue} en retard`}
+              style={{ width: pct(project.overdue), background: "var(--color-error)" }}
+            />
+          )}
+          {project.today > 0 && (
+            <span
+              className="block rounded-full"
+              title={`${project.today} aujourd'hui`}
+              style={{ width: pct(project.today), background: "var(--color-action)" }}
+            />
+          )}
+          {project.week > 0 && (
+            <span
+              className="block rounded-full"
+              title={`${project.week} cette semaine`}
+              style={{ width: pct(project.week), background: tintVar(project) }}
+            />
+          )}
+          {rest > 0 && <span className="block flex-1 rounded-full opacity-40" style={{ background: tintVar(project) }} />}
+        </div>
       </div>
     </div>
   );
 }
 
-/* --- Horizon 7 jours ------------------------------------------------------- */
+/* --- Horizon 7 jours interactif ------------------------------------------- */
 
-function Stack({ stacks, unit }: { stacks: OverviewStack[]; unit: number }) {
+function HorizonStack({ stacks, unit }: { stacks: OverviewStack[]; unit: number }) {
   if (!stacks.length) {
-    // Un jour vide reste un jour : le trait dit « rien ici », l'absence totale
-    // ferait croire à une colonne manquante.
     return <span className="block rounded-full" style={{ height: 3, background: "var(--line-2)" }} />;
   }
   return (
@@ -178,91 +141,9 @@ function Stack({ stacks, unit }: { stacks: OverviewStack[]; unit: number }) {
   );
 }
 
-function HorizonChart({
-  horizon,
-  overdueStacks,
-}: {
-  horizon: OverviewDay[];
-  overdueStacks: OverviewStack[];
-}) {
-  const overdueTotal = overdueStacks.reduce((n, s) => n + s.count, 0);
-  const maxTotal = Math.max(1, overdueTotal, ...horizon.map((d) => d.total));
-  const unit = CHART_H / maxTotal;
-
-  return (
-    <div className="flex h-[212px] items-end gap-2.5">
-      {/* Le retard est une colonne À PART, avant le trait : il n'appartient à
-          aucun jour, il pèse sur tous. L'agréger dans « aujourd'hui » ferait
-          disparaître la seule information qui demande une décision. */}
-      <div className="flex flex-none flex-col items-center gap-2">
-        <div
-          className="flex w-[34px] flex-col-reverse justify-start gap-0.5 overflow-hidden"
-          style={{ height: CHART_H }}
-        >
-          {overdueStacks.length ? (
-            overdueStacks.map((s, i) => (
-              <span
-                key={s.projectId}
-                className="block rounded-md"
-                title={`${s.name} · ${s.count}`}
-                style={{
-                  height: Math.max(12, Math.round(s.count * unit)),
-                  background: "var(--color-error)",
-                  // Le retard garde UNE couleur : ce qui compte est le volume,
-                  // pas de quel projet il vient. L'opacité sépare les strates
-                  // sans introduire une seconde grille de lecture.
-                  opacity: i === 0 ? 1 : Math.max(0.35, 0.85 - i * 0.25),
-                }}
-              />
-            ))
-          ) : (
-            <span className="block rounded-full" style={{ height: 3, background: "var(--line-2)" }} />
-          )}
-        </div>
-        <span
-          className="text-11 font-semibold"
-          style={{ color: overdueTotal ? "var(--color-error)" : "var(--color-ink-3)" }}
-        >
-          retard
-        </span>
-      </div>
-
-      <span className="block h-[190px] w-px flex-none" style={{ background: "var(--line-2)" }} />
-
-      <div className="flex h-[212px] flex-1 items-end gap-1.5">
-        {horizon.map((day) => (
-          <div key={day.date} className="flex flex-1 flex-col items-center gap-2">
-            <div
-              className="flex w-full flex-col-reverse justify-start gap-0.5 overflow-hidden"
-              style={{ height: CHART_H }}
-            >
-              <Stack stacks={day.stacks} unit={unit} />
-            </div>
-            <span
-              className="text-11"
-              style={{
-                fontWeight: day.isToday || day.total ? 600 : 500,
-                color: day.isToday
-                  ? "var(--color-action)"
-                  : day.total
-                    ? "var(--color-ink)"
-                    : "var(--color-ink-3)",
-              }}
-            >
-              {day.label}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* --- Écran ----------------------------------------------------------------- */
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-1 mt-4 mb-3 flex items-center gap-2">
+    <div className="mx-1 mt-5 mb-2.5 flex items-center gap-2">
       <span className="text-11 font-semibold tracking-[1.2px] text-ink-3 uppercase">{children}</span>
       <span className="h-px flex-1" style={{ background: "var(--line)" }} />
     </div>
@@ -279,9 +160,12 @@ export function OverviewScreen({
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  onNavigateToTasks?: () => void;
 }) {
   const mode = useSyncExternalStore(subscribeMode, readMode, serverMode);
   const pick = useCallback((m: Mode) => writeMode(m), []);
+
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
   const header = (subtitle: string) => (
     <div className="flex-none px-[26px] pt-2.5 pb-2">
@@ -293,7 +177,7 @@ export function OverviewScreen({
   if (loading && !overview) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        {header("Calcul de la charge…")}
+        {header("Analyse de ta charge…")}
         <div className="flex flex-1 items-center justify-center">
           <span className="animate-br-spin block h-6 w-6 rounded-full border-2 border-[var(--line-2)] border-t-action" />
         </div>
@@ -321,50 +205,62 @@ export function OverviewScreen({
 
   if (!overview) return null;
 
-  const { totals, byProject, activity, horizon, overdueStacks, peak } = overview;
+  const { totals, byProject, horizon, overdueStacks } = overview;
 
   if (!totals.open) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {header(longDate(overview.generatedAt))}
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-10 text-center">
-          <p className="m-0 text-21 font-semibold tracking-[-0.3px]">Rien ne déborde.</p>
+          <p className="m-0 text-21 font-semibold tracking-[-0.3px]">Tout est propre ! 🎯</p>
           <p className="m-0 text-15 leading-[1.5] font-normal text-ink-2">
-            Aucun item ouvert. Cet écran se remplira à la première dictée.
+            Aucune tâche ouverte. Tes projets sont à jour.
           </p>
         </div>
       </div>
     );
   }
 
-  // Tri par PRESSION, pas par volume : un projet avec trois retards passe devant
-  // un projet avec dix tâches lointaines.
-  const sorted = [...byProject].sort(
+  // Tri des projets par pression réelle
+  const sortedProjects = [...byProject].sort(
     (a, b) => b.overdue - a.overdue || b.today - a.today || b.total - a.total,
   );
-  const maxTotal = Math.max(1, ...sorted.map((p) => p.total));
-  const topOverdue = sorted.find((p) => p.overdue > 0);
-  const maxActivity = Math.max(1, ...activity);
+  const maxTotal = Math.max(1, ...sortedProjects.map((p) => p.total));
+  const topProject = sortedProjects[0];
 
-  const headline =
-    totals.overdue > 0 && topOverdue
-      ? `${topOverdue.name} déborde — ${topOverdue.overdue} des ${totals.overdue} retards viennent de là.`
-      : totals.today > 0
-        ? `Rien en retard. ${totals.today} item${totals.today > 1 ? "s" : ""} pour aujourd'hui.`
-        : "Rien en retard, rien pour aujourd'hui.";
+  // Calcul du plan d'action prioritaire
+  let actionTitle = "Tout roule pour aujourd'hui";
+  let actionAdvice = "Aucune urgence critique détectée sur tes projets.";
+
+  if (totals.overdue > 0 && topProject) {
+    actionTitle = `Priorité : apurer ${topProject.name}`;
+    actionAdvice = `Tu as ${totals.overdue} tâche${totals.overdue > 1 ? "s" : ""} en retard (dont ${topProject.overdue} sur ${topProject.name}). Traite-les en priorité.`;
+  } else if (totals.today > 0) {
+    actionTitle = `Objectif : ${totals.today} tâche${totals.today > 1 ? "s" : ""} aujourd'hui`;
+    actionAdvice = "Aucun retard. Concentre-toi sur tes échéances du jour pour garder le rythme.";
+  }
+
+  // Jour sélectionné dans l'horizon (par défaut le jour le plus chargé ou aujourd'hui)
+  const activeHorizonDay =
+    horizon.find((d) => d.date === selectedDateKey) ||
+    horizon.find((d) => d.isToday) ||
+    horizon[0];
+
+  const now = new Date();
+  const overdueTotal = overdueStacks.reduce((n, s) => n + s.count, 0);
+  const maxHorizonTotal = Math.max(1, overdueTotal, ...horizon.map((d) => d.total));
+  const horizonUnit = CHART_H / maxHorizonTotal;
 
   const subtitle =
     mode === "load"
-      ? `${longDate(overview.generatedAt)} · ${totals.open} item${totals.open > 1 ? "s" : ""} ouvert${totals.open > 1 ? "s" : ""}`
-      : `Sept jours devant · ${horizon.reduce((n, d) => n + d.total, 0)} item${horizon.reduce((n, d) => n + d.total, 0) > 1 ? "s" : ""} daté${horizon.reduce((n, d) => n + d.total, 0) > 1 ? "s" : ""}`;
+      ? `${longDate(overview.generatedAt)} · ${totals.open} tâche${totals.open > 1 ? "s" : ""} en cours`
+      : `Planning sur 7 jours · ${horizon.reduce((n, d) => n + d.total, 0)} tâche${horizon.reduce((n, d) => n + d.total, 0) > 1 ? "s" : ""} planifiée${horizon.reduce((n, d) => n + d.total, 0) > 1 ? "s" : ""}`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {header(subtitle)}
 
-      {/* Le seul segmenté de l'app qui ne filtre pas une liste mais change de
-          REPRÉSENTATION. C'est assumé : les deux réponses viennent du même
-          appel, et aucune ne rend l'autre inutile. */}
+      {/* Onglets Charge / Horizon */}
       <div className="flex-none px-[22px] pb-1">
         <div
           className="flex gap-1 rounded-chip p-1"
@@ -374,7 +270,7 @@ export function OverviewScreen({
         >
           {([
             ["load", "Charge"],
-            ["horizon", "Horizon"],
+            ["horizon", "Horizon 7j"],
           ] as const).map(([key, label]) => {
             const on = mode === key;
             return (
@@ -398,113 +294,186 @@ export function OverviewScreen({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-2.5 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-2 pb-4">
         {mode === "load" ? (
           <>
-            {/* Bloc inversé : c'est le seul de l'écran, donc le seul endroit où
-                l'œil va en premier. Le nombre de retards mérite cette place. */}
+            {/* Carte Bento de pilotage immédiat */}
             <div
-              className="animate-br-in mb-3 rounded-tile px-[22px] pt-5 pb-[22px]"
+              className="animate-br-in mb-4 rounded-tile px-5 pt-4 pb-4.5"
               style={{ background: "var(--color-ink)", color: "var(--color-page)" }}
             >
-              <div className="flex items-end gap-2.5">
-                <span className="tnum text-56 leading-[0.9] font-semibold tracking-[-2.4px]">
-                  {totals.overdue}
-                </span>
-                <span className="pb-1.5 text-15 leading-[1.3] font-medium opacity-70">
-                  item{totals.overdue > 1 ? "s" : ""}
-                  <br />
-                  en retard
-                </span>
-                <span className="ml-auto pb-1.5 text-right">
-                  <span className="tnum block text-21 font-semibold tracking-[-0.3px]">
-                    {totals.today}
+              <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
+                <div>
+                  <span className="text-11 font-semibold tracking-wider uppercase opacity-70">Focus du jour</span>
+                  <h3 className="m-0 mt-0.5 text-17 font-semibold text-white">{actionTitle}</h3>
+                </div>
+                {totals.overdue > 0 ? (
+                  <span className="rounded-full px-2.5 py-1 text-11 font-bold" style={{ background: "var(--color-error)", color: "white" }}>
+                    {totals.overdue} RETARD{totals.overdue > 1 ? "S" : ""}
                   </span>
-                  <span className="block text-11 font-medium opacity-70">aujourd&apos;hui</span>
-                </span>
+                ) : (
+                  <span className="rounded-full px-2.5 py-1 text-11 font-bold" style={{ background: "var(--color-ok)", color: "white" }}>
+                    À JOUR
+                  </span>
+                )}
               </div>
 
-              <p className="mt-3.5 mb-0 text-15 leading-[1.4] font-medium">{headline}</p>
-
-              <div className="mt-[18px] flex h-11 items-end justify-between">
-                {activity.map((n, i) => (
-                  <i
-                    key={i}
-                    className="block w-[11px] flex-none rounded-full"
-                    style={{
-                      height: `${Math.max(6, (n / maxActivity) * 100)}%`,
-                      background: i === activity.length - 1 ? "var(--color-action)" : "currentColor",
-                      opacity: i === activity.length - 1 ? 1 : 0.22,
-                    }}
-                  />
-                ))}
-              </div>
-              <p className="mt-[9px] mb-0 text-11 font-medium opacity-55">
-                Dictées des 7 derniers jours
+              <p className="mt-3 mb-0 text-13 leading-[1.45] font-normal opacity-85">
+                {actionAdvice}
               </p>
+
+              {/* Stat bar */}
+              <div className="mt-4 grid grid-cols-3 gap-2 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
+                <div>
+                  <span className="block text-11 opacity-65 font-medium">Aujourd&apos;hui</span>
+                  <span className="text-17 font-semibold text-white">{totals.today}</span>
+                </div>
+                <div>
+                  <span className="block text-11 opacity-65 font-medium">Cette semaine</span>
+                  <span className="text-17 font-semibold text-white">{totals.week}</span>
+                </div>
+                <div>
+                  <span className="block text-11 opacity-65 font-medium">Total en cours</span>
+                  <span className="text-17 font-semibold text-white">{totals.open}</span>
+                </div>
+              </div>
             </div>
 
             <SectionLabel>Charge par projet</SectionLabel>
 
-            <div className="flex flex-col gap-3.5">
-              {sorted.map((p) => (
+            <div className="flex flex-col gap-2.5">
+              {sortedProjects.map((p) => (
                 <ProjectLoadBar key={p.id} project={p} maxTotal={maxTotal} />
               ))}
             </div>
           </>
         ) : (
           <>
-            <HorizonChart horizon={horizon} overdueStacks={overdueStacks} />
+            {/* Graphique Horizon 7 jours interactif */}
+            <div className="rounded-tile border bg-tile p-4 shadow-[var(--e1)] mb-4" style={{ borderColor: "var(--line)" }}>
+              <div className="flex h-[200px] items-end gap-2.5">
+                {/* Colonne Retard */}
+                <div className="flex flex-none flex-col items-center gap-2">
+                  <div
+                    className="flex w-[32px] flex-col-reverse justify-start gap-0.5 overflow-hidden"
+                    style={{ height: CHART_H }}
+                  >
+                    {overdueStacks.length ? (
+                      overdueStacks.map((s, i) => (
+                        <span
+                          key={s.projectId}
+                          className="block rounded-md"
+                          title={`${s.name} · ${s.count}`}
+                          style={{
+                            height: Math.max(12, Math.round(s.count * horizonUnit)),
+                            background: "var(--color-error)",
+                            opacity: i === 0 ? 1 : Math.max(0.35, 0.85 - i * 0.25),
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <span className="block rounded-full" style={{ height: 3, background: "var(--line-2)" }} />
+                    )}
+                  </div>
+                  <span
+                    className="text-11 font-semibold"
+                    style={{ color: overdueTotal ? "var(--color-error)" : "var(--color-ink-3)" }}
+                  >
+                    retard
+                  </span>
+                </div>
 
-            {peak && (
-              <div
-                className="animate-br-in mt-[18px] rounded-tile px-5 pt-[18px] pb-5"
-                style={{ background: "var(--color-ink)", color: "var(--color-page)" }}
-              >
-                <p className="m-0 text-21 leading-[1.25] font-semibold tracking-[-0.3px]">
-                  {longDate(peak.date)} est ton mur : {peak.total} item
-                  {peak.total > 1 ? "s" : ""}
-                  {peak.events > 0 &&
-                    `, dont ${peak.events} rendez-vous`}
-                  .
-                </p>
-                <p className="mt-[9px] mb-0 text-13 leading-[1.5] font-normal opacity-70">
-                  {peak.projects} projet{peak.projects > 1 ? "s" : ""} le même jour.
-                </p>
-              </div>
-            )}
+                <span className="block h-[180px] w-px flex-none" style={{ background: "var(--line-2)" }} />
 
-            {peak && peak.items.length > 0 && (
-              <>
-                <SectionLabel>{longDate(peak.date)}</SectionLabel>
-                <div className="flex flex-col gap-2">
-                  {peak.items.map((it) => {
-                    const p = byProject.find((x) => x.id === it.projectId);
-                    const hour = hourOf(it.due, it.allDay);
+                {/* Colonnes 7 jours */}
+                <div className="flex h-[200px] flex-1 items-end gap-1.5">
+                  {horizon.map((day) => {
+                    const isSelected = activeHorizonDay?.date === day.date;
                     return (
-                      <div
-                        key={it.id}
-                        className="flex items-center gap-2.5 rounded-row border bg-tile px-3.5 py-[11px] shadow-[var(--e1)]"
-                        style={{ borderColor: "var(--line)" }}
+                      <button
+                        key={day.date}
+                        type="button"
+                        onClick={() => setSelectedDateKey(day.date)}
+                        className="flex flex-1 flex-col items-center gap-2 cursor-pointer border-none bg-transparent p-0 transition-transform active:scale-95"
                       >
-                        <span className="flex-none" style={{ color: tintVar(p ?? {}, true) }}>
-                          <ProjectDot shape={shapeFor({ id: it.projectId, shape: p?.shape })} />
+                        <div
+                          className={
+                            "flex w-full flex-col-reverse justify-start gap-0.5 overflow-hidden rounded-md transition-all " +
+                            (isSelected ? "ring-2 ring-[var(--color-action)] ring-offset-1" : "")
+                          }
+                          style={{ height: CHART_H }}
+                        >
+                          <HorizonStack stacks={day.stacks} unit={horizonUnit} />
+                        </div>
+                        <span
+                          className="text-11 font-semibold"
+                          style={{
+                            color: day.isToday
+                              ? "var(--color-action)"
+                              : isSelected
+                                ? "var(--color-ink)"
+                                : day.total
+                                  ? "var(--color-ink-2)"
+                                  : "var(--color-ink-3)",
+                          }}
+                        >
+                          {day.label}
                         </span>
-                        <span className="flex-1 text-15 font-medium">{it.title}</span>
-                        {hour ? (
-                          <span className="tnum text-11 font-medium text-ink-2">{hour}</span>
-                        ) : (
-                          <span
-                            className="text-11 font-semibold"
-                            style={{ color: PRIORITIES[it.priority].fg }}
-                          >
-                            {PRIORITIES[it.priority].label}
-                          </span>
-                        )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
+              </div>
+            </div>
+
+            {/* Détail du jour sélectionné */}
+            {activeHorizonDay && (
+              <>
+                <SectionLabel>
+                  {longDate(activeHorizonDay.date)}{" "}
+                  {activeHorizonDay.isToday ? "(Aujourd'hui)" : ""} · {activeHorizonDay.total} item{activeHorizonDay.total > 1 ? "s" : ""}
+                </SectionLabel>
+
+                {activeHorizonDay.items && activeHorizonDay.items.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {activeHorizonDay.items.map((it) => {
+                      const p = byProject.find((x) => x.id === it.projectId);
+                      const dueInfo = formatRelativeDue(it.due, it.allDay, now);
+                      const prio = PRIORITIES[it.priority];
+
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center gap-2.5 rounded-row border bg-tile px-3.5 py-3 shadow-[var(--e1)]"
+                          style={{ borderColor: "var(--line)" }}
+                        >
+                          <span className="flex-none" style={{ color: tintVar(p ?? {}, true) }}>
+                            <ProjectDot shape={shapeFor({ id: it.projectId, shape: p?.shape })} />
+                          </span>
+                          <span className="flex-1 text-14 font-medium text-ink">{it.title}</span>
+
+                          <span
+                            className="inline-flex h-5 items-center rounded-chip px-1.5 text-11 font-semibold"
+                            style={{ background: dueInfo.bg, color: dueInfo.color }}
+                          >
+                            {dueInfo.label}
+                          </span>
+
+                          <span
+                            className="inline-flex h-5 items-center rounded-chip px-1.5 text-11 font-semibold"
+                            style={{ background: prio.bg, color: prio.fg }}
+                          >
+                            {prio.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-row border bg-page p-6 text-center text-13 font-medium text-ink-3" style={{ borderColor: "var(--line-2)" }}>
+                    Aucune tâche planifiée pour ce jour.
+                  </div>
+                )}
               </>
             )}
           </>

@@ -9,51 +9,42 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-15 · Optimisation complète du workflow des tâches (recherche, sections temporelles, ajout rapide et swipe)
+# Passation — 2026-08-15 · Refonte de la page Vision (focus actionable, horizon interactif et copywriting direct)
 
 | | |
 |---|---|
 | **Agent** | Hermes Agent v0.20.0 · `google/gemini-3.7-flash` via OpenRouter |
 | **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits** | `feat: complete tasks workflow overhaul (search, time sections, quick add, swipe gestures)` |
+| **Commits** | `feat: overview screen overhaul with actionable priority focus, interactive 7-day horizon and direct copywriting` |
 
 ## Goal — l'objectif
 
-Rendre l'onglet Tâches ultra-fluide, ergonomique et complet :
-1. **Recherche instantanée** par mot-clé filtrant sur le titre de la tâche et le nom du projet.
-2. **Sections temporelles dynamiques** en vue "Urgence" (`En retard`, `Aujourd'hui`, `Demain`, `À venir`, `Sans date`).
-3. **Bouton et modalité d'Ajout rapide direct** (`+`) sans nécessiter la voix, avec sélection de projet, date rapide et priorité.
-4. **Gestes Swipe tactiles** sur mobile : swipe droite pour cocher (`Fait` / `Rouvrir`), swipe gauche pour `Reporter à demain`.
+Transformer l'onglet **Vision** pour qu'il réponde immédiatement et clairement à « Qu'est-ce que je dois faire maintenant ? » :
+1. **Suppression du jargon anxiogène** ou abstrait (*"dimanche 16 août est ton mur"*...) au profit d'un **Focus du jour clair et orienté action** (ex: *Priorité : apurer Frip & Trend*, *Objectif : N tâches aujourd'hui*).
+2. **Horizon 7 jours interactif** : possibilité de cliquer sur n'importe quel jour de la semaine pour inspecter instantanément les tâches associées, avec leurs badges d'échéance et de priorité.
+3. **Cartes de charge par projet affinées** avec compteurs précis et jauges lisibles.
 
 ## Current state — ce qui a été fait
 
-- **`src/lib/tasks.ts` & `src/lib/tasks.test.ts`** :
-  - Implémentation de `groupItemsByTimeSections()` partitionnant les tâches selon le fuseau horaire `Europe/Paris`.
-  - Nouveaux tests unitaires passants.
-- **`src/components/icons.tsx`** :
-  - Ajout du composant `SearchIcon`.
-- **`src/components/TasksScreen.tsx`** :
-  - Intégration du composant `SwipeableTaskCard` avec résistance tactile fluide et révélation des fonds d'actions (`var(--color-ok)`, `var(--color-warn)`).
-  - Ajout de la barre de recherche instantanée.
-  - Formulaire d'ajout rapide direct avec raccourcis de date (`aujourd'hui`, `demain`, `après-demain`, etc.).
-  - Affichage des sections temporelles en vue Urgence.
-- **`src/components/BriefApp.tsx`** :
-  - Câblage des callbacks `onQuickAdd` et `onPostponeTomorrow` avec persistance serveur atomique.
+- **`src/lib/types.ts` & `src/app/api/overview/route.ts`** :
+  - Enrichissement de `OverviewDay` pour renvoyer la liste complète des `items` associés à chaque jour de l'horizon dans la même lecture disque unique.
+- **`src/components/OverviewScreen.tsx`** :
+  - Remplacement du bloc brut par une **carte Bento de pilotage** mettant en avant l'action prioritaire et le bilan chiffré (`Aujourd'hui`, `Cette semaine`, `Total en cours`).
+  - Graphique d'horizon interactif avec sélection dynamique du jour et liste détaillée des tâches planifiées.
+  - Cartes projets en conteneurs surélevés (`rounded-row`, jauge colorée).
 
 ## Decisions — choix critiques ou irréversibles
 
-- **Conservation de l'architecture légère** : pas de dépendance externe de swipe (framer-motion, etc.) ajoutée, manipulation d'événements tactiles purs `onTouchStart`, `onTouchMove`, `onTouchEnd` conformes aux standards iOS.
+- **Conservation du calcul à la volée** côté serveur sans cache pour maintenir la cohérence absolue avec `items.json`.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/tasks.ts` | enrichi : `groupItemsByTimeSections`, `TimeSection`, `TimeBucketKey` |
-| `src/lib/tasks.test.ts` | enrichi : tests de segmentation temporelle |
-| `src/components/icons.tsx` | enrichi : `SearchIcon` |
-| `src/components/TasksScreen.tsx` | refondu : swipe cards, recherche, ajout rapide, sections d'urgence |
-| `src/components/BriefApp.tsx` | enrichi : intégration callbacks d'ajout rapide et report |
-| `docs/handoffs/2026-08-15-dates-naturelles-et-priorites-design.md` | **créé** — archive passation précédente |
+| `src/lib/types.ts` | enrichi : `items` dans `OverviewDay` |
+| `src/app/api/overview/route.ts` | enrichi : injection des items par jour d'horizon |
+| `src/components/OverviewScreen.tsx` | refondu : carte de pilotage, horizon interactif, nouveau copywriting |
+| `docs/handoffs/2026-08-15-workflow-taches-complet.md` | **créé** — archive passation précédente |
 | `HANDOFF.md` | réécrit — passation courante |
 
 ## Validations — passants / échoués / non lancés
@@ -62,7 +53,7 @@ Lancées **après** l'implémentation complète :
 
 | Commande | Résultat |
 |---|---|
-| `npx eslint .` | ✅ aucune erreur, aucun warning |
+| `npm run lint` | ✅ aucune erreur, aucun warning |
 | `npx tsc --noEmit` | ✅ types stricts validés |
 | `npx vitest run` | ✅ **94 tests passent** (7 test suites) |
 
@@ -72,7 +63,7 @@ Rien.
 
 ## Next — la prochaine action
 
-Déployer sur le VPS et tester la fluidité tactile sur l'iPhone d'Aramis.
+Déployer sur le VPS et tester la page Vision sur l'iPhone d'Aramis.
 
 ---
 
@@ -80,7 +71,8 @@ Déployer sur le VPS et tester la fluidité tactile sur l'iPhone d'Aramis.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-15** | **Optimisation complète tâches (recherche, sections, ajout direct, swipe)** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-15** | **Refonte page Vision (focus actionable, horizon interactif)** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-15 | Optimisation complète tâches (recherche, sections, ajout direct, swipe) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-workflow-taches-complet.md) |
 | 2026-08-15 | Dates langage naturel coloré, priorités & synthèse | Hermes Agent | [fiche](docs/handoffs/2026-08-15-dates-naturelles-et-priorites-design.md) |
 | 2026-08-15 | Tri multi-critères et filtre des tâches terminées | Hermes Agent | [fiche](docs/handoffs/2026-08-15-tri-et-filtre-taches-faites.md) |
 | 2026-08-14 | Brief parle à n8n, récap du matin sur Telegram | Claude Code | [fiche](docs/handoffs/2026-08-14-n8n-digest-telegram.md) |

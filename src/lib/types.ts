@@ -138,6 +138,15 @@ export type OverviewDay = {
   total: number;
   events: number;
   stacks: OverviewStack[];
+  items: {
+    id: string;
+    title: string;
+    projectId: string;
+    kind: ItemKind;
+    due: string | null;
+    allDay: boolean;
+    priority: Priority;
+  }[];
 };
 
 export type OverviewProject = {
