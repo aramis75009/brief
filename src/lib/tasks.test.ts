@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortItems } from "./tasks";
+import { groupItemsByTimeSections, sortItems } from "./tasks";
 import type { Item } from "./types";
 
 function mockItem(partial: Partial<Item>): Item {
@@ -47,5 +47,20 @@ describe("tasks sorting", () => {
 
     const sorted = sortItems([itemP4, itemP2, itemP1, itemP3], "priority");
     expect(sorted.map((i) => i.id)).toEqual(["p1", "p2", "p3", "p4"]);
+  });
+
+  it("groups items into time sections accurately", () => {
+    const fixedNow = new Date("2026-08-15T12:00:00+02:00");
+    const overdue = mockItem({ id: "o", due: "2026-08-14T10:00:00+02:00" });
+    const today = mockItem({ id: "t", due: "2026-08-15T18:00:00+02:00" });
+    const tomorrow = mockItem({ id: "tm", due: "2026-08-16T09:00:00+02:00" });
+    const later = mockItem({ id: "l", due: "2026-08-25T15:00:00+02:00" });
+    const none = mockItem({ id: "n", due: null });
+
+    const sections = groupItemsByTimeSections([overdue, today, tomorrow, later, none], fixedNow);
+    expect(sections.map((s) => s.key)).toEqual(["overdue", "today", "tomorrow", "later", "none"]);
+    expect(sections[0].items[0].id).toBe("o");
+    expect(sections[1].items[0].id).toBe("t");
+    expect(sections[2].items[0].id).toBe("tm");
   });
 });

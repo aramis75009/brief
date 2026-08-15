@@ -25,7 +25,7 @@ import {
   transcribeAudio,
   updateItem,
 } from "@/lib/api";
-import { formatDue } from "@/lib/due";
+import { formatDue, resolveDue } from "@/lib/due";
 import { uid } from "@/lib/ids";
 import {
   enqueue,
@@ -570,6 +570,54 @@ export function BriefApp() {
           onFilter={setFilter}
           onOpen={setSheetId}
           onToggleDone={(id, done) => void toggleDone(id, done)}
+          onQuickAdd={(item) => {
+            void (async () => {
+              setWorkPhase("saving");
+              try {
+                const draft: DraftItem = {
+                  id: uid(),
+                  kind: "task",
+                  title: item.title,
+                  projectId: item.projectId,
+                  due: item.due,
+                  allDay: item.allDay,
+                  priority: item.priority,
+                  rrule: null,
+                };
+                const res = await saveItems([draft]);
+                if (res.saved > 0) {
+                  flash("Tâche ajoutée.");
+                  void refreshItems();
+                  void refreshOverview();
+                }
+                setWorkPhase("idle");
+              } catch (e) {
+                setWorkPhase("idle");
+                if (e instanceof UnauthorizedError) {
+                  clearPin();
+                  setUnlocked(false);
+                  return;
+                }
+                flash(e instanceof ApiError ? e.message : "Erreur lors de l'ajout.", "err");
+              }
+            })();
+          }}
+          onPostponeTomorrow={(id) => {
+            void (async () => {
+              const target = sent.find((t) => t.id === id);
+              if (!target) return;
+              const res = resolveDue("demain", new Date());
+              if (!res) return;
+              try {
+                const updated = await updateItem(id, { due: res.due, allDay: res.allDay });
+                setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+                flash("Reporté à demain.");
+                void refreshOverview();
+              } catch {
+                flash("Impossible de reporter la tâche.", "err");
+              }
+            })();
+          }}
           busyId={doneBusyId}
         />
       )}

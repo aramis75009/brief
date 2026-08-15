@@ -60,6 +60,15 @@ export function PlusIcon({ size = 15, className }: IconProps) {
   );
 }
 
+export function SearchIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg {...base} width={size} height={size} strokeWidth={2} className={className}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4 4" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ size = 20, className }: IconProps) {
   return (
     <svg {...base} width={size} height={size} strokeWidth={1.8} className={className}>

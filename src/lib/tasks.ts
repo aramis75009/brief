@@ -1,6 +1,73 @@
 import type { Item } from "./types";
 
+import { zonedParts, zonedTime } from "./zoned";
+
 export type TaskSort = "urgency" | "due" | "priority" | "project";
+
+export type TimeBucketKey = "overdue" | "today" | "tomorrow" | "later" | "none";
+
+export interface TimeSection {
+  key: TimeBucketKey;
+  label: string;
+  items: Item[];
+  tone: "overdue" | "today" | "tomorrow" | "future" | "none";
+}
+
+/**
+ * Regroupe les items triés par sections temporelles dynamiques pour la vue Urgence
+ */
+export function groupItemsByTimeSections(items: Item[], now: Date = new Date()): TimeSection[] {
+  const nowParts = zonedParts(now);
+  const startOfToday = zonedTime(nowParts.y, nowParts.m, nowParts.d, 0, 0);
+  const startOfTomorrow = zonedTime(nowParts.y, nowParts.m, nowParts.d + 1, 0, 0);
+  const startOfAfterTomorrow = zonedTime(nowParts.y, nowParts.m, nowParts.d + 2, 0, 0);
+
+  const sections: Record<TimeBucketKey, Item[]> = {
+    overdue: [],
+    today: [],
+    tomorrow: [],
+    later: [],
+    none: [],
+  };
+
+  for (const item of items) {
+    if (!item.due) {
+      sections.none.push(item);
+      continue;
+    }
+    const d = new Date(item.due);
+    if (Number.isNaN(d.getTime())) {
+      sections.none.push(item);
+      continue;
+    }
+    if (d < startOfToday) {
+      sections.overdue.push(item);
+    } else if (d < startOfTomorrow) {
+      sections.today.push(item);
+    } else if (d < startOfAfterTomorrow) {
+      sections.tomorrow.push(item);
+    } else {
+      sections.later.push(item);
+    }
+  }
+
+  const defs: { key: TimeBucketKey; label: string; tone: TimeSection["tone"] }[] = [
+    { key: "overdue", label: "En retard", tone: "overdue" },
+    { key: "today", label: "Aujourd'hui", tone: "today" },
+    { key: "tomorrow", label: "Demain", tone: "tomorrow" },
+    { key: "later", label: "À venir", tone: "future" },
+    { key: "none", label: "Sans date", tone: "none" },
+  ];
+
+  return defs
+    .filter((d) => sections[d.key].length > 0)
+    .map((d) => ({
+      key: d.key,
+      label: d.label,
+      items: sections[d.key],
+      tone: d.tone,
+    }));
+}
 
 /**
  * Compare two items by urgency:
