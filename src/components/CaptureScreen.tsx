@@ -2,13 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { ArrowRightIcon, CloseIcon, MicIcon, StopIcon } from "./icons";
-import { MAX_SECONDS, type RecorderError } from "@/lib/useRecorder";
+import { type RecorderError } from "@/lib/useRecorder";
 import type { Overview, Phase } from "@/lib/types";
 
 const fmtClock = (s: number) =>
   Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
 
-/** Message d'erreur toujours accompagné d'une sortie : réessayer ou agir. */
 export type AppError = {
   title: string;
   steps: string[];
@@ -27,18 +26,13 @@ export type CaptureProps = {
   onClear: () => void;
   onTranscriptChange: (text: string) => void;
   onStructure: () => void;
-  /** Relevé du jour — le MÊME `GET /api/overview` que l'onglet Vision. */
   overview: Overview | null;
   onOpenOverview: () => void;
   onDismissError: () => void;
 };
 
 /**
- * Le relevé du jour, à la place des anciennes notes de démo.
- *
- * Les notes de démo disaient « ceci est une démo » : elles occupaient le seul
- * espace où l'on regarde avant de parler, pour ne rien apprendre. À leur place,
- * les deux chiffres qui décident de ce qu'on va dicter.
+ * Relevé du jour Bento — Carte haute lisibilité avec compteurs forts et jauge d'urgence
  */
 function DaySummary({
   overview,
@@ -52,94 +46,98 @@ function DaySummary({
 
   const sentence =
     totals.overdue > 0 && top && top.overdue > 0
-      ? `${top.name} concentre ${top.overdue} des ${totals.overdue} retards.`
+      ? `Priorité : apurer ${top.name} (${top.overdue} retard${top.overdue > 1 ? "s" : ""})`
       : totals.today > 0
-        ? `Rien en retard. ${totals.today} item${totals.today > 1 ? "s" : ""} pour aujourd'hui.`
-        : "Rien en retard, rien pour aujourd'hui.";
+        ? `Tout est fluide · ${totals.today} tâche${totals.today > 1 ? "s" : ""} pour aujourd'hui`
+        : "À jour · Aucune urgence en attente";
 
   const open = Math.max(1, totals.open);
   const pct = (n: number) => `${(n / open) * 100}%`;
-  const events = byProject.reduce((n, p) => n + p.events, 0);
   const rest = totals.open - totals.overdue - totals.today - totals.week;
 
   return (
-    <div className="animate-br-in w-full pb-2">
+    <div className="animate-br-in w-full pb-1">
       <div
-        className="rounded-tile px-5 pt-[18px] pb-5"
-        style={{ background: "var(--color-ink)", color: "var(--color-page)" }}
+        className="rounded-tile border bg-tile p-4.5 shadow-[var(--e1)]"
+        style={{ borderColor: "var(--line)" }}
       >
-        <div className="flex items-end gap-5">
-          <div>
-            <div
-              className="tnum text-40 leading-[0.95] font-semibold tracking-[-1.1px]"
-              // `--color-error` (#b23a22) sur ce bloc donne 1,9:1 — illisible.
-              // `--color-error-on-ink` existe pour ce cas précis.
-              style={{ color: "var(--color-error-on-ink)" }}
-            >
-              {totals.overdue}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div>
+              <span className="block text-11 font-semibold tracking-wider text-ink-3 uppercase">
+                En retard
+              </span>
+              <span
+                className="tnum text-32 leading-[1] font-bold tracking-tight"
+                style={{ color: totals.overdue > 0 ? "var(--color-error)" : "var(--color-ink-3)" }}
+              >
+                {totals.overdue}
+              </span>
             </div>
-            <div className="mt-1 text-11 font-semibold tracking-[1.2px] uppercase opacity-60">
-              en retard
+
+            <span className="block h-8 w-px bg-page" />
+
+            <div>
+              <span className="block text-11 font-semibold tracking-wider text-ink-3 uppercase">
+                Aujourd&apos;hui
+              </span>
+              <span
+                className="tnum text-32 leading-[1] font-bold tracking-tight"
+                style={{ color: totals.today > 0 ? "var(--color-action)" : "var(--color-ink)" }}
+              >
+                {totals.today}
+              </span>
+            </div>
+
+            <span className="block h-8 w-px bg-page" />
+
+            <div>
+              <span className="block text-11 font-semibold tracking-wider text-ink-3 uppercase">
+                Total
+              </span>
+              <span className="tnum text-32 leading-[1] font-bold tracking-tight text-ink">
+                {totals.open}
+              </span>
             </div>
           </div>
-          <span
-            className="block h-11 w-px"
-            style={{ background: "currentColor", opacity: 0.18 }}
-          />
-          <div>
-            <div className="tnum text-40 leading-[0.95] font-semibold tracking-[-1.1px]">
-              {totals.today}
-            </div>
-            <div className="mt-1 text-11 font-semibold tracking-[1.2px] uppercase opacity-60">
-              aujourd&apos;hui
-            </div>
-          </div>
+
+          <button
+            type="button"
+            onClick={onOpenOverview}
+            className="flex h-8 items-center gap-1.5 rounded-chip border border-[var(--line-2)] bg-page px-3 text-11 font-semibold text-ink transition-transform active:scale-95"
+          >
+            Vision
+            <ArrowRightIcon size={12} />
+          </button>
         </div>
 
-        <p className="mt-4 mb-0 text-15 leading-[1.4] font-medium">{sentence}</p>
+        <p className="mt-3.5 mb-2.5 text-13 font-medium text-ink-2">{sentence}</p>
 
-        <div className="mt-4 flex h-2 gap-[3px]">
+        {/* Jauge d'avancement globale */}
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-page gap-0.5">
           {totals.overdue > 0 && (
             <span
               className="block rounded-full"
-              style={{ width: pct(totals.overdue), background: "var(--color-error-on-ink)" }}
+              style={{ width: pct(totals.overdue), background: "var(--color-error)" }}
             />
           )}
           {totals.today > 0 && (
             <span
               className="block rounded-full"
-              style={{ width: pct(totals.today), background: "var(--color-page)" }}
+              style={{ width: pct(totals.today), background: "var(--color-action)" }}
             />
           )}
           {totals.week > 0 && (
             <span
-              className="block rounded-full"
-              style={{ width: pct(totals.week), background: "currentColor", opacity: 0.34 }}
+              className="block rounded-full opacity-50"
+              style={{ width: pct(totals.week), background: "var(--color-ink)" }}
             />
           )}
           {rest > 0 && (
-            <span
-              className="block flex-1 rounded-full"
-              style={{ background: "currentColor", opacity: 0.14 }}
-            />
+            <span className="block flex-1 rounded-full opacity-20" style={{ background: "var(--color-ink)" }} />
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={onOpenOverview}
-          className="mt-[18px] flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-field border-none text-13 font-semibold transition-all duration-200 active:scale-[0.985]"
-          style={{ background: "var(--on-ink-soft)", color: "currentColor" }}
-        >
-          Ouvrir la vision globale
-          <ArrowRightIcon size={15} />
-        </button>
       </div>
-
-      <p className="mx-1 mt-3.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
-        {totals.open} item{totals.open > 1 ? "s" : ""} ouvert{totals.open > 1 ? "s" : ""} ·{" "}
-        {events} rendez-vous · {byProject.length} projet{byProject.length > 1 ? "s" : ""}
-      </p>
     </div>
   );
 }
@@ -163,31 +161,21 @@ export function CaptureScreen({
   const recording = phase === "recording";
   const working = phase === "uploading" || phase === "transcribing" || phase === "parsing";
   const error = micError ?? (appError ? { title: appError.title, steps: appError.steps } : null);
-  const showEmptyHint = !hasTranscript && !error && !working;
 
   const hint: Record<Phase, string> = {
-    idle: hasTranscript ? "Continuer la dictée" : "Appuyer pour dicter",
-    recording: `${fmtClock(seconds)} · tape pour arrêter · stop auto ${fmtClock(MAX_SECONDS)}`,
+    idle: hasTranscript ? "Note prête à structurer" : "Touche le micro ou écris ci-dessous",
+    recording: `${fmtClock(seconds)} · Enregistrement en cours`,
     uploading: "Envoi de l'audio…",
-    transcribing: "Transcription en cours…",
-    parsing: "Structuration en cours…",
-    saving: "Enregistrement…",
-    success: hasTranscript ? "Continuer la dictée" : "Appuyer pour dicter",
+    transcribing: "Transcription Whisper…",
+    parsing: "Découpage & assignation IA…",
+    saving: "Enregistrement sur Brief…",
+    success: "Note enregistrée avec succès",
     error: "Micro indisponible",
   };
 
   const ctaDisabled = working || phase === "saving" || (!recording && !hasTranscript);
-
-  // Cmd/Ctrl+Entrée doit obéir aux MÊMES gardes que le CTA, plus une : pendant
-  // l'enregistrement, le bouton arrête le micro, il ne structure pas. Sans
-  // cette condition le raccourci basculait sur l'écran Revue micro ouvert, et
-  // des appuis répétés pendant `parsing` lançaient plusieurs `/api/parse`
-  // concurrents.
   const canStructure = !ctaDisabled && !recording;
 
-  // La note grandit avec son contenu. Compter les `\n` ne suffit pas : une
-  // dictée transcrite est une seule ligne sans retour, qu'un textarea de deux
-  // lignes en `resize-none` tronquait — alors que l'ancien `<p>` montrait tout.
   const noteRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const el = noteRef.current;
@@ -198,104 +186,87 @@ export function CaptureScreen({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-none px-[26px] pt-2.5 pb-1.5">
-        <div className="flex items-baseline justify-between">
-          <h1 className="m-0 text-27 font-semibold tracking-[-0.5px] text-ink">Brief</h1>
-          <span className="text-11 font-medium text-ink-2">FR</span>
-        </div>
-        <p className="mt-1 mb-0 text-13 leading-[1.45] font-normal text-ink-2">
-          Écris ta note ou dicte-la, Brief la range.
+      {/* Header épuré & statut */}
+      <div className="flex-none px-[26px] pt-2 pb-1">
+        <h1 className="m-0 text-27 font-bold tracking-tight text-ink">Capture</h1>
+        <p className="mt-0.5 mb-0 text-13 font-normal text-ink-2">
+          Dicte ou saisis ta note, l&apos;IA organise tout.
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-3.5 pb-1.5">
-        {/* Le relevé du jour d'abord : c'est ce qu'on regarde avant de savoir
-            quoi écrire ou dicter. Il s'affiche dès que la charge existe,
-            qu'il y ait déjà une note ou non. */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-2 pb-2">
+        {/* Relevé du jour dynamique */}
         {overview && overview.totals.open > 0 && (
           <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
         )}
 
-        {showEmptyHint && overview && overview.totals.open === 0 && (
-          <div className="animate-br-in px-1 pt-2">
-            <p className="m-0 text-17 leading-[1.45] font-medium text-ink">Rien en cours.</p>
-            <p className="mt-1.5 mb-0 text-13 leading-[1.5] font-normal text-ink-2">
-              Écris ta note ci-dessous, ou appuie sur le micro et dis ce que tu as à faire.
-            </p>
-          </div>
-        )}
-
-        {/* Zone de note : éditable au clavier, qu'il y ait ou non une dictée.
-            Juste sous le relevé du jour : on voit la charge, on écrit, on
-            structure. L'état « en attente » (pointillé) n'existe qu'en revue,
-            pas ici. */}
-        <div className="animate-br-in mt-3 rounded-tile border border-[var(--line)] bg-tile px-[18px] pt-[18px] pb-4 shadow-[var(--e1)]">
-          <div className="mb-[9px] flex items-center gap-[7px]">
-            <span className="text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
-              Note
+        {/* Zone de note principale — Carte Bento Hero */}
+        <div
+          className="animate-br-in mt-2.5 rounded-tile border bg-tile p-4.5 shadow-[var(--e1)] transition-all"
+          style={{ borderColor: recording ? "var(--color-action)" : "var(--line)" }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-11 font-semibold tracking-wider text-ink-3 uppercase">
+              {recording ? "Transcription en direct..." : "Note à organiser"}
             </span>
-            {hasTranscript && (
+            {hasTranscript && !recording && (
               <button
                 type="button"
                 onClick={onClear}
-                title="Effacer"
+                title="Effacer la note"
                 aria-label="Effacer la note"
-                className="-mt-1.5 -mr-1.5 -mb-1.5 ml-auto cursor-pointer border-none bg-transparent p-1.5 text-ink-3 transition-colors duration-200 hover:text-ink"
+                className="cursor-pointer border-none bg-transparent p-1 text-12 font-medium text-ink-3 hover:text-ink"
               >
-                <CloseIcon />
+                Effacer
               </button>
             )}
           </div>
+
           <textarea
             ref={noteRef}
             value={transcript}
             onChange={(e) => onTranscriptChange(e.target.value)}
             onKeyDown={(e) => {
-              // Cmd/Ctrl+Entrée structure directement depuis le clavier.
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canStructure) {
                 e.preventDefault();
                 onStructure();
               }
             }}
-            placeholder="Dicte ta note, ou écris-la ici…"
+            placeholder="Ex : Poster 10 polos pour Frip & Trend demain 14h, puis rdv dentiste mardi à 10h..."
             aria-label="Note à structurer"
-            rows={2}
-            className="m-0 max-h-[45vh] w-full resize-none overflow-y-auto border-none bg-transparent p-0 text-17 leading-[1.55] font-normal text-ink outline-none placeholder:text-ink-3"
+            rows={3}
+            className="m-0 max-h-[38vh] w-full resize-none overflow-y-auto border-none bg-transparent p-0 text-17 leading-[1.5] font-medium text-ink outline-none placeholder:text-ink-3 placeholder:font-normal"
           />
         </div>
 
-        {working && !hasTranscript && (
-          <div className="animate-br-in flex items-center gap-3 rounded-tile border border-[var(--line)] bg-tile px-[18px] py-4">
-            <span className="animate-br-spin block h-[17px] w-[17px] flex-none rounded-full border-2 border-[var(--line-2)] border-t-action" />
-            <span className="text-13 font-medium text-ink-2">{hint[phase]}</span>
+        {/* Indicateur de traitement */}
+        {working && (
+          <div className="animate-br-in mt-3 flex items-center gap-3 rounded-tile border bg-tile p-4 shadow-[var(--e1)]" style={{ borderColor: "var(--line)" }}>
+            <span className="animate-br-spin block h-4.5 w-4.5 flex-none rounded-full border-2 border-[var(--line-2)] border-t-action" />
+            <span className="text-13 font-semibold text-ink">{hint[phase]}</span>
           </div>
         )}
 
+        {/* Alerte Erreur */}
         {error && (
-          <div className="animate-br-in mt-3 rounded-tile border border-[var(--color-action)] bg-action-lo px-[18px] pt-4 pb-[18px]">
-            <div className="mb-2 flex items-center gap-[7px]">
-              <span className="text-11 font-semibold tracking-[1.1px] text-error uppercase">
-                Problème
-              </span>
+          <div className="animate-br-in mt-3 rounded-tile border bg-action-lo p-4" style={{ borderColor: "var(--color-action)" }}>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-11 font-bold tracking-wider text-error uppercase">Erreur</span>
               <button
                 type="button"
                 onClick={onDismissError}
-                title="Fermer"
-                aria-label="Fermer l'avertissement"
-                className="-mt-1.5 -mr-1.5 -mb-1.5 ml-auto cursor-pointer border-none bg-transparent p-1.5 text-error transition-colors duration-200 hover:text-ink"
+                aria-label="Fermer"
+                className="cursor-pointer border-none bg-transparent p-1 text-error"
               >
-                <CloseIcon />
+                <CloseIcon size={14} />
               </button>
             </div>
-            <p className="m-0 text-15 leading-[1.45] font-semibold text-ink">{error.title}</p>
+            <p className="m-0 text-14 font-semibold text-ink">{error.title}</p>
             {error.steps.length > 0 && (
-              <ul className="mt-2.5 mb-0 flex list-none flex-col gap-1.5 p-0">
-                {error.steps.map((step) => (
-                  <li
-                    key={step}
-                    className="relative pl-3.5 text-13 leading-[1.5] font-normal text-ink-2 before:absolute before:top-[7px] before:left-0 before:h-[5px] before:w-[5px] before:rounded-full before:bg-action before:content-['']"
-                  >
-                    {step}
+              <ul className="mt-2 mb-0 flex list-none flex-col gap-1 p-0">
+                {error.steps.map((step, idx) => (
+                  <li key={idx} className="text-12 font-normal text-ink-2">
+                    • {step}
                   </li>
                 ))}
               </ul>
@@ -304,7 +275,7 @@ export function CaptureScreen({
               <button
                 type="button"
                 onClick={appError.onRetry}
-                className="mt-3.5 h-11 w-full cursor-pointer rounded-field border-none bg-action text-15 font-semibold text-white transition-all duration-200 active:scale-[0.985]"
+                className="mt-3 h-9 w-full cursor-pointer rounded-chip border-none bg-action text-13 font-semibold text-white active:scale-95"
               >
                 {appError.retryLabel ?? "Réessayer"}
               </button>
@@ -313,52 +284,54 @@ export function CaptureScreen({
         )}
       </div>
 
-      <div className="flex flex-none flex-col items-center gap-3 px-[26px] pt-1.5 pb-3">
-        <div className="relative flex h-28 w-28 items-center justify-center">
+      {/* Zone de contrôle Micro & Actions */}
+      <div className="flex flex-none flex-col items-center gap-2.5 px-[26px] pt-1 pb-3">
+        <div className="relative flex h-24 w-24 items-center justify-center">
           {recording && (
             <>
-              <span className="animate-br-ring absolute top-3 left-3 h-[88px] w-[88px] rounded-full bg-[rgba(236,82,48,0.22)]" />
-              <span className="animate-br-ring absolute top-3 left-3 h-[88px] w-[88px] rounded-full bg-[rgba(236,82,48,0.18)] [animation-delay:0.63s]" />
-              <span className="animate-br-ring absolute top-3 left-3 h-[88px] w-[88px] rounded-full bg-[rgba(236,82,48,0.14)] [animation-delay:1.26s]" />
+              <span className="animate-br-ring absolute h-[82px] w-[82px] rounded-full bg-[rgba(236,82,48,0.25)]" />
+              <span className="animate-br-ring absolute h-[82px] w-[82px] rounded-full bg-[rgba(236,82,48,0.20)] [animation-delay:0.5s]" />
             </>
           )}
+
           <button
             type="button"
             onClick={onToggleMic}
             disabled={working || phase === "saving"}
-            title={recording ? "Arrêter" : "Dicter"}
+            title={recording ? "Arrêter l'enregistrement" : "Démarrer la dictée"}
             aria-label={recording ? "Arrêter l'enregistrement" : "Démarrer la dictée"}
-            className="relative flex h-[88px] w-[88px] cursor-pointer items-center justify-center rounded-full border-none text-[#FFF3EE] shadow-[var(--e-mic)] transition-all duration-200 active:scale-95 disabled:cursor-default"
+            className="relative flex h-[76px] w-[76px] cursor-pointer items-center justify-center rounded-full border-none text-white shadow-[var(--e-mic)] transition-all duration-200 active:scale-95 disabled:cursor-default"
             style={{
-              background: recording ? "var(--color-ink)" : working || phase === "saving" ? "var(--color-ink-3)" : "var(--color-action)",
+              background: recording
+                ? "var(--color-ink)"
+                : working || phase === "saving"
+                  ? "var(--color-ink-3)"
+                  : "var(--color-action)",
             }}
           >
             {recording ? (
-              <span className="flex h-[30px] items-center gap-1" aria-hidden>
+              <span className="flex h-[26px] items-center gap-1" aria-hidden>
                 {levels.map((level, i) => (
                   <span
                     key={i}
-                    className="block w-1 rounded-[2px] bg-current transition-transform duration-75 ease-out"
-                    style={{ height: 30, transform: `scaleY(${level})` }}
+                    className="block w-1 rounded-[2px] bg-white transition-transform duration-75 ease-out"
+                    style={{ height: 26, transform: `scaleY(${level})` }}
                   />
                 ))}
               </span>
             ) : working || phase === "saving" ? (
-              <span className="animate-br-spin block h-6 w-6 rounded-full border-[2.5px] border-[rgba(255,255,255,0.45)] border-t-[#FFF3EE]" />
+              <span className="animate-br-spin block h-5 w-5 rounded-full border-[2.5px] border-[rgba(255,255,255,0.45)] border-t-white" />
             ) : (
-              <MicIcon size={34} />
+              <MicIcon size={32} />
             )}
           </button>
         </div>
 
-        <span className="h-4 text-13 font-medium tracking-[0.1px] text-ink-2 tabular-nums">
+        <span className="text-12 font-medium text-ink-2 tabular-nums">
           {hint[phase]}
         </span>
 
-        {/* CTA : masqué tant qu'il n'y a RIEN à structurer — un bouton inerte
-            qui dit « Rien à structurer » ne fait que voler de la place en bas
-            de l'écran. Il apparaît dès qu'une note existe, qu'on enregistre ou
-            qu'on travaille. */}
+        {/* Bouton d'action plein format */}
         {(recording || working || phase === "saving" || hasTranscript) && (
           <button
             type="button"
@@ -366,32 +339,29 @@ export function CaptureScreen({
             disabled={ctaDisabled}
             aria-busy={working}
             className={
-              "flex h-[54px] w-full items-center justify-center gap-[9px] rounded-row border-none " +
-              "text-15 font-semibold tracking-[0.1px] transition-all duration-200 " +
+              "flex h-[50px] w-full items-center justify-center gap-2 rounded-row border-none " +
+              "text-15 font-semibold transition-all duration-200 " +
               (ctaDisabled
-                // Filet intérieur OBLIGATOIRE : le bouton est en `bg-page`, donc
-                // de la même couleur que la coque depuis qu'elle est passée en
-                // `page`. Sans ce trait, il disparaît purement et simplement.
-                ? "cursor-default bg-page text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
+                ? "cursor-default bg-page text-ink-3"
                 : recording
-                  ? "cursor-pointer bg-tile text-ink shadow-[inset_0_0_0_1px_var(--line-2)] hover:bg-page active:scale-[0.985]"
-                  : "cursor-pointer bg-ink text-page hover:bg-ink active:scale-[0.985]")
+                  ? "cursor-pointer bg-tile text-ink shadow-[var(--e1)] border border-[var(--line-2)] hover:bg-page active:scale-95"
+                  : "cursor-pointer bg-ink text-page shadow-[var(--e2)] active:scale-95")
             }
           >
             {working ? (
               <>
-                <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[var(--line-2)] border-t-ink-soft" />
-                {phase === "uploading" ? "Envoi…" : phase === "parsing" ? "Structuration…" : "Transcription…"}
+                <span className="animate-br-spin block h-4 w-4 rounded-full border-2 border-[var(--line-2)] border-t-white" />
+                <span>{phase === "uploading" ? "Envoi audio..." : phase === "parsing" ? "Organisation IA..." : "Transcription..."}</span>
               </>
             ) : recording ? (
               <>
-                <StopIcon size={18} />
-                Arrêter l&apos;enregistrement
+                <StopIcon size={16} />
+                <span>Arrêter l&apos;enregistrement</span>
               </>
             ) : (
               <>
-                Structurer la note
-                <ArrowRightIcon />
+                <span>Organiser avec l&apos;IA</span>
+                <ArrowRightIcon size={16} />
               </>
             )}
           </button>
