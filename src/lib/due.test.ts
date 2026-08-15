@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDue, resolveDue, toIsoWithOffset } from "./due";
+import { formatDue, formatRelativeDue, resolveDue, toIsoWithOffset } from "./due";
 
 /**
  * Ces tests couvrent le chantier que le pivot a déplacé : c'est Brief qui
@@ -119,5 +119,33 @@ describe("formatDue", () => {
 
   it("signale une date illisible au lieu d'afficher Invalid Date", () => {
     expect(formatDue("n'importe quoi", false)).toBe("Échéance illisible");
+  });
+
+  describe("formatRelativeDue", () => {
+    const fixedNow = new Date("2026-08-15T12:00:00+02:00");
+
+    it("identifie aujourd'hui avec heure", () => {
+      const res = formatRelativeDue("2026-08-15T20:00:00+02:00", false, fixedNow);
+      expect(res.tone).toBe("today");
+      expect(res.label).toBe("Aujourd'hui · 20:00");
+    });
+
+    it("identifie demain", () => {
+      const res = formatRelativeDue("2026-08-16T09:00:00+02:00", true, fixedNow);
+      expect(res.tone).toBe("tomorrow");
+      expect(res.label).toBe("Demain");
+    });
+
+    it("identifie après-demain", () => {
+      const res = formatRelativeDue("2026-08-17T14:30:00+02:00", false, fixedNow);
+      expect(res.tone).toBe("future");
+      expect(res.label).toBe("Après-demain · 14:30");
+    });
+
+    it("identifie en retard / hier", () => {
+      const res = formatRelativeDue("2026-08-14T09:00:00+02:00", true, fixedNow);
+      expect(res.tone).toBe("overdue");
+      expect(res.label).toBe("Hier");
+    });
   });
 });

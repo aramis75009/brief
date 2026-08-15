@@ -24,7 +24,7 @@ describe("priorités", () => {
     // Todoist (4 = urgente) casse quelque chose de bruyant.
     expect(PRIORITY_VALUES[0]).toBe(1);
     expect(PRIORITIES[1].long).toContain("Urgent");
-    expect(PRIORITIES[4].long).toContain("défaut");
+    expect(PRIORITIES[4].long).toContain("Basse");
   });
 
   it("refuse les valeurs hors échelle", () => {

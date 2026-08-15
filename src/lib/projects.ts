@@ -182,11 +182,11 @@ export function shapeFromId(id: string): Shape {
 
 export const PRIORITY_VALUES: Priority[] = [1, 2, 3, 4];
 
-export const PRIORITIES: Record<Priority, { label: string; long: string; bg: string; fg: string }> = {
-  1: { label: "p1", long: "p1 · Urgent", bg: "var(--color-action-lo)", fg: "var(--color-error)" },
-  2: { label: "p2", long: "p2 · Important", bg: "var(--color-p4)", fg: "var(--color-warn)" },
-  3: { label: "p3", long: "p3 · Normal", bg: "var(--color-p2)", fg: "var(--color-p2-ink)" },
-  4: { label: "p4", long: "p4 · Par défaut", bg: "var(--color-tile)", fg: "var(--color-ink-3)" },
+export const PRIORITIES: Record<Priority, { label: string; short: string; long: string; bg: string; fg: string }> = {
+  1: { label: "p1", short: "Urgent", long: "p1 · Urgent", bg: "var(--color-action-lo)", fg: "var(--color-error)" },
+  2: { label: "p2", short: "Élevé", long: "p2 · Élevé", bg: "var(--color-p4)", fg: "var(--color-warn)" },
+  3: { label: "p3", short: "Normal", long: "p3 · Normal", bg: "var(--color-p2)", fg: "var(--color-p2-ink)" },
+  4: { label: "p4", short: "Basse", long: "p4 · Basse", bg: "var(--color-page)", fg: "var(--color-ink-3)" },
 };
 
 export function isPriority(v: unknown): v is Priority {

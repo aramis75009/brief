@@ -157,7 +157,7 @@ function done(date: Date, hasHour: boolean): { due: string; allDay: boolean } {
   return { due: toIsoWithOffset(date), allDay: !hasHour };
 }
 
-/** Rend une date absolue lisible en français, pour l'affichage. */
+/** Rend une date absolue lisible en français, pour l'affichage standard. */
 export function formatDue(due: string | null, allDay: boolean): string {
   if (!due) return "Pas d'échéance";
   const date = new Date(due);
@@ -177,4 +177,111 @@ export function formatDue(due: string | null, allDay: boolean): string {
     timeZone: TIMEZONE,
   });
   return `${day} · ${time}`;
+}
+
+export type RelativeDueInfo = {
+  label: string;
+  tone: "overdue" | "today" | "tomorrow" | "future" | "none";
+  color: string;
+  bg: string;
+};
+
+/**
+ * Formatage naturel et dynamique avec sémantique de couleur pour les listes de tâches.
+ */
+export function formatRelativeDue(due: string | null, allDay: boolean, now: Date = new Date()): RelativeDueInfo {
+  if (!due) {
+    return {
+      label: "Pas d'échéance",
+      tone: "none",
+      color: "var(--color-ink-3)",
+      bg: "transparent",
+    };
+  }
+
+  const date = new Date(due);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      label: "Échéance illisible",
+      tone: "none",
+      color: "var(--color-ink-3)",
+      bg: "transparent",
+    };
+  }
+
+  const nowParts = zonedParts(now);
+  const dueParts = zonedParts(date);
+
+  const startOfToday = zonedTime(nowParts.y, nowParts.m, nowParts.d, 0, 0);
+  const startOfDueDay = zonedTime(dueParts.y, dueParts.m, dueParts.d, 0, 0);
+
+  // Différence en jours calendaires
+  const diffDays = Math.round((startOfDueDay.getTime() - startOfToday.getTime()) / (24 * 60 * 60 * 1000));
+
+  const timeStr = allDay
+    ? ""
+    : ` · ${date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: TIMEZONE })}`;
+
+  if (diffDays < 0) {
+    const overdueLabel = diffDays === -1 ? "Hier" : `Il y a ${Math.abs(diffDays)} j`;
+    return {
+      label: `${overdueLabel}${timeStr}`,
+      tone: "overdue",
+      color: "var(--color-error)",
+      bg: "var(--color-action-lo)",
+    };
+  }
+
+  if (diffDays === 0) {
+    return {
+      label: `Aujourd'hui${timeStr}`,
+      tone: "today",
+      color: "var(--color-action)",
+      bg: "var(--color-action-lo)",
+    };
+  }
+
+  if (diffDays === 1) {
+    return {
+      label: `Demain${timeStr}`,
+      tone: "tomorrow",
+      color: "var(--color-warn)",
+      bg: "var(--color-p4)",
+    };
+  }
+
+  if (diffDays === 2) {
+    return {
+      label: `Après-demain${timeStr}`,
+      tone: "future",
+      color: "var(--color-ink-2)",
+      bg: "var(--color-page)",
+    };
+  }
+
+  if (diffDays > 2 && diffDays < 7) {
+    const weekday = date.toLocaleDateString("fr-FR", { weekday: "long", timeZone: TIMEZONE });
+    const capitalized = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+    return {
+      label: `${capitalized}${timeStr}`,
+      tone: "future",
+      color: "var(--color-ink-2)",
+      bg: "var(--color-page)",
+    };
+  }
+
+  // Au-delà de 7 jours
+  const formatted = date.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: TIMEZONE,
+  });
+
+  return {
+    label: `${formatted}${timeStr}`,
+    tone: "future",
+    color: "var(--color-ink-2)",
+    bg: "var(--color-page)",
+  };
 }

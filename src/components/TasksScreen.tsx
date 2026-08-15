@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { DoneBox } from "./DoneBox";
 import { ProjectDot } from "./icons";
-import { formatDue } from "@/lib/due";
+import { formatRelativeDue } from "@/lib/due";
 import { PRIORITIES, shapeFor, skinFor } from "@/lib/projects";
 import { sortItems, type TaskSort } from "@/lib/tasks";
+import { zonedParts, zonedTime } from "@/lib/zoned";
 import type { Project, Item } from "@/lib/types";
 
 const FILTERS = [
@@ -51,6 +52,26 @@ export function TasksScreen({
   // être perdus, donc les seuls qui demandent une action.
   const all = [...pending, ...sent];
 
+  // Calcul des compteurs de synthèse (en retard / aujourd'hui) pour les items non terminés
+  const now = new Date();
+  const nowParts = zonedParts(now);
+  const startOfToday = zonedTime(nowParts.y, nowParts.m, nowParts.d, 0, 0);
+  const startOfTomorrow = zonedTime(nowParts.y, nowParts.m, nowParts.d + 1, 0, 0);
+
+  const activeItems = all.filter((t) => !t.doneAt);
+
+  const overdueCount = activeItems.filter((t) => {
+    if (!t.due) return false;
+    const d = new Date(t.due);
+    return !Number.isNaN(d.getTime()) && d < startOfToday;
+  }).length;
+
+  const todayCount = activeItems.filter((t) => {
+    if (!t.due) return false;
+    const d = new Date(t.due);
+    return !Number.isNaN(d.getTime()) && d >= startOfToday && d < startOfTomorrow;
+  }).length;
+
   // Filtrage par type et par statut terminé
   const filtered = all.filter((t) => {
     if (filter !== "all" && t.kind !== filter) return false;
@@ -80,8 +101,15 @@ export function TasksScreen({
     const done = !!t.doneAt;
     const isEvent = t.kind === "event";
     const waiting = !!t.pendingAt;
-    const proj: Project = projectsMap.get(t.projectId) || { id: t.projectId, name: "Autre", tint: 7 as const, shape: "disc" as const };
+    const proj: Project = projectsMap.get(t.projectId) || {
+      id: t.projectId,
+      name: "Autre",
+      tint: 7 as const,
+      shape: "disc" as const,
+    };
     const skin = skinFor(proj);
+    const dueInfo = formatRelativeDue(t.due, t.allDay, now);
+    const prio = PRIORITIES[t.priority];
 
     return (
       <div
@@ -137,7 +165,8 @@ export function TasksScreen({
               {waiting ? "en attente" : done ? "✓ fait" : isEvent ? "rendez-vous" : "tâche"}
             </span>
           </div>
-          <div className="mt-[7px] flex flex-wrap items-center gap-2">
+
+          <div className="mt-[9px] flex flex-wrap items-center gap-2">
             {showProjectBadge && (
               <>
                 <span
@@ -150,22 +179,38 @@ export function TasksScreen({
                 <span className="h-[3px] w-[3px] rounded-full bg-ink-3" />
               </>
             )}
-            <span className="text-11 font-medium text-ink-2">
-              {formatDue(t.due, t.allDay)}
-            </span>
+
+            {/* Échéance naturelle stylisée */}
+            {t.due ? (
+              <span
+                className="inline-flex h-5 items-center rounded-chip px-1.5 text-11 font-semibold"
+                style={{
+                  background: dueInfo.bg,
+                  color: dueInfo.color,
+                }}
+              >
+                {dueInfo.label}
+              </span>
+            ) : (
+              <span className="text-11 font-medium text-ink-3">
+                Pas d&apos;échéance
+              </span>
+            )}
+
             <span className="h-[3px] w-[3px] rounded-full bg-ink-3" />
+
+            {/* Badge de priorité bento sobre */}
             <span
-              className="text-11 font-semibold"
+              className="inline-flex h-5 items-center rounded-chip px-1.5 text-11 font-semibold"
               style={{
-                color:
-                  PRIORITIES[t.priority].fg === "var(--color-ink)"
-                    ? "var(--color-ink-3)"
-                    : PRIORITIES[t.priority].fg,
+                background: prio.bg,
+                color: prio.fg,
               }}
             >
-              {PRIORITIES[t.priority].label}
+              {prio.label} · {prio.short}
             </span>
           </div>
+
           {t.rrule && (
             <p className="mt-2 mb-0 text-11 leading-[1.4] text-ink-3">
               se répète
@@ -192,6 +237,30 @@ export function TasksScreen({
             </button>
           )}
         </div>
+
+        {/* Synthèse compacte : badges Retard / Aujourd'hui */}
+        {(overdueCount > 0 || todayCount > 0) && (
+          <div className="mb-3 flex items-center gap-2">
+            {overdueCount > 0 && (
+              <div
+                className="flex items-center gap-1.5 rounded-chip px-2.5 py-1 text-11 font-semibold"
+                style={{ background: "var(--color-action-lo)", color: "var(--color-error)" }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-error" />
+                <span>{overdueCount} en retard</span>
+              </div>
+            )}
+            {todayCount > 0 && (
+              <div
+                className="flex items-center gap-1.5 rounded-chip px-2.5 py-1 text-11 font-semibold"
+                style={{ background: "var(--color-p4)", color: "var(--color-warn)" }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+                <span>{todayCount} aujourd&apos;hui</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {pending.length > 0 && (
           <div
@@ -259,30 +328,33 @@ export function TasksScreen({
       <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-1 pb-[18px]">
         {sort === "project" ? (
           <>
-            {[...groups, ...(orphans.length ? [{ project: { id: "?", name: "Autre", tint: 7 as const, shape: "disc" as const }, items: orphans }] : [])].map(
-              ({ project, items }) => {
-                const skin = skinFor(project);
-                return (
-                  <div key={project.id} className="mb-5">
-                    <div className="mx-1 mt-0 mb-[9px] flex items-center gap-2">
-                      <span
-                        className="inline-flex h-6 items-center gap-2 rounded-chip px-[9px] text-11 font-semibold"
-                        style={{ background: skin.bg, color: skin.fg }}
-                      >
-                        <ProjectDot shape={shapeFor(project)} />
-                        {project.name}
-                      </span>
-                      <span className="text-11 font-medium text-ink-3">
-                        {items.length} {items.length > 1 ? "items" : "item"}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {items.map((t) => renderItemCard(t, false))}
-                    </div>
+            {[
+              ...groups,
+              ...(orphans.length
+                ? [{ project: { id: "?", name: "Autre", tint: 7 as const, shape: "disc" as const }, items: orphans }]
+                : []),
+            ].map(({ project, items }) => {
+              const skin = skinFor(project);
+              return (
+                <div key={project.id} className="mb-5">
+                  <div className="mx-1 mt-0 mb-[9px] flex items-center gap-2">
+                    <span
+                      className="inline-flex h-6 items-center gap-2 rounded-chip px-[9px] text-11 font-semibold"
+                      style={{ background: skin.bg, color: skin.fg }}
+                    >
+                      <ProjectDot shape={shapeFor(project)} />
+                      {project.name}
+                    </span>
+                    <span className="text-11 font-medium text-ink-3">
+                      {items.length} {items.length > 1 ? "items" : "item"}
+                    </span>
                   </div>
-                );
-              },
-            )}
+                  <div className="flex flex-col gap-2">
+                    {items.map((t) => renderItemCard(t, false))}
+                  </div>
+                </div>
+              );
+            })}
           </>
         ) : (
           <div className="flex flex-col gap-2">

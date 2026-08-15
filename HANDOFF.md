@@ -9,44 +9,46 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-15 · Amélioration du workflow des tâches (tri & filtre terminées)
+# Passation — 2026-08-15 · Dates en langage naturel coloré, design priorités et synthèse de tâches
 
 | | |
 |---|---|
 | **Agent** | Hermes Agent v0.20.0 · `google/gemini-3.7-flash` via OpenRouter |
 | **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits** | `feat: add task sorting by urgency/due/priority and done items toggle` |
+| **Commits** | `feat: natural language relative due dates with colored chips, redesigned priorities and overdue/today summary counters` |
 
 ## Goal — l'objectif
 
-Améliorer le workflow de gestion des tâches sur Brief en offrant à l'utilisateur :
-1. La possibilité de masquer par défaut les tâches terminées (`doneAt`) avec un basculeur d'affichage instantané.
-2. Un sélecteur de tri multidimensionnel : par **Projets** (vue groupée par défaut), par **Urgence** (échéances proches/dépassées + p1 > p4), par **Échéance** chronologique et par **Priorité** (`p1` à `p4`).
+Améliorer la lisibilité et la fluidité visuelle de l'onglet Tâches sur Brief :
+1. Afficher les dates d'échéance en langage naturel dynamique (« Aujourd'hui », « Demain », « Après-demain », « Hier » / retard) avec sémantique de couleur (`formatRelativeDue`).
+2. Rendre les badges de priorité plus design, précis et lisibles (`p1 · Urgent`, `p2 · Élevé`, `p3 · Normal`, `p4 · Basse`).
+3. Ajouter une barre de synthèse compacte en tête d'écran avec badges d'alerte pour les tâches en retard et du jour.
 
 ## Current state — ce qui a été fait
 
-- **Nouveau module `src/lib/tasks.ts`** :
-  - `sortItems(items, sortStrategy)` implémentant les comparateurs d'urgence, d'échéance et de priorité.
-  - Testé unitairement dans `src/lib/tasks.test.ts` (3 tests dédiés passants).
-- **Refonte de `src/components/TasksScreen.tsx`** :
-  - Ajout d'un bouton d'action discret en en-tête permettant de basculer la visibilité des tâches déjà cochées (`showDone`).
-  - Ajout d'une barre de tri horizontal (`Projets`, `Urgence`, `Échéance`, `Priorité`).
-  - Affichage des badges de projet avec forme & teinte (`skinFor`, `ProjectDot`) lorsque le tri à plat est actif.
-  - Conformité stricte avec `DESIGN.md` (General Sans, tokens de couleur sémantiques, absence d'ornement inutile).
+- **`src/lib/due.ts` & `src/lib/due.test.ts`** :
+  - Création de `formatRelativeDue(due, allDay, now)` qui calcule les jours calendaires relatifs en fuseau `Europe/Paris` et applique la charte de couleurs sémantique.
+  - 4 nouveaux tests unitaires dédiés, tous passants.
+- **`src/lib/projects.ts` & `src/lib/projects.test.ts`** :
+  - Enrichissement de `PRIORITIES` avec libellés courts (`short`) et ajustement des contrastes bento (`Basse`, `Normal`, `Élevé`, `Urgent`).
+- **`src/components/TasksScreen.tsx`** :
+  - Intégration des badges de synthèse en haut de page (`N en retard`, `N aujourd'hui`).
+  - Rendu visuel soigné des chips d'échéance naturelle et des priorités sur chaque carte d'item.
 
 ## Decisions — choix critiques ou irréversibles
 
-- **Conserver la vue groupée par Projet par défaut** pour préserver les repères habituels tout en permettant de basculer en un clic sur le tri par Urgence.
-- **Masquer les tâches faites par défaut** pour alléger immédiatement la charge cognitive et mettre l'accent sur ce qui reste à accomplir.
+- **Formatage naturel dynamique (Option C)** : calcul des jours calendaires via `zonedParts` / `zonedTime` de `src/lib/zoned.ts` pour garantir que minuit correspond bien au fuseau de Paris sans bug d'UTC.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/tasks.ts` | **créé** : logique de tri par urgence, priorité, échéance |
-| `src/lib/tasks.test.ts` | **créé** : tests unitaires du tri |
-| `src/components/TasksScreen.tsx` | enrichi : sélecteur de tri, toggle des items terminés, badges projet |
-| `docs/handoffs/2026-08-14-n8n-digest-telegram.md` | **créé** — archive de la passation n8n/digest de Claude |
+| `src/lib/due.ts` | enrichi : `formatRelativeDue()` et type `RelativeDueInfo` |
+| `src/lib/due.test.ts` | enrichi : tests de formatage naturel |
+| `src/lib/projects.ts` | enrichi : refonte design/labels des priorités |
+| `src/lib/projects.test.ts` | mis à jour suite au renommage `Basse` |
+| `src/components/TasksScreen.tsx` | enrichi : compteurs de synthèse + rendu cartes |
+| `docs/handoffs/2026-08-15-tri-et-filtre-taches-faites.md` | **créé** — archive passation précédente |
 | `HANDOFF.md` | réécrit — passation courante |
 
 ## Validations — passants / échoués / non lancés
@@ -57,15 +59,15 @@ Lancées **après** l'implémentation complète :
 |---|---|
 | `npx eslint .` | ✅ aucune erreur, aucun warning |
 | `npx tsc --noEmit` | ✅ types stricts validés |
-| `npx vitest run` | ✅ **89 tests passent** (7 suites) |
+| `npx vitest run` | ✅ **93 tests passent** (7 test suites) |
 
 ## Blockers — ce qui bloque
 
-Rien. Branche locale saine et propre.
+Rien.
 
 ## Next — la prochaine action
 
-Déployer le conteneur en production sur le VPS (`docker compose up -d --build`) et valider l'interaction sur l'iPhone d'Aramis.
+Déployer sur le VPS et vérifier l'affichage sur l'iPhone.
 
 ---
 
@@ -73,7 +75,8 @@ Déployer le conteneur en production sur le VPS (`docker compose up -d --build`)
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-15** | **Amélioration du workflow tâches (tri & terminées)** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-15** | **Dates langage naturel coloré, priorités & synthèse** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-15 | Tri multi-critères et filtre des tâches terminées | Hermes Agent | [fiche](docs/handoffs/2026-08-15-tri-et-filtre-taches-faites.md) |
 | 2026-08-14 | Brief parle à n8n, récap du matin sur Telegram | Claude Code | [fiche](docs/handoffs/2026-08-14-n8n-digest-telegram.md) |
 | 2026-08-14 | Déploiement prod + correctif projets invisibles | **Hermes** | [fiche](docs/handoffs/2026-08-14-deploiement-et-correctif-projets.md) |
 | 2026-08-14 | Système de passation + correctif fuseau | Claude Code | [fiche](docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md) |
