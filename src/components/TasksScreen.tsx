@@ -369,7 +369,7 @@ export function TasksScreen({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-none px-[26px] pt-2.5 pb-3">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="my-0 text-27 font-semibold tracking-[-0.5px] text-ink">Tâches</h1>
+          <h1 className="my-0 text-27 font-bold tracking-tight text-ink">Tâches</h1>
           <div className="flex items-center gap-2">
             {totalDoneCount > 0 && (
               <button

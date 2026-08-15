@@ -58,11 +58,11 @@ function DaySummary({
   return (
     <div className="animate-br-in w-full pb-1">
       <div
-        className="rounded-tile border bg-tile p-4.5 shadow-[var(--e1)]"
+        className="rounded-tile border bg-tile p-4 shadow-[var(--e1)]"
         style={{ borderColor: "var(--line)" }}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
             <div>
               <span className="block text-11 font-semibold tracking-wider text-ink-3 uppercase">
                 En retard
@@ -104,14 +104,15 @@ function DaySummary({
           <button
             type="button"
             onClick={onOpenOverview}
-            className="flex h-8 items-center gap-1.5 rounded-chip border border-[var(--line-2)] bg-page px-3 text-11 font-semibold text-ink transition-transform active:scale-95"
+            className="flex h-8 items-center gap-1.5 rounded-chip border-none px-3 text-11 font-semibold text-white shadow-sm transition-transform active:scale-95"
+            style={{ background: "var(--color-action)" }}
           >
             Vision
             <ArrowRightIcon size={12} />
           </button>
         </div>
 
-        <p className="mt-3.5 mb-2.5 text-13 font-medium text-ink-2">{sentence}</p>
+        <p className="mt-3 mb-2 text-13 font-medium text-ink-2">{sentence}</p>
 
         {/* Jauge d'avancement globale */}
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-page gap-0.5">
@@ -170,7 +171,7 @@ export function CaptureScreen({
     parsing: "Découpage & assignation IA…",
     saving: "Enregistrement sur Brief…",
     success: "Note enregistrée avec succès",
-    error: "Micro indisponible",
+    error: "Micro désactivé ou indisponible",
   };
 
   const ctaDisabled = working || phase === "saving" || (!recording && !hasTranscript);
@@ -194,15 +195,58 @@ export function CaptureScreen({
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-2 pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-1.5 pb-2">
         {/* Relevé du jour dynamique */}
         {overview && overview.totals.open > 0 && (
           <DaySummary overview={overview} onOpenOverview={onOpenOverview} />
         )}
 
+        {/* Alerte Erreur / Annulation — Carte compacte sans overflow */}
+        {error && (
+          <div
+            className="animate-br-in mt-2 mb-2 rounded-tile border bg-action-lo p-3.5 shadow-sm"
+            style={{ borderColor: "var(--color-action)" }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-11 font-bold tracking-wider text-error uppercase">Attention</span>
+                </div>
+                <p className="m-0 mt-1 text-13 font-semibold text-ink leading-[1.35]">{error.title}</p>
+                {error.steps.length > 0 && (
+                  <ul className="mt-1.5 mb-0 flex list-none flex-col gap-1 p-0">
+                    {error.steps.map((step, idx) => (
+                      <li key={idx} className="text-11 font-normal text-ink-2 leading-[1.3]">
+                        • {step}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={onDismissError}
+                aria-label="Fermer"
+                className="cursor-pointer border-none bg-transparent p-1 text-error hover:opacity-80"
+              >
+                <CloseIcon size={14} />
+              </button>
+            </div>
+            {appError?.onRetry && (
+              <button
+                type="button"
+                onClick={appError.onRetry}
+                className="mt-2.5 h-8 w-full cursor-pointer rounded-chip border-none bg-action text-12 font-semibold text-white active:scale-95"
+              >
+                {appError.retryLabel ?? "Réessayer"}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Zone de note principale — Carte Bento Hero */}
         <div
-          className="animate-br-in mt-2.5 rounded-tile border bg-tile p-4.5 shadow-[var(--e1)] transition-all"
+          className="animate-br-in mt-2 rounded-tile border bg-tile p-4 shadow-[var(--e1)] transition-all"
           style={{ borderColor: recording ? "var(--color-action)" : "var(--line)" }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -234,63 +278,27 @@ export function CaptureScreen({
             }}
             placeholder="Ex : Poster 10 polos pour Frip & Trend demain 14h, puis rdv dentiste mardi à 10h..."
             aria-label="Note à structurer"
-            rows={3}
-            className="m-0 max-h-[38vh] w-full resize-none overflow-y-auto border-none bg-transparent p-0 text-17 leading-[1.5] font-medium text-ink outline-none placeholder:text-ink-3 placeholder:font-normal"
+            rows={2}
+            className="m-0 max-h-[30vh] w-full resize-none overflow-y-auto border-none bg-transparent p-0 text-16 leading-[1.5] font-medium text-ink outline-none placeholder:text-ink-3 placeholder:font-normal"
           />
         </div>
 
         {/* Indicateur de traitement */}
         {working && (
-          <div className="animate-br-in mt-3 flex items-center gap-3 rounded-tile border bg-tile p-4 shadow-[var(--e1)]" style={{ borderColor: "var(--line)" }}>
-            <span className="animate-br-spin block h-4.5 w-4.5 flex-none rounded-full border-2 border-[var(--line-2)] border-t-action" />
+          <div className="animate-br-in mt-2.5 flex items-center gap-3 rounded-tile border bg-tile p-3.5 shadow-[var(--e1)]" style={{ borderColor: "var(--line)" }}>
+            <span className="animate-br-spin block h-4 w-4 flex-none rounded-full border-2 border-[var(--line-2)] border-t-action" />
             <span className="text-13 font-semibold text-ink">{hint[phase]}</span>
-          </div>
-        )}
-
-        {/* Alerte Erreur */}
-        {error && (
-          <div className="animate-br-in mt-3 rounded-tile border bg-action-lo p-4" style={{ borderColor: "var(--color-action)" }}>
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-11 font-bold tracking-wider text-error uppercase">Erreur</span>
-              <button
-                type="button"
-                onClick={onDismissError}
-                aria-label="Fermer"
-                className="cursor-pointer border-none bg-transparent p-1 text-error"
-              >
-                <CloseIcon size={14} />
-              </button>
-            </div>
-            <p className="m-0 text-14 font-semibold text-ink">{error.title}</p>
-            {error.steps.length > 0 && (
-              <ul className="mt-2 mb-0 flex list-none flex-col gap-1 p-0">
-                {error.steps.map((step, idx) => (
-                  <li key={idx} className="text-12 font-normal text-ink-2">
-                    • {step}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {appError?.onRetry && (
-              <button
-                type="button"
-                onClick={appError.onRetry}
-                className="mt-3 h-9 w-full cursor-pointer rounded-chip border-none bg-action text-13 font-semibold text-white active:scale-95"
-              >
-                {appError.retryLabel ?? "Réessayer"}
-              </button>
-            )}
           </div>
         )}
       </div>
 
       {/* Zone de contrôle Micro & Actions */}
-      <div className="flex flex-none flex-col items-center gap-2.5 px-[26px] pt-1 pb-3">
-        <div className="relative flex h-24 w-24 items-center justify-center">
+      <div className="flex flex-none flex-col items-center gap-2 px-[26px] pt-1 pb-3">
+        <div className="relative flex h-22 w-22 items-center justify-center">
           {recording && (
             <>
-              <span className="animate-br-ring absolute h-[82px] w-[82px] rounded-full bg-[rgba(236,82,48,0.25)]" />
-              <span className="animate-br-ring absolute h-[82px] w-[82px] rounded-full bg-[rgba(236,82,48,0.20)] [animation-delay:0.5s]" />
+              <span className="animate-br-ring absolute h-[76px] w-[76px] rounded-full bg-[rgba(236,82,48,0.25)]" />
+              <span className="animate-br-ring absolute h-[76px] w-[76px] rounded-full bg-[rgba(236,82,48,0.20)] [animation-delay:0.5s]" />
             </>
           )}
 
@@ -300,7 +308,7 @@ export function CaptureScreen({
             disabled={working || phase === "saving"}
             title={recording ? "Arrêter l'enregistrement" : "Démarrer la dictée"}
             aria-label={recording ? "Arrêter l'enregistrement" : "Démarrer la dictée"}
-            className="relative flex h-[76px] w-[76px] cursor-pointer items-center justify-center rounded-full border-none text-white shadow-[var(--e-mic)] transition-all duration-200 active:scale-95 disabled:cursor-default"
+            className="relative flex h-[72px] w-[72px] cursor-pointer items-center justify-center rounded-full border-none text-white shadow-[var(--e-mic)] transition-all duration-200 active:scale-95 disabled:cursor-default"
             style={{
               background: recording
                 ? "var(--color-ink)"
@@ -310,24 +318,24 @@ export function CaptureScreen({
             }}
           >
             {recording ? (
-              <span className="flex h-[26px] items-center gap-1" aria-hidden>
+              <span className="flex h-[24px] items-center gap-1" aria-hidden>
                 {levels.map((level, i) => (
                   <span
                     key={i}
                     className="block w-1 rounded-[2px] bg-white transition-transform duration-75 ease-out"
-                    style={{ height: 26, transform: `scaleY(${level})` }}
+                    style={{ height: 24, transform: `scaleY(${level})` }}
                   />
                 ))}
               </span>
             ) : working || phase === "saving" ? (
               <span className="animate-br-spin block h-5 w-5 rounded-full border-[2.5px] border-[rgba(255,255,255,0.45)] border-t-white" />
             ) : (
-              <MicIcon size={32} />
+              <MicIcon size={30} />
             )}
           </button>
         </div>
 
-        <span className="text-12 font-medium text-ink-2 tabular-nums">
+        <span className="text-11 font-medium text-ink-2 tabular-nums">
           {hint[phase]}
         </span>
 
@@ -339,8 +347,8 @@ export function CaptureScreen({
             disabled={ctaDisabled}
             aria-busy={working}
             className={
-              "flex h-[50px] w-full items-center justify-center gap-2 rounded-row border-none " +
-              "text-15 font-semibold transition-all duration-200 " +
+              "flex h-[48px] w-full items-center justify-center gap-2 rounded-row border-none " +
+              "text-14 font-semibold transition-all duration-200 " +
               (ctaDisabled
                 ? "cursor-default bg-page text-ink-3"
                 : recording

@@ -9,40 +9,41 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-15 · Refonte complète de la page Capture (Bento Hero, copywriting direct & grand format)
+# Passation — 2026-08-15 · Refonte globale UI : PIN Bento, Réglages avancés, harmonisation des titres et fix overflow
 
 | | |
 |---|---|
 | **Agent** | Hermes Agent v0.20.0 · `google/gemini-3.7-flash` via OpenRouter |
 | **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits** | `feat: capture screen overhaul with bento hero card, direct copywriting and modern clean layout` |
+| **Commits** | `feat: global UI overhaul (pin screen, settings, unified bold titles, fix capture overflow and vision button)` |
 
 ## Goal — l'objectif
 
-Transformer l'écran principal **Capture** pour lui donner un design moderne, haut de gamme et épuré :
-1. **Suppression des éléments cheap** : retrait définitif du badge `FR` inutile et du titre basique.
-2. **En-tête épuré** : Typogramme net `Capture` avec sous-titre explicite.
-3. **Carte Bento "Relevé du jour" haute lisibilité** : chiffres forts (`32px` gras) pour les retards (`totals.overdue`), tâches du jour (`totals.today`) et total ouvert (`totals.open`), avec jauge segmentée et bouton d'accès rapide à la Vision.
-4. **Zone de Note surélevée (Input Hero)** : carte blanche/tile avec typographie fluide, placeholder exemplaire et raccourci d'effacement discret.
-5. **Bouton Micro Héroïque & CTA pleine largeur** : halo interactif, barres de fréquence fluides et grand bouton noir d'organisation IA.
+Finaliser l'homogénéité visuelle de toute l'application Brief :
+1. **Fix Capture** : suppression de l'overflow du message d'erreur micro (carte compacte intégrée) et coloration du bouton KPI Vision en couleur d'action vive.
+2. **Harmonisation typographique** : standardisation des titres de toutes les pages (`Capture`, `Tâches`, `Vision`, `Réglages`, `Brief`) en `text-27 font-bold tracking-tight text-ink`.
+3. **Refonte de l'écran PIN (`PinGate.tsx`)** : logo `B` en bloc bento noir contrasté, touches tactiles surélevées en cartes tuiles avec retours visuels précis.
+4. **Refonte de l'écran Réglages (`SettingsScreen.tsx`)** :
+   - Gestion complète des projets (création avec teintes et formes personnalisées, suppression sécurisée).
+   - Bouton de synchronisation manuelle forcée avec le serveur VPS.
+   - Module Web Push avec activation / désactivation et test de notification en direct.
+   - Outil d'export complet des données en JSON (`brief-backup-*.json`).
+   - Bouton de verrouillage applicatif direct.
 
 ## Current state — ce qui a été fait
 
 - **`src/components/CaptureScreen.tsx`** :
-  - Refonte totale du template JSX et des styles Tailwind v4 conformément aux directives de design (General Sans, tokens sémantiques, absence d'ornement inutile).
-  - Suppression des anciens textes verbeux pour un copywriting direct (*« Dicte ou saisis ta note, l'IA organise tout »*, *« Organiser avec l'IA »*).
-
-## Decisions — choix critiques ou irréversibles
-
-- **Conserver la parité stricte avec les actions audio & clavier** : la frappe au clavier et la dictée Whisper alimentent le même pipeline de structuration vers `/api/parse`.
-
-## Changed — fichiers et composants
-
-| Fichier | Nature |
-|---|---|
-| `src/components/CaptureScreen.tsx` | refondu : en-tête épuré, carte bento 3 compteurs, input hero, micro moderne |
-| `docs/handoffs/2026-08-15-refonte-vision-focus-et-horizon.md` | **créé** — archive passation précédente |
-| `HANDOFF.md` | réécrit — passation courante |
+  - Bouton Vision coloré en `--color-action` avec texte blanc.
+  - Alerte d'erreur/annulation compactée sans débordement sous l'écran.
+- **`src/components/PinGate.tsx`** :
+  - Nouveau logo Bento `B` sur fond sombre.
+  - Pavé numérique composé de cartes tactiles `rounded-2xl border bg-tile shadow-[var(--e1)]` avec typographie 24px en gras.
+- **`src/components/SettingsScreen.tsx`** :
+  - Formulaire de création de projets avec sélection de teintes (1 à 8) et de formes (disque, carré, losange, anneau, pilule).
+  - Gestionnaire de notifications avec bouton de test 🔔.
+  - Fonction d'export JSON complète téléchargeable.
+- **`src/components/TasksScreen.tsx` & `src/components/OverviewScreen.tsx`** :
+  - Harmonisation des titres en gras avec tracking serré.
 
 ## Validations — passants / échoués / non lancés
 
@@ -60,7 +61,7 @@ Rien.
 
 ## Next — la prochaine action
 
-Déployer sur le VPS et tester la saisie et la dictée sur l'iPhone d'Aramis.
+Déployer sur le VPS et tester l'expérience complète sur l'iPhone.
 
 ---
 
@@ -68,7 +69,8 @@ Déployer sur le VPS et tester la saisie et la dictée sur l'iPhone d'Aramis.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-15** | **Refonte page Capture (Bento Hero & design moderne)** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-15** | **Refonte globale UI (PIN, Réglages, Titres unifiés & fix Capture)** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-15 | Refonte page Capture (Bento Hero & design moderne) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-refonte-capture-bento-hero.md) |
 | 2026-08-15 | Refonte page Vision (focus actionable, horizon interactif) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-refonte-vision-focus-et-horizon.md) |
 | 2026-08-15 | Optimisation complète tâches (recherche, sections, ajout direct, swipe) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-workflow-taches-complet.md) |
 | 2026-08-15 | Dates langage naturel coloré, priorités & synthèse | Hermes Agent | [fiche](docs/handoffs/2026-08-15-dates-naturelles-et-priorites-design.md) |

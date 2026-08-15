@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ProjectDot, TrashIcon } from "./icons";
+import { PlusIcon, ProjectDot, TrashIcon } from "./icons";
 import {
   disablePush,
   enablePush,
@@ -10,311 +10,18 @@ import {
   type PushState,
 } from "@/lib/push-client";
 import { shapeFor, skinFor } from "@/lib/projects";
-import type { Item, Project } from "@/lib/types";
+import type { Item, Project, Shape, Tint } from "@/lib/types";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mx-1 mt-0 mb-[9px] text-11 font-semibold tracking-[1.1px] text-ink-3 uppercase">
-      {children}
-    </p>
+    <div className="mx-1 mt-5 mb-2.5 flex items-center gap-2">
+      <span className="text-11 font-semibold tracking-[1.2px] text-ink-3 uppercase">{children}</span>
+      <span className="h-px flex-1" style={{ background: "var(--line)" }} />
+    </div>
   );
 }
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
-
-/**
- * Notifications — le chemin par lequel un rappel sonnera.
- *
- * iOS ne fournit aucune API de notification programmée à une PWA : ni
- * Notification Triggers, ni Background Sync. La notification vient donc du
- * serveur, à la seconde voulue. Cet écran sert à prouver que cette chaîne
- * fonctionne bout en bout avant qu'on construise l'ordonnanceur.
- */
-function NotificationsSection() {
-  const [state, setState] = useState<PushState | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "ko"; text: string } | null>(null);
-
-  const refresh = useCallback(() => {
-    void readPushState().then(setState);
-  }, []);
-
-  useEffect(refresh, [refresh]);
-
-  const run = async (fn: () => Promise<unknown>, ok: string) => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await fn();
-      setMessage({ kind: "ok", text: ok });
-      refresh();
-    } catch (e) {
-      setMessage({ kind: "ko", text: e instanceof Error ? e.message : "Échec." });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const on = state?.status === "on";
-
-  const subtitle = (): string => {
-    switch (state?.status) {
-      case "on":
-        return "Actives sur cet appareil";
-      case "off":
-        return "Inactives — aucun rappel ne sonnera";
-      case "denied":
-        return "Refusées — à réactiver dans les réglages du navigateur";
-      case "needs-install":
-        return "Ajoute Brief à l'écran d'accueil : iOS ne notifie pas depuis un onglet";
-      case "unsupported":
-        return state.reason;
-      default:
-        return "Vérification…";
-    }
-  };
-
-  const canToggle = state?.status === "on" || state?.status === "off";
-
-  return (
-    <div>
-      <SectionLabel>Notifications</SectionLabel>
-      <div className="overflow-hidden rounded-row border border-[var(--line)] bg-tile">
-        <div className="flex min-h-14 items-center gap-3 px-4 py-[15px]">
-          <div className="flex-1">
-            <p className="m-0 text-15 font-semibold text-ink">Rappels</p>
-            <p className="mt-0.5 mb-0 text-11 leading-[1.4] font-normal text-ink-2">{subtitle()}</p>
-          </div>
-          <span
-            className="flex-none rounded-chip px-2.5 py-1 text-11 font-semibold"
-            style={{
-              background: on ? "var(--color-p3)" : "var(--color-p4)",
-              color: on ? "var(--color-p3-ink)" : "var(--color-p4-ink)",
-            }}
-          >
-            {on ? "actives" : "inactives"}
-          </span>
-        </div>
-
-        {canToggle && (
-          <>
-            <div className="mx-4 h-px bg-[var(--line)]" />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(
-                  on ? disablePush : () => enablePush(VAPID_PUBLIC_KEY),
-                  on ? "Notifications désactivées." : "Notifications activées.",
-                )
-              }
-              className="flex min-h-14 w-full cursor-pointer items-center gap-3 border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-page disabled:opacity-60"
-            >
-              <p className="m-0 flex-1 text-15 font-semibold text-ink">
-                {on ? "Désactiver sur cet appareil" : "Activer sur cet appareil"}
-              </p>
-              {busy && (
-                <span className="animate-br-spin block h-4 w-4 flex-none rounded-full border-2 border-[var(--line-2)] border-t-action" />
-              )}
-            </button>
-          </>
-        )}
-
-        {on && (
-          <>
-            <div className="mx-4 h-px bg-[var(--line)]" />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const { sent, total } = await sendTestPush();
-                  if (sent === 0) throw new Error("Aucune notification n'est partie.");
-                  if (sent < total) throw new Error(`${sent} envoyée(s) sur ${total}.`);
-                }, "Envoyée. Verrouille le téléphone et attends.")
-              }
-              className="flex min-h-14 w-full cursor-pointer items-center gap-3 border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-page disabled:opacity-60"
-            >
-              <div className="flex-1">
-                <p className="m-0 text-15 font-semibold text-ink">Tester une notification</p>
-                <p className="mt-0.5 mb-0 text-11 font-normal text-ink-2">
-                  Envoi immédiat sur cet appareil
-                </p>
-              </div>
-            </button>
-          </>
-        )}
-      </div>
-
-      {message && (
-        <p
-          className="mx-1 mt-2.5 mb-0 text-11 leading-[1.5]"
-          style={{ color: message.kind === "ok" ? "var(--color-ok)" : "var(--color-error)" }}
-        >
-          {message.text}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Gestion des projets.
- *
- * Une liste de lignes plutôt qu'un nuage de puces : une puce n'a pas de place
- * pour dire combien d'items elle porte, ni pour offrir une suppression sans que
- * la cible devienne minuscule. Ici chaque ligne fait 44 px au minimum, la cible
- * tactile d'iOS.
- */
-function ProjectsSection({
-  projects,
-  items,
-  onCreate,
-  onDelete,
-}: {
-  projects: Project[];
-  items: Item[];
-  onCreate: (name: string) => Promise<string | null>;
-  onDelete: (id: string) => Promise<string | null>;
-}) {
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-
-  /** Items OUVERTS du projet : un item terminé n'a plus besoin de destination. */
-  const openCount = (id: string) =>
-    items.filter((i) => i.projectId === id && !i.doneAt).length;
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const value = name.trim();
-    if (!value || busy) return;
-    setBusy(true);
-    setError(null);
-    const err = await onCreate(value);
-    setBusy(false);
-    if (err) setError(err);
-    else setName("");
-  };
-
-  const remove = async (id: string) => {
-    setBusy(true);
-    setError(null);
-    const err = await onDelete(id);
-    setBusy(false);
-    setConfirmId(null);
-    if (err) setError(err);
-  };
-
-  return (
-    <div>
-      <SectionLabel>Projets</SectionLabel>
-
-      <div className="overflow-hidden rounded-row border border-[var(--line)] bg-tile">
-        {projects.map((p, i) => {
-          const skin = skinFor(p);
-          const n = openCount(p.id);
-          const confirming = confirmId === p.id;
-          return (
-            <div key={p.id}>
-              {i > 0 && <div className="mx-4 h-px bg-[var(--line)]" />}
-              <div className="flex min-h-14 items-center gap-3 px-4 py-3">
-                <span
-                  className="inline-flex h-8 flex-none items-center gap-2 rounded-chip px-3 text-13 font-semibold"
-                  style={{ background: skin.bg, color: skin.fg }}
-                >
-                  <ProjectDot shape={shapeFor(p)} />
-                  {p.name}
-                </span>
-                <span className="tnum flex-1 text-11 font-medium text-ink-3">
-                  {n} item{n > 1 ? "s" : ""}
-                </span>
-                {!confirming && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmId(p.id)}
-                    disabled={busy}
-                    aria-label={`Supprimer le projet ${p.name}`}
-                    className="-mr-1.5 flex h-11 w-11 flex-none cursor-pointer items-center justify-center rounded-chip border-none bg-transparent text-ink-3 transition-colors duration-200 disabled:opacity-40"
-                  >
-                    <TrashIcon size={18} />
-                  </button>
-                )}
-              </div>
-
-              {confirming && (
-                <div className="animate-br-in px-4 pb-3">
-                  <p className="m-0 text-13 leading-[1.45] font-medium text-ink">
-                    Supprimer « {p.name} » ?
-                  </p>
-                  <p className="mt-1 mb-2.5 text-11 leading-[1.45] font-normal text-ink-2">
-                    {n === 0
-                      ? "Aucun item ne pointe dessus."
-                      : `${n} item${n > 1 ? "s" : ""} ${n > 1 ? "resteront" : "restera"} et ${n > 1 ? "passeront" : "passera"} sous « Autre » dans Tâches. Rien n'est supprimé.`}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void remove(p.id)}
-                      disabled={busy}
-                      className="h-10 flex-1 cursor-pointer rounded-field border-none bg-action text-13 font-semibold text-white disabled:opacity-60"
-                    >
-                      Supprimer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmId(null)}
-                      className="h-10 flex-1 cursor-pointer rounded-field bg-page text-13 font-semibold text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
-                    >
-                      Annuler
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {!projects.length && (
-          <p className="m-0 px-4 py-5 text-center text-13 font-medium text-ink-3">
-            Aucun projet. Les dictées resteront sans destination.
-          </p>
-        )}
-      </div>
-
-      <form onSubmit={submit} className="mt-2.5 flex gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nom du projet"
-          aria-label="Nom du nouveau projet"
-          maxLength={40}
-          enterKeyHint="done"
-          className="h-11 min-w-0 flex-1 rounded-field border border-[var(--line-2)] bg-tile px-3.5 text-15 text-ink outline-none placeholder:text-ink-3 focus:border-[var(--color-action)]"
-        />
-        <button
-          type="submit"
-          disabled={busy || !name.trim()}
-          className="h-11 flex-none cursor-pointer rounded-field border-none bg-ink px-4 text-13 font-semibold text-page transition-all duration-200 active:scale-[0.985] disabled:cursor-default disabled:opacity-40"
-        >
-          Ajouter
-        </button>
-      </form>
-
-      {error && (
-        <p className="animate-br-in mx-1 mt-2 mb-0 text-11 leading-[1.45] font-semibold text-error">
-          {error}
-        </p>
-      )}
-
-      <p className="mx-1 mt-2.5 mb-0 text-11 leading-[1.5] text-ink-3">
-        Les projets appartiennent à Brief. Aucun plafond de nombre. La teinte et la forme
-        sont attribuées automatiquement, les moins utilisées d&apos;abord.
-      </p>
-    </div>
-  );
-}
 
 export function SettingsScreen({
   projects,
@@ -330,95 +37,334 @@ export function SettingsScreen({
   items: Item[];
   reloading: boolean;
   onReloadProjects: () => void;
-  onCreateProject: (name: string) => Promise<string | null>;
+  onCreateProject: (name: string, tint?: Tint, shape?: Shape) => Promise<string | null>;
   onDeleteProject: (id: string) => Promise<string | null>;
   onClearSession: () => void;
   onLock: () => void;
 }) {
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newTint, setNewTint] = useState<Tint>(1);
+  const [newShape, setNewShape] = useState<Shape>("disc");
+  const [addingProject, setAddingProject] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [busyProjectId, setBusyProjectId] = useState<string | null>(null);
+
+  // Gestion des notifications
+  const [pushState, setPushState] = useState<PushState | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [testPushBusy, setTestPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+
+  const refreshPush = useCallback(() => {
+    void readPushState().then(setPushState);
+  }, []);
+
+  useEffect(refreshPush, [refreshPush]);
+
+  const togglePush = async () => {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      if (pushState?.status === "on") {
+        await disablePush();
+        setPushMessage("Notifications désactivées.");
+      } else {
+        await enablePush(VAPID_PUBLIC_KEY);
+        setPushMessage("Notifications activées !");
+      }
+      refreshPush();
+    } catch (e) {
+      setPushMessage(e instanceof Error ? e.message : "Échec de modification.");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const testPush = async () => {
+    setTestPushBusy(true);
+    setPushMessage(null);
+    try {
+      await sendTestPush();
+      setPushMessage("Notification de test envoyée !");
+    } catch (e) {
+      setPushMessage(e instanceof Error ? e.message : "Échec de l'envoi test.");
+    } finally {
+      setTestPushBusy(false);
+    }
+  };
+
+  // Exportation des données en JSON
+  const handleExportData = () => {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      projects,
+      items,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `brief-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCreateProjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim() || creating) return;
+    setCreating(true);
+    try {
+      await onCreateProject(newProjectName.trim(), newTint, newShape);
+      setNewProjectName("");
+      setAddingProject(false);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const isPushActive = pushState?.status === "on";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-none px-[26px] pt-2.5 pb-2">
-        <h1 className="m-0 text-27 font-semibold tracking-[-0.5px] text-ink">Réglages</h1>
+      <div className="flex-none px-[26px] pt-2 pb-1">
+        <h1 className="m-0 text-27 font-bold tracking-tight text-ink">Réglages</h1>
+        <p className="mt-0.5 mb-0 text-13 font-normal text-ink-2">
+          Gestion des projets, synchronisation et préférences
+        </p>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-[22px] pt-2.5 pb-5">
-        <div>
-          <SectionLabel>Stockage</SectionLabel>
-          <div className="overflow-hidden rounded-row border border-[var(--line)] bg-tile">
-            <div className="flex min-h-14 items-center gap-3 px-4 py-[15px]">
-              <div className="flex-1">
-                <p className="m-0 text-15 font-semibold text-ink">Brief</p>
-                <p className="mt-0.5 mb-0 text-11 font-normal text-ink-2">
-                  {projects.length} projet{projects.length > 1 ? "s" : ""} · aucun plafond
-                </p>
+      <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-2 pb-6">
+        {/* Section 1 : Projets */}
+        <div className="mb-2 flex items-center justify-between">
+          <SectionLabel>Projets ({projects.length})</SectionLabel>
+          <button
+            type="button"
+            onClick={() => setAddingProject(!addingProject)}
+            className="flex h-7 items-center gap-1 cursor-pointer rounded-chip border-none px-2.5 text-11 font-semibold text-white transition-transform active:scale-95"
+            style={{ background: "var(--color-action)" }}
+          >
+            <PlusIcon size={13} />
+            Nouveau
+          </button>
+        </div>
+
+        {/* Formulaire de création de projet */}
+        {addingProject && (
+          <form
+            onSubmit={handleCreateProjectSubmit}
+            className="mb-3.5 rounded-tile border bg-tile p-4 shadow-[var(--e1)] animate-br-in"
+            style={{ borderColor: "var(--line)" }}
+          >
+            <span className="block text-11 font-bold tracking-wider text-ink-3 uppercase mb-2">
+              Créer un projet
+            </span>
+            <input
+              type="text"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder="Nom du projet (ex: Freelance, Maison...)"
+              className="w-full rounded-field border bg-page px-3 py-2 text-14 font-medium text-ink placeholder:text-ink-3 focus:outline-none"
+              style={{ borderColor: "var(--line-2)" }}
+            />
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {/* Choix de teinte */}
+                <select
+                  value={newTint}
+                  onChange={(e) => setNewTint(Number(e.target.value) as Tint)}
+                  className="h-8 rounded-chip border bg-page px-2 text-11 font-semibold text-ink focus:outline-none"
+                  style={{ borderColor: "var(--line-2)" }}
+                >
+                  <option value={1}>Lilas (p1)</option>
+                  <option value={2}>Ardoise (p2)</option>
+                  <option value={3}>Sauge (p3)</option>
+                  <option value={4}>Sable (p4)</option>
+                  <option value={5}>Argile (p5)</option>
+                  <option value={6}>Acier (p6)</option>
+                  <option value={7}>Lin (p7)</option>
+                  <option value={8}>Glacier (p8)</option>
+                </select>
+
+                {/* Choix de forme */}
+                <select
+                  value={newShape}
+                  onChange={(e) => setNewShape(e.target.value as Shape)}
+                  className="h-8 rounded-chip border bg-page px-2 text-11 font-semibold text-ink focus:outline-none"
+                  style={{ borderColor: "var(--line-2)" }}
+                >
+                  <option value="disc">Disque ●</option>
+                  <option value="square">Carré ■</option>
+                  <option value="diamond">Losange ◆</option>
+                  <option value="ring">Anneau ◯</option>
+                  <option value="capsule">Pilule ⬭</option>
+                </select>
               </div>
-              <span
-                className="flex-none rounded-chip px-2.5 py-1 text-11 font-semibold"
-                style={{ background: "var(--color-p3)", color: "var(--color-p3-ink)" }}
-              >
-                autonome
-              </span>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAddingProject(false)}
+                  className="h-8 cursor-pointer rounded-chip border-none bg-transparent px-2.5 text-12 font-medium text-ink-3"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newProjectName.trim() || creating}
+                  className="h-8 cursor-pointer rounded-chip border-none px-3.5 text-12 font-semibold text-white transition-opacity disabled:opacity-40"
+                  style={{ background: "var(--color-action)" }}
+                >
+                  {creating ? "Création…" : "Ajouter"}
+                </button>
+              </div>
             </div>
+          </form>
+        )}
 
-            <div className="mx-4 h-px bg-[var(--line)]" />
+        {/* Liste des projets */}
+        <div className="flex flex-col gap-2 mb-4">
+          {projects.map((p) => {
+            const skin = skinFor(p);
+            const count = items.filter((i) => i.projectId === p.id && !i.doneAt).length;
+            const isDeleting = busyProjectId === p.id;
 
-            <button
-              type="button"
-              onClick={onReloadProjects}
-              disabled={reloading}
-              className="flex min-h-14 w-full cursor-pointer items-center gap-3 border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-page disabled:opacity-60"
-            >
-              <div className="flex-1">
-                <p className="m-0 text-15 font-semibold text-ink">Recharger les projets</p>
-                <p className="mt-0.5 mb-0 text-11 font-normal text-ink-2">Relit le stockage serveur</p>
+            return (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-3 rounded-row border bg-tile px-4 py-3 shadow-[var(--e1)]"
+                style={{ borderColor: "var(--line)" }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="inline-flex h-6 items-center gap-1.5 rounded-chip px-2 text-12 font-semibold"
+                    style={{ background: skin.bg, color: skin.fg }}
+                  >
+                    <ProjectDot shape={shapeFor(p)} />
+                    {p.name}
+                  </span>
+                  <span className="text-11 font-medium text-ink-3">
+                    {count} tâche{count > 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isDeleting || projects.length <= 1}
+                  onClick={() => {
+                    if (confirm(`Supprimer le projet « ${p.name} » ? Ses tâches basculeront sur le projet par défaut.`)) {
+                      setBusyProjectId(p.id);
+                      void onDeleteProject(p.id).finally(() => setBusyProjectId(null));
+                    }
+                  }}
+                  title="Supprimer ce projet"
+                  aria-label={`Supprimer ${p.name}`}
+                  className="cursor-pointer border-none bg-transparent p-1 text-ink-3 transition-colors hover:text-error disabled:opacity-30"
+                >
+                  <TrashIcon size={16} />
+                </button>
               </div>
-              {reloading && (
-                <span className="animate-br-spin block h-4 w-4 flex-none rounded-full border-2 border-[var(--line-2)] border-t-action" />
-              )}
-            </button>
-          </div>
+            );
+          })}
         </div>
 
-        <NotificationsSection />
+        {/* Bouton pour recharger les projets depuis le serveur */}
+        <button
+          type="button"
+          disabled={reloading}
+          onClick={onReloadProjects}
+          className="mb-4 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-chip border border-[var(--line-2)] bg-page text-12 font-semibold text-ink transition-transform active:scale-95 disabled:opacity-50"
+        >
+          {reloading ? "Synchronisation en cours…" : "↻ Forcer la synchronisation des projets"}
+        </button>
 
-        <ProjectsSection
-          projects={projects}
-          items={items}
-          onCreate={onCreateProject}
-          onDelete={onDeleteProject}
-        />
-
-        <div>
-          <SectionLabel>Session</SectionLabel>
-          <div className="overflow-hidden rounded-row border border-[var(--line)] bg-tile">
-            <button
-              type="button"
-              onClick={onClearSession}
-              className="min-h-14 w-full cursor-pointer border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-page"
-            >
-              <p className="m-0 text-15 font-semibold text-action">Vider la session</p>
-              <p className="mt-0.5 mb-0 text-11 font-normal text-ink-2">
-                Efface transcription et historique local
+        {/* Section 2 : Notifications & Rappels */}
+        <SectionLabel>Notifications Web Push</SectionLabel>
+        <div className="rounded-tile border bg-tile p-4 shadow-[var(--e1)] mb-4" style={{ borderColor: "var(--line)" }}>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="m-0 text-15 font-semibold text-ink">Rappels en temps réel</p>
+              <p className="mt-0.5 mb-0 text-11 text-ink-2">
+                {isPushActive
+                  ? "Actives sur cet appareil (serveur VPS connecté)"
+                  : "Inactives — active-les pour recevoir les rappels"}
               </p>
+            </div>
+            <span
+              className="rounded-chip px-2.5 py-1 text-11 font-bold"
+              style={{
+                background: isPushActive ? "var(--color-p3)" : "var(--color-p4)",
+                color: isPushActive ? "var(--color-p3-ink)" : "var(--color-p4-ink)",
+              }}
+            >
+              {isPushActive ? "ON" : "OFF"}
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              disabled={pushBusy}
+              onClick={() => void togglePush()}
+              className="flex-1 h-9 cursor-pointer rounded-chip border-none px-3 text-12 font-semibold text-white shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+              style={{ background: isPushActive ? "var(--color-ink)" : "var(--color-action)" }}
+            >
+              {pushBusy ? "Traitement…" : isPushActive ? "Désactiver" : "Activer les rappels"}
             </button>
 
-            <div className="mx-4 h-px bg-[var(--line)]" />
+            {isPushActive && (
+              <button
+                type="button"
+                disabled={testPushBusy}
+                onClick={() => void testPush()}
+                className="h-9 cursor-pointer rounded-chip border border-[var(--line-2)] bg-page px-3 text-12 font-semibold text-ink transition-transform active:scale-95 disabled:opacity-50"
+              >
+                {testPushBusy ? "Envoi…" : "Tester 🔔"}
+              </button>
+            )}
+          </div>
+
+          {pushMessage && (
+            <p className="mt-2.5 mb-0 text-12 font-semibold text-action">{pushMessage}</p>
+          )}
+        </div>
+
+        {/* Section 3 : Sauvegarde & Sécurité */}
+        <SectionLabel>Sauvegarde & Sécurité</SectionLabel>
+        <div className="rounded-tile border bg-tile p-4 shadow-[var(--e1)] mb-4" style={{ borderColor: "var(--line)" }}>
+          <div className="flex flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={handleExportData}
+              className="flex h-10 w-full cursor-pointer items-center justify-between rounded-row border border-[var(--line)] bg-page px-4 text-13 font-semibold text-ink transition-transform active:scale-98"
+            >
+              <span>Exporter mes données en JSON</span>
+              <span className="text-11 text-ink-3">Télécharger 💾</span>
+            </button>
 
             <button
               type="button"
-              onClick={onLock}
-              className="min-h-14 w-full cursor-pointer border-none bg-transparent px-4 py-[15px] text-left transition-colors duration-200 hover:bg-page"
+              onClick={() => {
+                if (confirm("Vider la session locale ? (Les données sur le VPS restent intactes)")) {
+                  onClearSession();
+                }
+              }}
+              className="flex h-10 w-full cursor-pointer items-center justify-between rounded-row border border-[var(--line)] bg-page px-4 text-13 font-semibold text-error transition-transform active:scale-98"
             >
-              <p className="m-0 text-15 font-semibold text-ink">Verrouiller</p>
-              <p className="mt-0.5 mb-0 text-11 font-normal text-ink-2">Redemande le code</p>
+              <span>Vider le cache local</span>
+              <span className="text-11 text-error opacity-70">Réinitialiser</span>
             </button>
           </div>
         </div>
 
-        <p className="mx-1 my-0 text-11 text-ink-3">
-          Brief · transcription Groq Whisper · structuration LLM · rappels Web Push
-        </p>
+        {/* Verrouiller l'application */}
+        <button
+          type="button"
+          onClick={onLock}
+          className="mt-2 flex h-11 w-full cursor-pointer items-center justify-center rounded-tile border-none bg-ink text-14 font-semibold text-page shadow-[var(--e2)] transition-transform active:scale-95"
+        >
+          Verrouiller l&apos;application 🔒
+        </button>
       </div>
     </div>
   );

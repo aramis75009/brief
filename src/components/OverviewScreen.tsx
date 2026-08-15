@@ -168,9 +168,9 @@ export function OverviewScreen({
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
   const header = (subtitle: string) => (
-    <div className="flex-none px-[26px] pt-2.5 pb-2">
-      <h1 className="m-0 text-27 font-semibold tracking-[-0.7px]">Vision</h1>
-      <p className="mt-1 mb-0 text-13 font-normal text-ink-2">{subtitle}</p>
+    <div className="flex-none px-[26px] pt-2 pb-1">
+      <h1 className="m-0 text-27 font-bold tracking-tight text-ink">Vision</h1>
+      <p className="mt-0.5 mb-0 text-13 font-normal text-ink-2">{subtitle}</p>
     </div>
   );
 
