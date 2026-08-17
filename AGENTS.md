@@ -94,7 +94,7 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
   `DECISIONS.md` — elle renverse l'écart du 14/08). Synchro Brief → calendrier
   Apple, latence ~15 min **acceptée** : les rappels à court terme restent en
   Web Push dans Brief, seuls les résumés matin/soir passent par le calendrier.
-  État : décision actée, implémentation à faire.
+  Implémenté : `src/lib/caldav.ts` + route cron `caldav-sync`.
 - **C'est le serveur qui possède l'horloge.** iOS ne donne aucune API de
   notification programmée à une PWA — ni Notification Triggers, ni Background
   Sync, ni Periodic Background Sync, ni Background Fetch.

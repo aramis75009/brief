@@ -79,6 +79,7 @@ services:
         apk add --no-cache curl >/dev/null
         while true; do
           curl -fsS -m 30 -H "Authorization: Bearer $$BRIEF_CRON_TOKEN" http://app:3000/api/cron/reminders || echo '[cron] passage échoué'
+          curl -fsS -m 30 -H "Authorization: Bearer $$BRIEF_CALDAV_TOKEN" http://app:3000/api/cron/caldav-sync || echo '[cron] caldav échoué'
           sleep 60
         done
 

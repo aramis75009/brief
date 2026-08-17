@@ -66,7 +66,10 @@ jamais le mot de passe Apple) → module CalDAV côté serveur → écriture des
 items datés en VEVENT/VTODO dans un calendrier iCloud dédié → hook dans le
 conteneur cron existant.
 
-**Statut.** 🔶 Décision actée, implémentation à faire.
+**Statut.** ✅ Implémenté (branche `feat/caldav-sync`) : module `src/lib/caldav.ts`
++ route `/api/cron/caldav-sync` (jeton `BRIEF_CALDAV_TOKEN`, garde-fou 15 min).
+Connexion iCloud testée en réel (découverte + lecture, puis PUT/DELETE curl
+201/204). Suite : 104/104 ✓. Déploiement du cron sur le VPS à faire.
 
 ---
 
