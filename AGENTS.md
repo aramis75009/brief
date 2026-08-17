@@ -10,6 +10,7 @@ que tous chargent. Une règle qui n'est pas ici n'est appliquée par personne.
 | Fichier | Quand le lire |
 |---|---|
 | **`HANDOFF.md`** | **Toujours, en premier.** Où en est le projet, maintenant. |
+| **`DECISIONS.md`** | **Toujours, en deuxième.** Les choix critiques d'Aramis et leur POURQUOI. Ne pas re-débattre ce qui y est inscrit. |
 | `AGENTS.md` | Ce fichier. Les règles qui ne changent pas. |
 | `TODOS.md` | Ce qui est différé. Rien de différé ne vit ailleurs. |
 | `README.md` | Fonctionnement, routes, déploiement, variables d'environnement. |
@@ -65,7 +66,9 @@ if (denied) return denied;
 ```
 
 L'URL de déploiement est publique ; `src/lib/guard.ts` est la seule barrière.
-L'écran PIN et le `sessionStorage` ne sont que de l'UX, ils ne protègent rien.
+L'écran PIN et la mémorisation locale (localStorage) ne sont que de l'UX, ils ne
+protègent rien — depuis le 2026-08-17, le code est saisi une fois par appareil
+puis mémorisé (`DECISIONS.md`).
 
 `/api/cron/reminders` et `/api/capture` portent un **jeton machine**, pas le
 PIN : un secret déposé dans une crontab ou un raccourci iOS ne doit pas ouvrir
@@ -87,9 +90,11 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
 - **L'`id` d'un item est généré avant le premier envoi et réutilisé.** Un
   second envoi écrase au lieu de dupliquer : double-clic et rejeu sont
   inoffensifs.
-- **CalDAV a été écarté et ne revient pas sans nouvelle décision.** Pas de push
-  APNs pour un compte CalDAV tiers sur iOS → plancher de synchro d'environ
-  15 minutes, ce qui casse tout rappel à court terme.
+- **CalDAV Apple est réactivé depuis le 2026-08-17** (décision Aramis,
+  `DECISIONS.md` — elle renverse l'écart du 14/08). Synchro Brief → calendrier
+  Apple, latence ~15 min **acceptée** : les rappels à court terme restent en
+  Web Push dans Brief, seuls les résumés matin/soir passent par le calendrier.
+  État : décision actée, implémentation à faire.
 - **C'est le serveur qui possède l'horloge.** iOS ne donne aucune API de
   notification programmée à une PWA — ni Notification Triggers, ni Background
   Sync, ni Periodic Background Sync, ni Background Fetch.
