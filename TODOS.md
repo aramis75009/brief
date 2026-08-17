@@ -15,10 +15,11 @@ n'a donc aucun plafond de projets.
 | Hébergement | VPS Hostinger, `docker-compose.yml` (app + cron + volume `brief-data`), sauvegarde par `deploy/backup.sh`. |
 | Client | PWA installée sur iPhone. Dictée → Whisper → structuration LLM → revue → enregistrement. |
 
-**CalDAV a été écarté** et ne doit pas revenir sans nouvelle décision : un compte
-CalDAV tiers sur iOS n'a pas de push APNs, donc un plancher de synchronisation
-d'environ 15 minutes qui casse tout rappel à court terme. Un serveur qui tourne
-24 h/24 pousse à l'instant exact.
+**CalDAV Apple a été réactivé le 2026-08-17** (décision Aramis, `DECISIONS.md`) :
+la synchro Brief → calendrier Apple est **implémentée et déployée**
+(`src/lib/caldav.ts` + `/api/cron/caldav-sync`). La latence ~15 min d'un compte
+CalDAV tiers est acceptée car les rappels à court terme restent en Web Push
+dans Brief — le calendrier Apple sert les résumés matin/soir, pas les rappels.
 
 ⚠️ Le journal de décisions mentionne encore « Postgres » et un « flux
 `calendar.ics` en lecture seule ». **Ni l'un ni l'autre n'existe dans le code.**
@@ -156,10 +157,22 @@ raison nouvelle.
 
 ## P2 — Prévu, à faire plus tard
 
-**Tranché par Aramis le 2026-08-11 :** ces deux chantiers sont validés, ils
-avaient simplement été oubliés. Ce ne sont donc pas des questions ouvertes. Le
-pour et le contre restent écrits parce qu'ils décrivent les pièges de mise en
-œuvre, pas parce que la décision serait à reprendre.
+**Tranché par Aramis le 2026-08-15 :**
+
+### Version Desktop & Vue Kanban (Trello-like)
+- Refonte / layout adapté grand écran (navigation latérale, vue d'ensemble étendue).
+- Vue en colonnes Kanban / Board interactif avec glisser-déposer (Drag & Drop) d'un statut/horizon à un autre.
+- Prototype préliminaire / preview HTML via Claude Design.
+
+### Workflow Conversationnel Telegram ↔ Hermes ↔ Brief
+- Consultation des tâches en langage naturel (synthèse ultra lisible, priorités, deadlines).
+- Actions directes depuis Telegram : cocher/valider une tâche ("la 1 est faite"), reporter/décaler une date, ajouter une tâche sur un projet ("sur Trezo", "sur Frip & Trend").
+- Intégration directe VPS via les endpoints API de Brief.
+
+### Évolutions n8n & Automatisations
+- Digest du matin (8h30) amélioré avec gestion d'erreurs (alertes en cas de fail).
+- Automatisation du bilan du soir (récap à 19h30 des tâches faites vs reportées).
+- Webhook d'ingestion rapide (transférer un message Telegram ou un vocal pour créer une tâche).
 
 ### Passer le stockage à Postgres
 - **État :** annoncé dans le journal de décisions, jamais construit. Le code livré
@@ -247,6 +260,7 @@ pour et le contre restent écrits parce qu'ils décrivent les pièges de mise en
 
 ## Retiré — ne pas réintroduire
 
-Ces éléments dépendaient d'un noyau CalDAV qui ne sera pas construit :
-**cible CalDAV générique** (Nextcloud, Fastmail) et **sous-tâches par
-`RELATED-TO`**, dont l'intention survit sous une autre forme ci-dessus.
+Ces éléments dépendaient d'un noyau CalDAV générique, abandonné : **cible
+CalDAV générique** (Nextcloud, Fastmail) — la synchro du 17/08 vise iCloud
+Apple uniquement, par décision — et **sous-tâches par `RELATED-TO`**, dont
+l'intention survit sous une autre forme ci-dessus.

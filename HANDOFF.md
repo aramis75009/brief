@@ -1,86 +1,101 @@
-# HANDOFF — Brief
-
-**Ce fichier ne contient qu'une seule passation : la dernière.** Avant de
-travailler, lis-le en entier. Avant de partir, remplace-le et archive celui que
-tu remplaces dans `docs/handoffs/`.
-
-Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
-« Terminer une session ». L'index des passations passées est en bas de page.
-
----
-
-# Passation — 2026-08-15 · Refonte globale UI : PIN Bento, Réglages avancés, harmonisation des titres et fix overflow
+# Passation — 2026-08-17 · PIN mémoire + synchro CalDAV Apple
 
 | | |
 |---|---|
-| **Agent** | Hermes Agent v0.20.0 · `google/gemini-3.7-flash` via OpenRouter |
-| **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits** | `feat: global UI overhaul (pin screen, settings, unified bold titles, fix capture overflow and vision button)` |
+| **Agent** | Hermes Agent · `deepseek/deepseek-v4-flash-0731` via OpenRouter |
+| **Branche** | `feat/task-completion` — **la branche que sert le VPS** (fusion de `feat/remember-device-pin` + `feat/caldav-sync`) |
+| **Commits** | `f2ad5e4` (PIN mémorisé), `36fcdf5` (DECISIONS.md), `df4af5e` (CalDAV) — **déployé en prod** |
 
 ## Goal — l'objectif
 
-Finaliser l'homogénéité visuelle de toute l'application Brief :
-1. **Fix Capture** : suppression de l'overflow du message d'erreur micro (carte compacte intégrée) et coloration du bouton KPI Vision en couleur d'action vive.
-2. **Harmonisation typographique** : standardisation des titres de toutes les pages (`Capture`, `Tâches`, `Vision`, `Réglages`, `Brief`) en `text-27 font-bold tracking-tight text-ink`.
-3. **Refonte de l'écran PIN (`PinGate.tsx`)** : logo `B` en bloc bento noir contrasté, touches tactiles surélevées en cartes tuiles avec retours visuels précis.
-4. **Refonte de l'écran Réglages (`SettingsScreen.tsx`)** :
-   - Gestion complète des projets (création avec teintes et formes personnalisées, suppression sécurisée).
-   - Bouton de synchronisation manuelle forcée avec le serveur VPS.
-   - Module Web Push avec activation / désactivation et test de notification en direct.
-   - Outil d'export complet des données en JSON (`brief-backup-*.json`).
-   - Bouton de verrouillage applicatif direct.
+Deux décisions fortes d'Aramis (17/08), actées dans `DECISIONS.md` et livrées en
+production : 1) **supprimer la friction du PIN** à l'ouverture (le code se saisit
+une fois par appareil, puis Brief s'ouvre direct) ; 2) **réactiver CalDAV Apple**
+— synchro Brief → calendrier Apple **obligatoire**, latence ~15 min acceptée.
 
 ## Current state — ce qui a été fait
 
-- **`src/components/CaptureScreen.tsx`** :
-  - Bouton Vision coloré en `--color-action` avec texte blanc.
-  - Alerte d'erreur/annulation compactée sans débordement sous l'écran.
-- **`src/components/PinGate.tsx`** :
-  - Nouveau logo Bento `B` sur fond sombre.
-  - Pavé numérique composé de cartes tactiles `rounded-2xl border bg-tile shadow-[var(--e1)]` avec typographie 24px en gras.
-- **`src/components/SettingsScreen.tsx`** :
-  - Formulaire de création de projets avec sélection de teintes (1 à 8) et de formes (disque, carré, losange, anneau, pilule).
-  - Gestionnaire de notifications avec bouton de test 🔔.
-  - Fonction d'export JSON complète téléchargeable.
-- **`src/components/TasksScreen.tsx` & `src/components/OverviewScreen.tsx`** :
-  - Harmonisation des titres en gras avec tracking serré.
+1. **PIN « appareil mémorisé »** : `src/lib/pin.ts` passe de `sessionStorage`
+   (vidé à chaque fermeture) à `localStorage` (persistant). Le serveur ne change
+   **pas** : `requirePin` / `x-brief-pin` / `BRIEF_PIN` restent la seule
+   barrière, vérifiée en prod (401 sans PIN, 200 avec).
+2. **`DECISIONS.md` créé** : journal permanent des décisions d'Aramis (10
+   entrées, du 06/08 au 17/08), référencé dans AGENTS.md comme lecture
+   obligatoire juste après HANDOFF.md. Deux invariants AGENTS.md obsolètes
+   corrigés (sessionStorage → localStorage ; CalDAV écarté → réactivé).
+3. **Synchro CalDAV Apple implémentée et DÉPLOYÉE** :
+   - `src/lib/caldav.ts` : découverte PROPFIND (principal → calendar-home-set
+     → calendrier `home/` = « Personnel »), mapping items datés → VEVENT
+     (all-day ou horaire, rrule RFC 5545, priorité), UID stable `brief-<id>`
+     (PUT idempotent, DELETE des terminés), garde-fou 15 min persisté dans
+     `BRIEF_DATA_DIR`. Tout le calcul de date passe par `zoned.ts`.
+   - Route `/api/cron/caldav-sync` (jeton machine `BRIEF_CALDAV_TOKEN`), appelée
+     par le conteneur cron existant (docker-compose.yml) chaque minute ; le
+     garde-fou interne la fait sortir sans réseau hors intervalle.
+   - Secrets iCloud (`BRIEF_CALDAV_USER`, `BRIEF_CALDAV_PASSWORD`) + jeton
+     ajoutés au `.env.production` du VPS — **jamais dans git** (`.env.local`
+     gitignoré, vérifié non tracké).
+4. **Mise en production** : fusion fast-forward dans `feat/task-completion`,
+   push, `git pull` + rebuild + `up -d` sur le VPS (`/docker/brief`).
+   Conteneurs recréés, `brief-app-1` healthy.
+
+## Decisions — choix critiques ou irréversibles
+
+- **CalDAV réactivé (renverse l'écart du 14/08).** La latence ~15 min est
+  acceptée car les rappels courts restent en Web Push dans Brief ; le calendrier
+  Apple sert les résumés matin/soir. Sens : **Brief → Apple seulement** pour
+  commencer (aller-retour décidé plus tard). Détails : `DECISIONS.md`.
+- **PIN une fois par appareil.** Mémorisation `localStorage`, sécurité serveur
+  inchangée. Détails : `DECISIONS.md`.
+- **Calendrier cible = « Personnel » (`home/`)** — décision d'Aramis, pas de
+  calendrier dédié. `BRIEF_CALDAV_CALENDAR_PATH` vide par défaut.
+
+## Changed — fichiers et composants
+
+| Fichier | Nature |
+|---|---|
+| `src/lib/pin.ts` | sessionStorage → localStorage (PIN mémorisé) |
+| `src/components/PinGate.tsx` | Copy : « Une seule fois sur cet appareil » |
+| `src/app/api/session/route.ts` | Commentaire mis à jour |
+| `DECISIONS.md` | **Nouveau** — journal des décisions (10 entrées) |
+| `AGENTS.md` | Table des fichiers + 2 invariants corrigés |
+| `src/lib/caldav.ts` | **Nouveau** — module de synchro CalDAV |
+| `src/lib/caldav.test.ts` | **Nouveau** — 9 tests unitaires (génération ICS) |
+| `src/lib/caldav.integration.test.ts` | **Nouveau** — test réseau (sauté sans `.env.local`) |
+| `src/app/api/cron/caldav-sync/route.ts` | **Nouveau** — route cron (jeton machine) |
+| `.env.example` / `.env.production.example` | 5 variables CalDAV documentées |
+| `docker-compose.yml` | Cron appelle aussi `/api/cron/caldav-sync` |
 
 ## Validations — passants / échoués / non lancés
 
-Lancées **après** l'implémentation complète :
-
-| Commande | Résultat |
-|---|---|
-| `npm run lint` | ✅ aucune erreur, aucun warning |
-| `npx tsc --noEmit` | ✅ types stricts validés |
-| `npx vitest run` | ✅ **94 tests passent** (7 test suites) |
+- `npx eslint .` : ✅ 0 erreur.
+- `npx tsc --noEmit` : ✅ 0 erreur.
+- `npx vitest run` : ✅ **104/104** (94 existants + 9 caldav + 1 intégration
+  réseau réelle exécutée avec `.env.local` présent).
+- Connexion iCloud réelle : ✅ découverte + lecture via le module (test
+  d'intégration) ; PUT/DELETE curl 201/204 (événement de test supprimé).
+- **Prod** : ✅ `GET /` 200 ; `/api/items` sans PIN 401 ; **premier passage de
+  la synchro : `desired=8 put=8 failures=0`**, puis `skipped nextSyncIn=840s`.
+  ✅ **8 événements `brief-*` confirmés par lecture CalDAV indépendante** dans
+  le calendrier Personnel.
+- MKCALENDAR (créer un calendrier via CalDAV) : ❌ **403 iCloud** — les
+  calendriers se créent côté app Apple. Contourné (calendrier Personnel).
 
 ## Blockers — ce qui bloque
 
-Rien.
+Rien. À savoir : `BRIEF_CALDAV_TOKEN` dans `.env.production` du VPS et dans le
+fichier de la machine locale — les deux doivent rester identiques si on le
+régénère. Les identifiants iCloud ne sont **que** sur le VPS et en `.env.local`
+local (jamais dans git).
 
 ## Next — la prochaine action
 
-Déployer sur le VPS et tester l'expérience complète sur l'iPhone.
-
----
-
-## Historique des passations
-
-| Date | Sujet | Agent | Fiche |
-|---|---|---|---|
-| **2026-08-15** | **Refonte globale UI (PIN, Réglages, Titres unifiés & fix Capture)** | **Hermes Agent** | *(cette passation)* |
-| 2026-08-15 | Refonte page Capture (Bento Hero & design moderne) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-refonte-capture-bento-hero.md) |
-| 2026-08-15 | Refonte page Vision (focus actionable, horizon interactif) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-refonte-vision-focus-et-horizon.md) |
-| 2026-08-15 | Optimisation complète tâches (recherche, sections, ajout direct, swipe) | Hermes Agent | [fiche](docs/handoffs/2026-08-15-workflow-taches-complet.md) |
-| 2026-08-15 | Dates langage naturel coloré, priorités & synthèse | Hermes Agent | [fiche](docs/handoffs/2026-08-15-dates-naturelles-et-priorites-design.md) |
-| 2026-08-15 | Tri multi-critères et filtre des tâches terminées | Hermes Agent | [fiche](docs/handoffs/2026-08-15-tri-et-filtre-taches-faites.md) |
-| 2026-08-14 | Brief parle à n8n, récap du matin sur Telegram | Claude Code | [fiche](docs/handoffs/2026-08-14-n8n-digest-telegram.md) |
-| 2026-08-14 | Déploiement prod + correctif projets invisibles | **Hermes** | [fiche](docs/handoffs/2026-08-14-deploiement-et-correctif-projets.md) |
-| 2026-08-14 | Système de passation + correctif fuseau | Claude Code | [fiche](docs/handoffs/2026-08-14-systeme-passation-et-fuseau.md) |
-| 2026-08-14 | Saisie clavier et modification des items | **Hermes** | [fiche](docs/handoffs/2026-08-14-saisie-clavier-et-edition-items.md) |
-| 2026-08-13 | En ligne, en TLS, et le Web Push sonne | Claude Code | [fiche](docs/handoffs/2026-08-13-vps-tls-et-web-push-prouve.md) |
-| 2026-08-11 | Projets gérés depuis Réglages | Claude Code | [fiche](docs/handoffs/2026-08-11-projets-en-reglages.md) |
-| 2026-08-10 | Le pivot : Brief possède ses données | Claude Code | [fiche](docs/handoffs/2026-08-10-pivot-organiseur-autonome.md) |
-| 2026-08-07 | Chaîne dictée → Todoist, et PWA | Claude Code | [fiche](docs/handoffs/2026-08-07-chaine-complete-et-pwa.md) |
-| 2026-08-06 | Scaffold, UI, garde PIN et micro | Claude Code | [fiche](docs/handoffs/2026-08-06-scaffold-ui-et-garde-pin.md) |
+1. **Aramis : tester sur iPhone** — 1ʳᵉ ouverture après déploiement demande le
+   PIN **une dernière fois** (l'ancien code était en sessionStorage), ensuite
+   Brief s'ouvre direct. Vérifier que les 8 tâches datées apparaissent bien dans
+   l'app Calendrier (calendrier « Personnel ») et qu'elles **disparaissent
+   quand on les coche** dans Brief.
+2. Décider plus tard du sens aller-retour (Apple → Brief) si besoin.
+3. Reprendre la refonte produit (peau Claude Design) — voir
+   `docs/designs/2026-08-16-brief-design-v4.md` ; le modèle produit validé du
+   16/08 ne change pas.
