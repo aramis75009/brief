@@ -110,7 +110,7 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
 
         <h1 className="mt-4 mb-0 text-27 font-bold tracking-tight text-ink">Brief</h1>
         <p className="mt-1 mb-0 text-center text-13 font-normal text-ink-2">
-          Saisis ton code pour déverrouiller
+          Une seule fois sur cet appareil — ensuite Brief s&apos;ouvre direct
         </p>
 
         {/* Indicateurs de saisie PIN */}

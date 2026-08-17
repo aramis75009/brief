@@ -1,9 +1,14 @@
 /**
- * PIN côté client — stocké en sessionStorage (vidé à la fermeture de l'onglet).
+ * PIN côté client — mémorisé par appareil dans localStorage (persistant).
  *
  * ⚠️ Ce module ne protège RIEN par lui-même : c'est de l'UX. La seule barrière
  * réelle est la vérification serveur dans src/lib/guard.ts, que toute route
  * /api/* doit appeler. Ne jamais considérer ce fichier comme un contrôle d'accès.
+ *
+ * Depuis le 2026-08-17, la mémorisation est permanente : le code est saisi
+ * UNE fois par appareil (première ouverture), puis Brief s'ouvre directement.
+ * L'écran PIN ne réapparaît que sur un appareil jamais associé, ou après un
+ * « Verrouiller » explicite, ou si le code serveur a changé (401).
  */
 
 const KEY = "brief:pin";
@@ -12,7 +17,7 @@ export const PIN_HEADER = "x-brief-pin";
 export function getPin(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.sessionStorage.getItem(KEY);
+    return window.localStorage.getItem(KEY);
   } catch {
     return null;
   }
@@ -20,7 +25,7 @@ export function getPin(): string | null {
 
 export function setPin(pin: string): void {
   try {
-    window.sessionStorage.setItem(KEY, pin);
+    window.localStorage.setItem(KEY, pin);
   } catch {
     /* Safari en navigation privée peut refuser l'écriture — on continue en mémoire. */
   }
@@ -41,7 +46,7 @@ export function readStoredTranscript(): string {
 
 export function clearPin(): void {
   try {
-    window.sessionStorage.removeItem(KEY);
+    window.localStorage.removeItem(KEY);
   } catch {
     /* idem */
   }
