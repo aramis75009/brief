@@ -49,13 +49,41 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
         ? Math.round(v.durationMinutes)
         : undefined,
     notes: typeof v.notes === "string" ? v.notes : undefined,
+    subtasks: Array.isArray(v.subtasks) ? v.subtasks.filter(isSubTask) : undefined,
+    audioOrigin: isAudioOrigin(v.audioOrigin) ? v.audioOrigin : undefined,
+    status: v.status === "idea" || v.status === "archived" ? v.status : undefined,
   };
+}
+
+function isSubTask(s: unknown): s is { id: string; title: string; done: boolean } {
+  if (typeof s !== "object" || s === null) return false;
+  const o = s as Record<string, unknown>;
+  return typeof o.id === "string" && typeof o.title === "string" && typeof o.done === "boolean";
+}
+
+function isAudioOrigin(v: unknown): v is import("@/lib/types").AudioOrigin {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.text === "string" && typeof o.highlight === "string"
+    && typeof o.startSec === "number" && typeof o.endSec === "number"
+    && typeof o.durationSec === "number" && typeof o.date === "string"
+    && Array.isArray(o.siblingIds);
 }
 
 export async function GET(req: Request): Promise<Response> {
   const denied = requirePin(req);
   if (denied) return denied;
-  return Response.json({ items: await readItems() });
+
+  const url = new URL(req.url);
+  const statusFilter = url.searchParams.get("status");
+  let items = await readItems();
+  if (statusFilter === "idea" || statusFilter === "active" || statusFilter === "archived") {
+    items = items.filter((i) => (i.status || "active") === statusFilter);
+  } else if (statusFilter === "not-idea") {
+    items = items.filter((i) => i.status !== "idea" && i.status !== "archived");
+  }
+
+  return Response.json({ items });
 }
 
 export async function POST(req: Request): Promise<Response> {
