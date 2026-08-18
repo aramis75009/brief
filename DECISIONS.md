@@ -14,6 +14,35 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-18 · Les suppressions d'occurrences du calendrier sont adoptées (EXDATE)
+
+**Décision.** Quand Aramis supprime une occurrence d'une série récurrente dans
+l'app Calendrier, Brief **adopte** la suppression (champ `exdates` sur l'item,
+écrit en `EXDATE` dans l'ICS) au lieu de la réécrire. Et l'ancre `DTSTART`
+d'une série n'est **plus réadoptée** : `due` est l'occurrence courante
+(avancée par le cron), DTSTART reste l'ancre d'origine.
+
+**Pourquoi.** Le 18/08 au soir, Aramis a supprimé les occurrences du 17/08 de
+« Poster 10 articles » (17:30) et « Reposter 10 articles » (18:00) dans l'app
+Calendrier — elles sont réapparues dans Brief. Deux bugs dans le chemin
+calendrier → Brief : (1) `parseRemoteEvent` ignorait les `EXDATE` du master
+→ le sync ne voyait aucune différence et son PUT **écrasait la suppression** ;
+(2) le sync réadoptait l'ancre DTSTART à chaque passage → l'avancement des
+séries par le cron était annulé et les tâches restaient bloquées sur « hier ».
+
+**Comment.** `src/lib/caldav.ts` : `parseRemoteEvent` lit les EXDATE (lignes
+pliées comprises) ; `remoteDiffers`/`calendarPatch` comparent/adoptent
+`exdates` ; `buildEventIcs` écrit `EXDATE` ; l'ancre DTSTART n'est comparée
+que si l'item n'a pas de récurrence. `src/lib/types.ts` : champ `exdates`.
+Route PATCH : accepte `exdates` (absent = ne pas toucher). 4 tests ajoutés.
+Commits `d5b6430` + `6172bcd` + `0be8a13`, déployés le 18/08. Données
+réparées : EXDATE réappliqués sur iCloud (PUT 204), items avancés au 19/08,
+convergence `adopted=0` vérifiée.
+
+**Statut.** ✅ Fait.
+
+---
+
 ## 2026-08-18 · Le PIN mémorisé survit aux purges iOS (cookie + localStorage)
 
 **Décision.** Le PIN saisi une fois par appareil est mémorisé dans **deux**
