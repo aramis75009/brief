@@ -71,6 +71,16 @@ function sanitizePatch(
   ) {
     out.durationMinutes = Math.round(v.durationMinutes);
   }
+  // Occurrences supprimées (adoptées depuis le calendrier) : tableau de dates
+  // UTC RFC 5545, ou null/absent pour effacer.
+  if (v.exdates === null || v.exdates === undefined) {
+    out.exdates = undefined;
+  } else if (Array.isArray(v.exdates)) {
+    const clean = v.exdates.filter(
+      (d): d is string => typeof d === "string" && /^\d{8}T\d{6}Z$/.test(d),
+    );
+    out.exdates = clean.length > 0 ? clean : undefined;
+  }
   return out;
 }
 
