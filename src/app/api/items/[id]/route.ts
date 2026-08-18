@@ -72,8 +72,9 @@ function sanitizePatch(
     out.durationMinutes = Math.round(v.durationMinutes);
   }
   // Occurrences supprimées (adoptées depuis le calendrier) : tableau de dates
-  // UTC RFC 5545, ou null/absent pour effacer.
-  if (v.exdates === null || v.exdates === undefined) {
+  // UTC RFC 5545. `null` = effacement explicite ; ABSENT = on ne touche pas
+  // (un PATCH {due} ne doit pas effacer les exdates existants).
+  if (v.exdates === null) {
     out.exdates = undefined;
   } else if (Array.isArray(v.exdates)) {
     const clean = v.exdates.filter(
