@@ -132,18 +132,49 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
       dtstart: "20260819",
       dtend: null,
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH,SU",
+      exdates: [],
     });
+  });
+
+  it("parse les EXDATE (occurrences supprimées dans l'app Calendrier), y compris pliées", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-x\r\n" +
+      "DTSTART:20260817T160000Z\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH\r\n" +
+      "EXDATE:20260818T160000Z,20260819T160000Z\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(parseRemoteEvent(ics).exdates).toEqual([
+      "20260818T160000Z",
+      "20260819T160000Z",
+    ]);
   });
 
   it("détecte qu'un horaire distant discorde de celui de Brief (édition manuelle)", () => {
     const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
-    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T120000Z", dtend: "20260818T130000Z", rrule: null })).toBe(false);
-    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T150000Z", dtend: "20260818T160000Z", rrule: null })).toBe(true);
+    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T120000Z", dtend: "20260818T130000Z", rrule: null, exdates: [] })).toBe(false);
+    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T150000Z", dtend: "20260818T160000Z", rrule: null, exdates: [] })).toBe(true);
+  });
+
+  it("détecte une occurrence supprimée dans le calendrier (EXDATE) — le bug des tâches réapparues", () => {
+    const it = item({
+      allDay: false,
+      due: "2026-08-17T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      durationMinutes: 30,
+    });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260817T160000Z",
+      dtend: "20260817T163000Z",
+      rrule: it.rrule,
+      exdates: ["20260818T160000Z"],
+    };
+    expect(remoteDiffers(it, remote)).toBe(true);
+    const patch = calendarPatch(it, remote);
+    expect(patch).toEqual({ exdates: ["20260818T160000Z"] });
   });
 
   it("produit le patch qui aligne Brief sur le calendrier (horaire décalé)", () => {
     const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
-    const patch = calendarPatch(it, { summary: it.title, dtstart: "20260818T180000Z", dtend: "20260818T190000Z", rrule: null });
+    const patch = calendarPatch(it, { summary: it.title, dtstart: "20260818T180000Z", dtend: "20260818T190000Z", rrule: null, exdates: [] });
     expect(patch).toEqual({ due: "2026-08-18T18:00:00Z", allDay: false });
   });
 
@@ -154,13 +185,47 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
       dtstart: "20260818",
       dtend: null,
       rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+      exdates: [],
     });
     expect(patch).toEqual({ rrule: "FREQ=WEEKLY;BYDAY=WE,SA" });
   });
 
   it("renvoie null si le calendrier est identique à Brief (rien à adopter)", () => {
     const it = item();
-    expect(calendarPatch(it, { summary: it.title, dtstart: "20260818", dtend: null, rrule: null })).toBeNull();
+    expect(calendarPatch(it, { summary: it.title, dtstart: "20260818", dtend: null, rrule: null, exdates: [] })).toBeNull();
+  });
+
+  it("ne réadopte PAS l'ancre DTSTART d'une série avancée — le bug des tâches bloquées sur hier", () => {
+    // Le cron a avancé `due` à l'occurrence courante (19/08) ; le master
+    // iCloud garde l'ancre d'origine (17/08). Réadopter l'ancre ramènerait
+    // la série en arrière à chaque passage.
+    const it = item({
+      allDay: false,
+      due: "2026-08-19T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      durationMinutes: 30,
+    });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260817T160000Z",
+      dtend: "20260817T163000Z",
+      rrule: it.rrule,
+      exdates: [],
+    };
+    expect(remoteDiffers(it, remote)).toBe(false);
+    expect(calendarPatch(it, remote)).toBeNull();
+  });
+
+  it("écrit les EXDATE dans l'ICS — le PUT ne réécrit plus les occurrences supprimées", () => {
+    const ics = buildEventIcs(
+      item({
+        allDay: false,
+        due: "2026-08-17T16:00:00Z",
+        rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+        exdates: ["20260818T160000Z"],
+      }),
+    );
+    expect(ics).toContain("EXDATE:20260818T160000Z");
   });
 
   it("dé-escape les titres RFC 5545", () => {

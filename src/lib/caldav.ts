@@ -176,6 +176,11 @@ export function buildEventIcs(item: Item): string | null {
   lines.push(`SUMMARY:${escapeText(item.title)}`);
   if (item.notes) lines.push(`DESCRIPTION:${escapeText(item.notes)}`);
   if (item.rrule) lines.push(`RRULE:${item.rrule}`);
+  // Occurrences supprimées dans l'app Calendrier (adoptées depuis le master) :
+  // sans elles, le PUT suivant les réécrirait et la suppression réapparaîtrait.
+  if (item.exdates && item.exdates.length > 0) {
+    lines.push(`EXDATE:${item.exdates.join(",")}`);
+  }
   // Priorité 1 (Brief) = priorité 1 (RFC 5545, la plus haute).
   lines.push(`PRIORITY:${item.priority}`);
 
@@ -333,6 +338,8 @@ export type RemoteEventFields = {
   dtstart: string | null;
   dtend: string | null;
   rrule: string | null;
+  /** Occurrences supprimées (EXDATE), en UTC RFC 5545. */
+  exdates: string[];
 };
 
 export function parseRemoteEvent(ics: string): RemoteEventFields {
@@ -340,11 +347,18 @@ export function parseRemoteEvent(ics: string): RemoteEventFields {
   const dt = ics.match(/^DTSTART(?:;[^:]*)?:([^\r\n]+)/m);
   const de = ics.match(/^DTEND(?:;[^:]*)?:([^\r\n]+)/m);
   const rr = ics.match(/^RRULE:([^\r\n]+)/m);
+  // EXDATE peut être une ligne unique (`EXDATE:20260818T160000Z`) ou une
+  // ligne pliée RFC 5545 (`EXDATE:20260818T160000Z,20260819T160000Z`).
+  const exdates = (ics.match(/^EXDATE(?:;[^:]*)?:([^\r\n]+)/gm) ?? [])
+    .flatMap((line) => line.replace(/^EXDATE(?:;[^:]*)?:/, "").split(","))
+    .map((v) => v.trim())
+    .filter((v) => /^\d{8}T\d{6}Z?$/.test(v));
   return {
     summary: title ? unescapeText(title[1].trim()) : "",
     dtstart: dt ? dt[1].trim() : null,
     dtend: de ? de[1].trim() : null,
     rrule: rr ? rr[1].trim() : null,
+    exdates,
   };
 }
 
@@ -372,11 +386,19 @@ export function remoteDurationMinutes(remote: RemoteEventFields): number | null 
 export function remoteDiffers(item: Item, remote: RemoteEventFields): boolean {
   const remoteMinutes = remoteDurationMinutes(remote);
   const itemMinutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
+  const itemExdates = item.exdates ?? [];
+  const exdatesDiffer =
+    remote.exdates.length !== itemExdates.length ||
+    remote.exdates.some((d) => !itemExdates.includes(d)) ||
+    itemExdates.some((d) => !remote.exdates.includes(d));
   return (
     remote.summary !== item.title ||
     (remote.rrule ?? null) !== (item.rrule ?? null) ||
-    (remote.dtstart ?? null) !== canonicalDueField(item) ||
-    (remoteMinutes !== null && remoteMinutes !== itemMinutes)
+    // Pour une série, l'ancre DTSTART ne compte pas : `due` est l'occurrence
+    // courante (avancée par le cron), DTSTART reste l'ancre d'origine.
+    ((remote.dtstart ?? null) !== canonicalDueField(item) && !item.rrule) ||
+    (remoteMinutes !== null && remoteMinutes !== itemMinutes) ||
+    exdatesDiffer
   );
 }
 
@@ -393,11 +415,19 @@ export function remoteDueToItem(dtstart: string): string {
   return dtstart;
 }
 
-/** Patch Brief qui aligne l'item sur la version du calendrier (ou null si identique). */
+/**
+ * Patch Brief qui aligne l'item sur la version du calendrier (ou null si identique).
+ *
+ * ⚠️ L'ancre DTSTART n'est réadoptée que si l'item n'a PAS de récurrence :
+ * pour une série, `due` est l'occurrence COURANTE (avancée par le cron des
+ * rappels ou la coche), alors que DTSTART reste l'ancre d'origine. Réadopter
+ * l'ancre à chaque passage ramènerait la série en arrière — c'est le bug
+ * « les tâches restent bloquées sur hier » corrigé le 18/08.
+ */
 export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<Item> | null {
   const patch: Partial<Item> = {};
   if (remote.summary !== "" && remote.summary !== item.title) patch.title = remote.summary;
-  if (remote.dtstart !== null && remote.dtstart !== canonicalDueField(item)) {
+  if (remote.dtstart !== null && remote.dtstart !== canonicalDueField(item) && !item.rrule) {
     patch.due = remoteDueToItem(remote.dtstart);
     patch.allDay = !remote.dtstart.includes("T");
   }
@@ -408,6 +438,14 @@ export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<It
   const itemMinutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
   if (remoteMinutes !== null && remoteMinutes !== itemMinutes) {
     patch.durationMinutes = remoteMinutes;
+  }
+  const itemExdates = item.exdates ?? [];
+  const exdatesDiffer =
+    remote.exdates.length !== itemExdates.length ||
+    remote.exdates.some((d) => !itemExdates.includes(d)) ||
+    itemExdates.some((d) => !remote.exdates.includes(d));
+  if (exdatesDiffer) {
+    patch.exdates = remote.exdates.length > 0 ? remote.exdates : undefined;
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }

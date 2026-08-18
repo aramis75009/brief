@@ -89,6 +89,13 @@ export type DraftItem = {
    * publication Frip & Trend font 30 min (17:30→18:00, 18:00→18:30).
    */
   durationMinutes?: number;
+  /**
+   * Occurrences supprimées d'une série récurrente, en UTC RFC 5545
+   * (`YYYYMMDDTHHMMSSZ`). Adoptées depuis le calendrier quand Aramis
+   * supprime une occurrence dans l'app Calendrier (EXDATE du master) —
+   * sinon le PUT suivant du sync les réécrit et l'occurrence réapparaît.
+   */
+  exdates?: string[];
   notes?: string;
 };
 
