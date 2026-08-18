@@ -230,10 +230,21 @@ export async function discoverCalendarUrl(homeHref: string): Promise<string> {
   return new URL("home/", homeHref).toString();
 }
 
+/** Décodage des entités XML : iCloud renvoie le displayname encodé
+ * (`Vinted Frip&amp;Trend` → `Vinted Frip&Trend`). */
+function decodeXml(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 /**
- * Liste tous les calendriers du compte : displayname (normalisé, espaces de
- * tête/queue retirés) → URL absolue. Les dossiers système (inbox/outbox/
- * notification) sont exclus.
+ * Liste tous les calendriers du compte : displayname (décodé) → URL absolue.
+ * Les dossiers système (inbox/outbox/notification) sont exclus.
  */
 export async function discoverCalendars(homeHref: string): Promise<Map<string, string>> {
   const res = await caldavFetch(homeHref, {
@@ -254,12 +265,17 @@ export async function discoverCalendars(homeHref: string): Promise<Map<string, s
   while ((block = responseRe.exec(xml)) !== null) {
     const body = block[1];
     const href = body.match(/<href[^>]*>([^<]*)<\/href>/)?.[1];
-    const name = body.match(/<displayname[^>]*>([^<]*)<\/displayname>/i)?.[1];
+    const nameRaw = body.match(/<displayname[^>]*>([^<]*)<\/displayname>/i)?.[1];
     const isCalendar = body.includes("<collection/>") && body.includes("urn:ietf:params:xml:ns:caldav");
-    if (!href || !name || !isCalendar) continue;
-    const base = homeHref.replace(/\/$/, "") + "/";
-    const abs = /^https?:/i.test(href) ? href : new URL(href.replace(/^\//, ""), base).toString();
-    out.set(name.trim(), abs);
+    if (!href || !nameRaw || !isCalendar) continue;
+    const name = decodeXml(nameRaw.trim());
+    // Le href peut être absolu (`/16391108573/calendars/X/`) ou relatif
+    // (`home/`). `new URL(href, homeHref)` résout les deux : un href qui
+    // commence par `/` s'ancre sur l'ORIGINE, pas sur le chemin du home. Il ne
+    // faut PAS dépouiller ce `/` de tête, sinon on duplique le chemin du home
+    // (`/16391.../calendars/16391.../`) et iCloud répond 400 au calendar-query.
+    const abs = /^https?:/i.test(href) ? href : new URL(href, homeHref).toString();
+    out.set(name, abs);
   }
   return out;
 }
