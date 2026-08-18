@@ -1,7 +1,7 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readItems } from "./store";
+import { patchItem, readItems } from "./store";
 import { shiftDays, zonedParts } from "./zoned";
 import type { Item } from "./types";
 
@@ -87,6 +87,7 @@ export type CalDavSyncRun = {
   desired: number;
   existing: number;
   put: number;
+  adopted: number;
   deleted: number;
   failures: { uid: string; error: string }[];
 };
@@ -282,7 +283,7 @@ export async function discoverCalendars(homeHref: string): Promise<Map<string, s
 
 /* --- Lecture de l'existant ------------------------------------------------- */
 
-export type RemoteEvent = { href: string; uid: string };
+export type RemoteEvent = { href: string; uid: string; ics: string };
 
 /** Liste les événements déjà présents dont l'UID commence par `brief-`. */
 export async function listBriefEvents(calendarUrl: string): Promise<RemoteEvent[]> {
@@ -308,9 +309,82 @@ export async function listBriefEvents(calendarUrl: string): Promise<RemoteEvent[
     if (!href) continue;
     // L'UID est dans le calendar-data ; on ne garde que les nôtres.
     const uid = body.match(/UID:([^\r\n]+)/)?.[1];
-    if (uid?.startsWith(UID_PREFIX)) events.push({ href, uid });
+    if (!uid?.startsWith(UID_PREFIX)) continue;
+    // On garde l'ICS complet (désencodé) : c'est la vérité qu'Aramis a posée
+    // dans l'app Calendrier — elle peut différer de celle de Brief.
+    const data = body.match(/<calendar-data[^>]*>([\s\S]*?)<\/calendar-data>/i);
+    events.push({ href, uid, ics: data ? decodeXml(data[1]) : "" });
   }
   return events;
+}
+
+/* --- « Le calendrier gagne » (décision Aramis 18/08) -------------------- */
+
+/** Dé-escape une valeur TEXT RFC 5545 : `\,` `\;` `\\` `\n`. */
+export function unescapeText(s: string): string {
+  return s.replace(/\\n/g, "\n").replace(/\\([\\,;])/g, "$1");
+}
+
+/** Champs éditables d'un événement posé dans l'app Calendrier. */
+export type RemoteEventFields = {
+  summary: string;
+  dtstart: string | null;
+  rrule: string | null;
+};
+
+export function parseRemoteEvent(ics: string): RemoteEventFields {
+  const title = ics.match(/^SUMMARY:([^\r\n]*)/m);
+  const dt = ics.match(/^DTSTART(?:;[^:]*)?:([^\r\n]+)/m);
+  const rr = ics.match(/^RRULE:([^\r\n]+)/m);
+  return {
+    summary: title ? unescapeText(title[1].trim()) : "",
+    dtstart: dt ? dt[1].trim() : null,
+    rrule: rr ? rr[1].trim() : null,
+  };
+}
+
+/** Le champ d'horodatage que Brief écrirait pour cet item (comparaison canonique). */
+function canonicalDueField(item: Item): string | null {
+  if (!item.due) return null;
+  const due = new Date(item.due);
+  if (Number.isNaN(due.getTime())) return null;
+  return item.allDay ? icalDate(due) : icalUtc(due);
+}
+
+/** Vrai si l'événement distant diffère de ce que Brief écrirait → Aramis l'a édité. */
+export function remoteDiffers(item: Item, remote: RemoteEventFields): boolean {
+  return (
+    remote.summary !== item.title ||
+    (remote.rrule ?? null) !== (item.rrule ?? null) ||
+    (remote.dtstart ?? null) !== canonicalDueField(item)
+  );
+}
+
+/** `20260819T140000Z` → `2026-08-19T14:00:00Z` ; `20260819` → `2026-08-19T09:00:00+02:00` (allDay Brief). */
+export function remoteDueToItem(dtstart: string): string {
+  const utc = dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (utc) {
+    return `${utc[1]}-${utc[2]}-${utc[3]}T${utc[4]}:${utc[5]}:${utc[6]}Z`;
+  }
+  const day = dtstart.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (day) {
+    return `${day[1]}-${day[2]}-${day[3]}T09:00:00+02:00`;
+  }
+  return dtstart;
+}
+
+/** Patch Brief qui aligne l'item sur la version du calendrier (ou null si identique). */
+export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<Item> | null {
+  const patch: Partial<Item> = {};
+  if (remote.summary !== "" && remote.summary !== item.title) patch.title = remote.summary;
+  if (remote.dtstart !== null && remote.dtstart !== canonicalDueField(item)) {
+    patch.due = remoteDueToItem(remote.dtstart);
+    patch.allDay = !remote.dtstart.includes("T");
+  }
+  if (remote.rrule !== null && remote.rrule !== (item.rrule ?? null)) {
+    patch.rrule = remote.rrule || null;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 /* --- Garde-fou ------------------------------------------------------------ */
@@ -368,6 +442,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       desired: 0,
       existing: 0,
       put: 0,
+      adopted: 0,
       deleted: 0,
       failures: [],
     };
@@ -405,6 +480,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
 
   const failures: { uid: string; error: string }[] = [];
   let put = 0;
+  let adopted = 0;
   let deleted = 0;
   let existing = 0;
   const touched: string[] = [];
@@ -422,6 +498,9 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // créé à l'ancien emplacement « Personnel » puis routé vers son projet).
   // Deux passages distincts garantissent un seul exemplaire par UID.
   const readFailed = new Set<string>();
+  // uid -> événement distant (avec son ICS) par calendrier : sert à la phase 2
+  // pour détecter les éditions qu'Aramis a faites dans l'app Calendrier.
+  const remoteByCal = new Map<string, Map<string, RemoteEvent>>();
   for (const calName of toSweep) {
     const calUrl = calendars.get(calName);
     if (!calUrl) continue;
@@ -439,6 +518,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       continue;
     }
     existing += remote.length;
+    remoteByCal.set(calName, new Map(remote.map((ev) => [ev.uid, ev])));
 
     for (const ev of remote) {
       if (targetByUid.get(ev.uid) === calName) continue;
@@ -451,7 +531,10 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     }
   }
 
-  // PHASE 2 — écriture des items désirés dans leur calendrier cible.
+  // PHASE 2 — écriture, sauf quand « le calendrier gagne » : si l'événement
+  // déjà présent dans le calendrier diffère de ce que Brief écrirait, c'est
+  // qu'Aramis l'a édité à la main (décalé, renommé, récurrence modifiée) →
+  // on ADOPTE sa version dans l'item Brief au lieu de l'écraser.
   for (const [calName, calItems] of byCalendar) {
     const calUrl = calendars.get(calName);
     if (!calUrl) {
@@ -464,7 +547,30 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     }
     if (readFailed.has(calName)) continue; // non lisible → rien à faire en phase 2
 
+    const remotes = remoteByCal.get(calName);
     for (const it of calItems) {
+      const remote = remotes?.get(`${UID_PREFIX}${it.id}`);
+      if (remote?.ics) {
+        const fields = parseRemoteEvent(remote.ics);
+        if (remoteDiffers(it, fields)) {
+          const patch = calendarPatch(it, fields);
+          if (patch) {
+            try {
+              const updated = await patchItem(it.id, patch);
+              if (updated) {
+                adopted += 1;
+                continue; // le calendrier est déjà la vérité : rien à réécrire
+              }
+            } catch (e) {
+              failures.push({
+                uid: `${UID_PREFIX}${it.id}`,
+                error: e instanceof Error ? e.message : "adoption échouée",
+              });
+              continue;
+            }
+          }
+        }
+      }
       try {
         await putEvent(calUrl, it);
         put += 1;
@@ -487,6 +593,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     desired: desired.length,
     existing,
     put,
+    adopted,
     deleted,
     failures,
   };

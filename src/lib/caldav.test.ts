@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildEventIcs, calendarForProject } from "./caldav";
+import {
+  calendarPatch,
+  parseRemoteEvent,
+  remoteDiffers,
+  remoteDueToItem,
+  unescapeText,
+} from "./caldav";
 import type { Item } from "./types";
 
 /**
@@ -97,5 +104,52 @@ describe("calendarForProject", () => {
     expect(calendarForProject("projet-inconnu")).toBe("Personnel");
     expect(calendarForProject(null)).toBe("Personnel");
     expect(calendarForProject(undefined)).toBe("Personnel");
+  });
+});
+
+describe("« le calendrier gagne » — édition faite dans l'app Calendrier (décision 18/08)", () => {
+  it("parse les champs éditables d'un événement distant", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-x\r\n" +
+      "DTSTART;VALUE=DATE:20260819\r\nSUMMARY:Séance push\r\n" +
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,TH,SU\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(parseRemoteEvent(ics)).toEqual({
+      summary: "Séance push",
+      dtstart: "20260819",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH,SU",
+    });
+  });
+
+  it("détecte qu'un horaire distant discorde de celui de Brief (édition manuelle)", () => {
+    const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
+    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T120000Z", rrule: null })).toBe(false);
+    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T150000Z", rrule: null })).toBe(true);
+  });
+
+  it("produit le patch qui aligne Brief sur le calendrier (horaire décalé)", () => {
+    const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
+    const patch = calendarPatch(it, { summary: it.title, dtstart: "20260818T180000Z", rrule: null });
+    expect(patch).toEqual({ due: "2026-08-18T18:00:00Z", allDay: false });
+  });
+
+  it("ajoute la récurrence posée dans le calendrier", () => {
+    const it = item();
+    const patch = calendarPatch(it, {
+      summary: it.title,
+      dtstart: "20260818",
+      rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+    });
+    expect(patch).toEqual({ rrule: "FREQ=WEEKLY;BYDAY=WE,SA" });
+  });
+
+  it("renvoie null si le calendrier est identique à Brief (rien à adopter)", () => {
+    const it = item();
+    expect(calendarPatch(it, { summary: it.title, dtstart: "20260818", rrule: null })).toBeNull();
+  });
+
+  it("dé-escape les titres RFC 5545", () => {
+    expect(unescapeText("A\\, B \\; C \\n D")).toBe("A, B ; C \n D");
+    expect(remoteDueToItem("20260819T140000Z")).toBe("2026-08-19T14:00:00Z");
+    expect(remoteDueToItem("20260819")).toBe("2026-08-19T09:00:00+02:00");
   });
 });

@@ -90,11 +90,15 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
 - **L'`id` d'un item est généré avant le premier envoi et réutilisé.** Un
   second envoi écrase au lieu de dupliquer : double-clic et rejeu sont
   inoffensifs.
-- **CalDAV Apple est réactivé depuis le 2026-08-17** (décision Aramis,
-  `DECISIONS.md` — elle renverse l'écart du 14/08). Synchro Brief → calendrier
-  Apple, latence ~15 min **acceptée** : les rappels à court terme restent en
-  Web Push dans Brief, seuls les résumés matin/soir passent par le calendrier.
-  Implémenté : `src/lib/caldav.ts` + route cron `caldav-sync`.
+- **CalDAV Apple : le calendrier iCloud est la SOURCE DE VÉRITÉ pour les
+  horaires/tâches datées** (décision Aramis du 2026-08-18, `DECISIONS.md` —
+  renverse le one-way « Brief → Apple » du 17/08). Sens **bidirectionnel** :
+  Brief écrit les nouvelles tâches (capture vocale / API / Telegram) au
+  calendrier, MAIS toute édition faite **directement dans l'app Calendrier**
+  (horaire, titre, récurrence) **écrase** celle de Brief → Brief **adopte la
+  version du calendrier**, pas l'inverse. Latence ~15 min acceptée ; les
+  rappels à court terme restent en Web Push. Implémenté : `src/lib/caldav.ts`
+  + route cron `caldav-sync`.
 - **C'est le serveur qui possède l'horloge.** iOS ne donne aucune API de
   notification programmée à une PWA — ni Notification Triggers, ni Background
   Sync, ni Periodic Background Sync, ni Background Fetch.
@@ -121,8 +125,11 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
   ne voie rien.
 - **Traefik tourne en `exposedbydefault=false`.** Sans les labels, le conteneur
   démarre et reste invisible depuis Internet : aucune erreur, juste un 404.
-- **Le volume `brief-data` est l'unique copie de l'organisation d'Aramis.**
-  Contrairement à une synchro CalDAV, aucun téléphone n'en garde de réplique.
+- **Le volume `brief-data` reste l'unique copie de l'état complet des items**
+  (titre, projet, priorité, fait/non-fait, rappels). Le calendrier Apple ne
+  reflète que le **planning** (horaires/récurrences) des items datés — c'est
+  une vue autoritaire sur les horaires (décision 18/08), pas l'état complet.
+  Aucun téléphone n'en garde de réplique complète.
 
 ---
 

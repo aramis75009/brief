@@ -14,6 +14,32 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-18 · Le calendrier Apple est la source de vérité des horaires (bidirectionnel)
+
+**Décision.** Le sens de la synchro CalDAV devient **bidirectionnel avec
+prééminence du calendrier** : toute édition faite **directement dans l'app
+Calendrier** (horaire, titre, récurrence) **écrase** la valeur de Brief, et
+**Brief adopte** la version du calendrier. Brief continue par ailleurs d'ajouter
+de nouvelles tâches au calendrier (capture vocale / API / Telegram).
+
+**Pourquoi.** Aramis, en cours de journée, ajuste ses tâches en direct dans
+Apple Calendar (« je cale sur ce que je fais actuellement, je décale à plus
+tard »). Sous l'ancien one-way Brief → Apple, la synchro réécrivait à chaque
+passage la version de Brief et **écrasait ses modifications manuelles**.
+C'est Aramis qui agit dans le calendrier : ce qu'il y pose doit gagner, pas
+être effacé par la machine.
+
+**Comment.** Dans `runCalDavSync` (phase 2), avant d'écrire un `brief-*`, on lit
+l'événement déjà présent dans le calendrier cible : s'il diffère de ce que Brief
+générerait (heure / titre / récurrence), on **adopte** ses champs dans l'item
+Brief (`patchItem`) puis on réécrit la version canonique — ça converge sans
+osciller. Créations et tâches faites continuent de se refléter au calendrier.
+
+**Statut.** ✅ acté puis **implémenté + déployé**, vérifié par un test réel
+(édition d'un horaire dans iCloud → item Brief mis à jour au passage suivant).
+
+---
+
 ## 2026-08-18 · CalDAV : un calendrier Apple par projet — chaque couleur identifie un domaine
 
 **Décision.** La synchro Brief → Apple ne va plus tout écrire dans « Personnel »
