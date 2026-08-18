@@ -74,6 +74,20 @@ describe("buildEventIcs", () => {
     expect(ics).toContain("DTEND:20260818T130000Z");
   });
 
+  it("respecte durationMinutes pour un créneau de 30 minutes (décision 18/08)", () => {
+    const ics = buildEventIcs(
+      item({
+        kind: "event",
+        allDay: false,
+        // 17h30 à Paris (+02:00) = 15h30 UTC → fin 16h00 UTC (30 min).
+        due: "2026-08-18T17:30:00+02:00",
+        durationMinutes: 30,
+      }),
+    );
+    expect(ics).toContain("DTSTART:20260818T153000Z");
+    expect(ics).toContain("DTEND:20260818T160000Z");
+  });
+
   it("échappe les virgules, points-virgules et retours à la ligne du titre", () => {
     const ics = buildEventIcs(item({ title: "Résumé, suite ; suite\nsuite" }));
     expect(ics).toContain("SUMMARY:Résumé\\, suite \\; suite\\nsuite");
@@ -116,19 +130,20 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
     expect(parseRemoteEvent(ics)).toEqual({
       summary: "Séance push",
       dtstart: "20260819",
+      dtend: null,
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH,SU",
     });
   });
 
   it("détecte qu'un horaire distant discorde de celui de Brief (édition manuelle)", () => {
     const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
-    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T120000Z", rrule: null })).toBe(false);
-    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T150000Z", rrule: null })).toBe(true);
+    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T120000Z", dtend: "20260818T130000Z", rrule: null })).toBe(false);
+    expect(remoteDiffers(it, { summary: it.title, dtstart: "20260818T150000Z", dtend: "20260818T160000Z", rrule: null })).toBe(true);
   });
 
   it("produit le patch qui aligne Brief sur le calendrier (horaire décalé)", () => {
     const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
-    const patch = calendarPatch(it, { summary: it.title, dtstart: "20260818T180000Z", rrule: null });
+    const patch = calendarPatch(it, { summary: it.title, dtstart: "20260818T180000Z", dtend: "20260818T190000Z", rrule: null });
     expect(patch).toEqual({ due: "2026-08-18T18:00:00Z", allDay: false });
   });
 
@@ -137,6 +152,7 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
     const patch = calendarPatch(it, {
       summary: it.title,
       dtstart: "20260818",
+      dtend: null,
       rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
     });
     expect(patch).toEqual({ rrule: "FREQ=WEEKLY;BYDAY=WE,SA" });
@@ -144,7 +160,7 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
 
   it("renvoie null si le calendrier est identique à Brief (rien à adopter)", () => {
     const it = item();
-    expect(calendarPatch(it, { summary: it.title, dtstart: "20260818", rrule: null })).toBeNull();
+    expect(calendarPatch(it, { summary: it.title, dtstart: "20260818", dtend: null, rrule: null })).toBeNull();
   });
 
   it("dé-escape les titres RFC 5545", () => {

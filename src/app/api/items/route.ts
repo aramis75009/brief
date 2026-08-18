@@ -44,6 +44,10 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     allDay: v.allDay === true,
     priority: isPriority(v.priority) ? v.priority : 4,
     rrule: typeof v.rrule === "string" && /^FREQ=/i.test(v.rrule) ? v.rrule : null,
+    durationMinutes:
+      typeof v.durationMinutes === "number" && Number.isFinite(v.durationMinutes) && v.durationMinutes > 0
+        ? Math.round(v.durationMinutes)
+        : undefined,
     notes: typeof v.notes === "string" ? v.notes : undefined,
   };
 }

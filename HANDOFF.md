@@ -9,75 +9,69 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-18 · Le calendrier Apple est la source de vérité (+ semaine récurrente)
+# Passation — 2026-08-18 · Récurrences de publication bornées fin août
 
 | | |
 |---|---|
-| **Agent** | Hermes Agent · `deepseek/deepseek-v4-flash-0731` via OpenRouter |
+| **Agent** | Hermes Agent · `deepseek-v4-flash:0731` via Ollama Cloud |
 | **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
 | **Commits récents** | `b98c73d` (calendrier = source de vérité) … |
 
 ## Goal — l'objectif
 
-Aramis modifie ses tâches **en direct dans Apple Calendar** (il décale les
-horaires selon ce qu'il fait). L'ancienne synchro one-way Brief → Apple
-**écrasait ses modifs** à chaque passage. Objectif : **le calendrier iCloud est
-la source de vérité des horaires** — ce que tu poses dans l'app Calendrier,
-Brief (et Hermes) le suivent. En plus, la **semaine récurrente** de sport et de
-pubs Frip & Trend est posée en récurrence (RRULE).
+Aramis a recréé à la main ses événements de publication Frip & Trend dans Apple
+Calendar (après suppression), sans récurrence. Les récurrences existantes
+tournaient **à l'infini**. Objectif : **borner toutes les récurrences de
+publication à la fin du mois d'août** (`UNTIL=20260831T235959Z`), en respectant
+le principe « le calendrier est la source de vérité ».
 
 ## Decisions — choix critiques ou irréversibles (DECISIONS.md 18/08)
 
-1. **Le calendrier gagne (bidirectionnel)** : Brief écrit les nouvelles tâches
-   au calendrier, mais toute édition faite directement dans l'app Calendrier
-   (horaire / titre / récurrence) **écrase** la valeur de Brief → Brief adopte
-   la version du calendrier via `patchItem`. Renverse le one-way du 17/08.
-2. **Semaine type récurrente** (données Brief, en RRULE) :
-   - Sport 16–17 h : **push** lun·jeu·dim · **pull** mar·ven · **courir** mer·sam
-   - Frip & Trend 18–19 h : **Poster/Reposter 10** lun–jeu · **Reposter 15 /
-     Poster 20** ven–dim
+1. **Les récurrences de publication sont bornées** (fin de mois ou date
+   explicite) — jamais d'infini. Règle de fond pour les prochaines sessions.
+2. Rappel : le calendrier Apple **gagne** (bidirectionnel, décision 18/08) —
+   toute édition dans l'app Calendrier écrase Brief.
 
 ## Current state — ce qui a été fait
 
-1. **`src/lib/caldav.ts`** — sens inverse (« le calendrier gagne ») :
-   - `listBriefEvents` capture désormais l'**ICS complet** (désencodé) de chaque
-     événement distant.
-   - Helpers purs : `parseRemoteEvent`, `remoteDiffers`, `calendarPatch`,
-     `remoteDueToItem`, `unescapeText` (+ tests) : comparent ce que Brief
-     écrirait vs. l'événement posé dans le calendrier.
-   - En phase 2, si l'événement distant diffère → **adoption** dans l'item Brief
-     (`patchItem`) au lieu de l'écraser ; sinon PUT normal. Constateur
-     `adopted` ajouté au compte-rendu et au log cron.
-2. **Semaine récurrente** posée (items Brief via API prod, `rrule = FREQ=WEEKLY;BYDAY=…`).
-   `due` = DTSTART ancreur : Poster/Reposter 10 → **lun 17/08** ; 15/20 → **ven
-   21/08** ; push → 20/08 (jeu) ; pull → 21/08 ; courir → 19/08 (mer).
-3. **Déployé** sur le VPS, `brief-app-1` healthy.
+1. **Audit iCloud complet** (REPORT calendar-query brut sur « Vinted
+   Frip&Trend ») : 3 récurrences infinies identifiées :
+   - `brief-it_1787066667909_reposter15` (Reposter 15, FR,SA,SU)
+   - `brief-it_1787066667912_poster20` (Poster 20, FR,SA,SU)
+   - `1B3A002E-D9FF-4D00-8CB7-209638B12364` (Reposter 10 manuel, MO,TU,WE,TH)
+2. **PUT iCloud** (source de vérité) : `UNTIL=20260831T235959Z` ajouté aux 3
+   (HTTP 204). Les one-shots manuels des 17→27/08 et le sport (infini voulu)
+   sont intacts.
+3. **Synchro forcée** (reset garde-fou + `/api/cron/caldav-sync`) :
+   `adopted=3` — Brief a adopté les nouvelles RRULE.
+4. **Vérifié des deux côtés** : items.json prod (7 items avec rrule, 4 bornés
+   dont 3 nouveaux) + relu iCloud brute (convergence, pas d'oscillation).
+5. **DECISIONS.md** : entrée « Récurrences de publication bornées » ajoutée.
 
 ## Validations
 
 | Commande / vérif | Résultat |
 |---|---|
-| `npx vitest run` | ✅ **112/112** (9 fichiers) |
-| `npx tsc --noEmit` / `npx eslint …` | ✅ 0 erreur |
-| **Test réel « calendrier gagne »** | ✅ iCloud a décalé « Séance push » 16h→18h (PUT 204) → synchro `adopted=3` → item Brief `due=…16:00Z` (18 h Paris) |
-| Convergence | ✅ 2ᵉ passage `adopted=0`, pas d'oscillation |
-| Lecture indépendante iCloud | ✅ masters récurrents corrects (Poster/Reposter 10 → DTSTART lun 17, BYDAY MO,TU,WE,TH ; 15/20 → ven 21, FR,SA,SU) |
+| PUT iCloud (3 événements) | ✅ HTTP 204 ×3 |
+| Synchro forcée | ✅ `adopted=3`, `failures=[]` |
+| items.json prod | ✅ `reposter15` + `poster20` → `UNTIL=20260831T235959Z` |
+| Relu iCloud brute | ✅ mêmes RRULE côté iCloud, convergence |
+| One-shots manuels Aramis | ✅ intacts (17→27/08, sans récurrence) |
 
 **Non vérifié visuellement :** le rendu réel dans l'app Calendrier de l'iPhone
-(expansion des récurrences par jour) — effet sur canal externe, à confirmer par
-Aramis.
+(les récurrences s'arrêtent bien le 31/08) — à confirmer par Aramis.
 
 ## Blockers
 
-Rien. ⚠️ Note DEV : ne jamais écraser `HOME` dans les scripts session
-(/*.sh avec `source .env.local` + `HOME=$(curl…)` a corrompu `$HOME` → SSH
-cassé). La clé SSH du VPS est `/opt/data/home/.ssh/id_ed25519`.
+Rien. ⚠️ Note DEV : ne jamais écraser `HOME` dans les scripts session. La clé
+SSH du VPS est `/opt/data/home/.ssh/id_ed25519`. Les commandes SSH complexes
+avec variables inline peuvent être bloquées par le parser — passer par un
+script fichier si besoin.
 
 ## Next
 
-1. Aramis vérifie sur l'iPhone : les récurrences sport/pubs se déroulent
-   lun→dim, et qu'une tâche décalée dans l'app Calendrier se reflète dans Brief
-   (~15 min).
+1. Aramis vérifie sur l'iPhone : les récurrences poster/reposter s'arrêtent le
+   31/08, et le sport continue (infini voulu).
 2. Peau Claude Design (refonte visuelle) toujours en attente.
 
 ---
@@ -86,7 +80,8 @@ cassé). La clé SSH du VPS est `/opt/data/home/.ssh/id_ed25519`.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-18** | **Calendrier = source de vérité + semaine récurrente** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-18** | **Récurrences de publication bornées fin août** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-18 | Calendrier = source de vérité + semaine récurrente | Hermes Agent | [fiche](docs/handoffs/2026-08-18-caldav-source-de-verite.md) |
 | 2026-08-18 | CalDAV multi-calendriers déployé + routage vérifié | Hermes Agent | [fiche](docs/handoffs/2026-08-18-caldav-multicalendriers-deploye.md) |
 | 2026-08-18 | CalDAV multi-calendriers (un calendrier par projet) — implémenté, à déployer | Hermes Agent | [fiche](docs/handoffs/2026-08-18-caldav-multicalendriers.md) |
 | 2026-08-17 | PIN mémoire + synchro CalDAV Apple | Hermes Agent | [fiche](docs/handoffs/2026-08-17-pin-memoire-et-caldav-apple.md) |

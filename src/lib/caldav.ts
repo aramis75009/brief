@@ -167,8 +167,10 @@ export function buildEventIcs(item: Item): string | null {
     );
   } else {
     lines.push(`DTSTART:${icalUtc(due)}`);
-    // Pas de durée dans le schéma Brief : un rendez-vous occupe une heure.
-    lines.push(`DTEND:${icalUtc(new Date(due.getTime() + 60 * 60 * 1000))}`);
+    // Durée du créneau en minutes (décision 18/08 : « toutes les tâches
+    // doivent avoir un temps ») ; 60 min par défaut si absente.
+    const minutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
+    lines.push(`DTEND:${icalUtc(new Date(due.getTime() + minutes * 60 * 1000))}`);
   }
 
   lines.push(`SUMMARY:${escapeText(item.title)}`);
@@ -329,16 +331,19 @@ export function unescapeText(s: string): string {
 export type RemoteEventFields = {
   summary: string;
   dtstart: string | null;
+  dtend: string | null;
   rrule: string | null;
 };
 
 export function parseRemoteEvent(ics: string): RemoteEventFields {
   const title = ics.match(/^SUMMARY:([^\r\n]*)/m);
   const dt = ics.match(/^DTSTART(?:;[^:]*)?:([^\r\n]+)/m);
+  const de = ics.match(/^DTEND(?:;[^:]*)?:([^\r\n]+)/m);
   const rr = ics.match(/^RRULE:([^\r\n]+)/m);
   return {
     summary: title ? unescapeText(title[1].trim()) : "",
     dtstart: dt ? dt[1].trim() : null,
+    dtend: de ? de[1].trim() : null,
     rrule: rr ? rr[1].trim() : null,
   };
 }
@@ -351,12 +356,27 @@ function canonicalDueField(item: Item): string | null {
   return item.allDay ? icalDate(due) : icalUtc(due);
 }
 
+/** Durée en minutes d'un événement distant (DTEND − DTSTART), ou null si illisible. */
+export function remoteDurationMinutes(remote: RemoteEventFields): number | null {
+  if (!remote.dtstart || !remote.dtend) return null;
+  const start = remote.dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  const end = remote.dtend.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (!start || !end) return null;
+  const s = Date.UTC(+start[1], +start[2] - 1, +start[3], +start[4], +start[5], +start[6]);
+  const e = Date.UTC(+end[1], +end[2] - 1, +end[3], +end[4], +end[5], +end[6]);
+  const minutes = Math.round((e - s) / 60000);
+  return minutes > 0 ? minutes : null;
+}
+
 /** Vrai si l'événement distant diffère de ce que Brief écrirait → Aramis l'a édité. */
 export function remoteDiffers(item: Item, remote: RemoteEventFields): boolean {
+  const remoteMinutes = remoteDurationMinutes(remote);
+  const itemMinutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
   return (
     remote.summary !== item.title ||
     (remote.rrule ?? null) !== (item.rrule ?? null) ||
-    (remote.dtstart ?? null) !== canonicalDueField(item)
+    (remote.dtstart ?? null) !== canonicalDueField(item) ||
+    (remoteMinutes !== null && remoteMinutes !== itemMinutes)
   );
 }
 
@@ -383,6 +403,11 @@ export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<It
   }
   if (remote.rrule !== null && remote.rrule !== (item.rrule ?? null)) {
     patch.rrule = remote.rrule || null;
+  }
+  const remoteMinutes = remoteDurationMinutes(remote);
+  const itemMinutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
+  if (remoteMinutes !== null && remoteMinutes !== itemMinutes) {
+    patch.durationMinutes = remoteMinutes;
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }

@@ -82,6 +82,13 @@ export type DraftItem = {
   priority: Priority;
   /** Règle de récurrence RFC 5545, ex. `FREQ=WEEKLY;BYDAY=TU`. */
   rrule: string | null;
+  /**
+   * Durée du créneau en minutes (événements horaires uniquement).
+   * Absent = 60 min par défaut à l'écriture CalDAV. Décision 18/08 :
+   * « toutes les tâches doivent avoir un temps » — les créneaux de
+   * publication Frip & Trend font 30 min (17:30→18:00, 18:00→18:30).
+   */
+  durationMinutes?: number;
   notes?: string;
 };
 

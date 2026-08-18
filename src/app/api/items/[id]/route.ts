@@ -62,6 +62,15 @@ function sanitizePatch(
   } else if (typeof v.rrule === "string" && /^FREQ=/i.test(v.rrule.trim())) {
     out.rrule = v.rrule.trim();
   }
+  if (v.durationMinutes === null || v.durationMinutes === undefined) {
+    out.durationMinutes = undefined;
+  } else if (
+    typeof v.durationMinutes === "number" &&
+    Number.isFinite(v.durationMinutes) &&
+    v.durationMinutes > 0
+  ) {
+    out.durationMinutes = Math.round(v.durationMinutes);
+  }
   return out;
 }
 

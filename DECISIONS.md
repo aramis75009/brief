@@ -14,6 +14,28 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-18 · Les récurrences de publication Frip & Trend sont bornées — pas d'infini
+
+**Décision.** Les récurrences hebdomadaires de publication (Poster/Reposter 10/15/20
+articles) s'arrêtent à la fin du mois d'août (`UNTIL=20260831T235959Z`). Elles ne
+tournent pas à l'infini.
+
+**Pourquoi.** Aramis : « sinon ça continue jusqu'à l'infini et c'est très emmerdant ».
+Le rythme de publication suit le mois en cours ; une récurrence infinie pollue le
+calendrier après la fin du mois. Règle de fond pour les prochaines sessions : toute
+récurrence de publication créée est **bornée** (fin de mois ou date explicite).
+
+**Comment.** Modifié directement dans iCloud (source de vérité) : `UNTIL` ajouté sur
+`brief-it_1787066667909_reposter15` (Reposter 15), `brief-it_1787066667912_poster20`
+(Poster 20) et l'événement manuel `1B3A002E` (Reposter 10, recréé à la main par
+Aramis après suppression). Synchro forcée → Brief a adopté (`adopted=3`). Vérifié des
+deux côtés (items.json prod + relu iCloud brute). Les one-shots manuels des 17→27/08
+et les récurrences sport (infini, voulu) ne sont pas touchés.
+
+**Statut.** ✅ Fait.
+
+---
+
 ## 2026-08-18 · Le calendrier Apple est la source de vérité des horaires (bidirectionnel)
 
 **Décision.** Le sens de la synchro CalDAV devient **bidirectionnel avec
