@@ -58,8 +58,8 @@ fermetures de l'app.
 | POST /api/session sans PIN (prod) | ✅ 401, pas de cookie |
 | Déploiement VPS | ✅ `brief-app-1 Healthy` |
 
-**Non vérifié visuellement :** le comportement réel sur l'iPhone d'Aramis
-(fermer/relancer la PWA sans revoir l'écran PIN) — à confirmer par Aramis.
+**Vérifié par Aramis (18/08 au soir) :** fermer/relancer la PWA sur l'iPhone ne
+fait plus réapparaître l'écran PIN — le cookie serveur tient.
 
 ## Blockers
 
