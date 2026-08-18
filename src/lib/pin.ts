@@ -51,7 +51,12 @@ function writeCookie(pin: string): void {
 function clearCookie(): void {
   if (typeof document === "undefined") return;
   try {
-    document.cookie = `${COOKIE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
+    // Même attribut Secure que le cookie serveur : un cookie Secure ne peut
+    // être effacé que par un Set-Cookie Secure (sinon « Verrouiller » ne
+    // déverrouillerait pas vraiment).
+    const secure =
+      typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${COOKIE_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
   } catch {
     /* idem */
   }
