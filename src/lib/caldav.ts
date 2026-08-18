@@ -366,8 +366,13 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // Grouper par calendrier cible (nom) — chaque item va dans le calendrier de
   // son projet (fallback « Personnel »).
   const byCalendar = new Map<string, Item[]>();
+  // uid -> calendrier cible (nom) : dit où chaque événement `brief-*` DOIT
+  // vivre. Un événement trouvé ailleurs — ou dont l'uid a disparu (tâche
+  // cochée, supprimée, dédatée) — est retiré du calendrier qui le contient.
+  const targetByUid = new Map<string, string>();
   for (const d of desired) {
     const calName = calendarForProject(d.item.projectId);
+    targetByUid.set(`${UID_PREFIX}${d.item.id}`, calName);
     const list = byCalendar.get(calName) ?? [];
     list.push(d.item);
     byCalendar.set(calName, list);
@@ -388,16 +393,25 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   let existing = 0;
   const touched: string[] = [];
 
-  for (const [calName, calItems] of byCalendar) {
+  // On balaie TOUS les calendriers découverts (pas seulement ceux qui ont
+  // encore des items à écrire) : une tâche cochée qui était la dernière de son
+  // calendrier doit quand même en disparaître, et un item dont le projet a
+  // changé doit quitter l'ancien calendrier. `targetByUid` décide : un
+  // événement `brief-*` resté dans un calendrier != sa cible est supprimé.
+  const toSweep = new Set<string>([...byCalendar.keys(), ...calendars.keys()]);
+
+  for (const calName of toSweep) {
     const calUrl = calendars.get(calName);
+    const calItems = byCalendar.get(calName) ?? [];
     if (!calUrl) {
-      // Calendrier introuvable : on signale plutôt que d'écrire n'importe où.
-      for (const it of calItems) failures.push({ uid: `${UID_PREFIX}${it.id}`, error: `calendrier « ${calName} » introuvable` });
+      // Calendrier attendu mais introuvable : on signale plutôt que d'écrire
+      // n'importe où.
+      for (const it of calItems) {
+        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: `calendrier « ${calName} » introuvable` });
+      }
       continue;
     }
     touched.push(calName);
-
-    const desiredUids = new Set(calItems.map((it) => `${UID_PREFIX}${it.id}`));
 
     let remote: RemoteEvent[];
     try {
@@ -420,7 +434,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     }
 
     for (const ev of remote) {
-      if (desiredUids.has(ev.uid)) continue;
+      if (targetByUid.get(ev.uid) === calName) continue;
       try {
         await deleteEvent(calUrl, ev.href);
         deleted += 1;
