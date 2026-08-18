@@ -52,7 +52,7 @@ const LAST_SYNC_FILE = "caldav-last-sync.json";
  */
 const DEFAULT_CALENDAR_MAPPING: Record<string, string> = {
   "frip-trend": "Vinted Frip&Trend",
-  "my-flip": "Dropshipping",
+  "my-flip": "My Flip",
   perso: "Personnel",
   sport: "Sport",
   webacademie: "Web@académie",

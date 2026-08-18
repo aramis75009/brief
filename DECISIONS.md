@@ -26,16 +26,23 @@ même couleur donc je n'arrive pas à séparer ce que j'ai à faire ». Le mappi
 utilise ses calendriers existants quand ils existent, et en crée de nouveaux
 sinon — l'app Calendrier devient un tableau de bord visuel par activité.
 
-**Mapping (décision Aramis du 18/08).**
+**Mapping (décision Aramis du 18/08, ajusté le 18/08 au soir).**
 | Projet Brief | Calendrier Apple | Statut |
 |---|---|---|
 | Frip & Trend | « Vinted Frip&Trend » | existant |
-| My Flip | « Dropshipping » | existant (remplace l'usage de l'ancien projet) |
+| My Flip | « My Flip » | **créé** (orange) |
 | Perso | « Personnel » | existant (défaut) |
 | Sport | « Sport » | existant |
 | Web@académie | « Web@académie » | **créé** (rouge) — remplace l'usage de « Travail » |
 | IA | « IA » | **créé** (vert) |
 | (autre / inconnu) | « Personnel » | fallback |
+
+**Ajustement My Flip / Dropshipping.** Le mapping initial réutilisait le
+calendrier « Dropshipping » (vestige de l'ancien projet). Aramis a supprimé le
+projet Dropshipping (« le projet n'est plus d'actualité ») : My Flip reçoit
+donc **son propre calendrier « My Flip »** (créé par MKCOL). Le calendrier
+iCloud « Dropshipping » n'est plus utilisé par Brief (reste en orphelin sur le
+compte, suppression proposée mais non demandée).
 
 **Comment.** `calendarForProject(projectId)` dans `src/lib/caldav.ts` (table
 par défaut, surchargeable par `BRIEF_CALDAV_MAPPING` JSON). `runCalDavSync`

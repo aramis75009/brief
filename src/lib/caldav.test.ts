@@ -86,7 +86,7 @@ describe("buildEventIcs", () => {
 describe("calendarForProject", () => {
   it("route chaque projet Brief vers son calendrier Apple", () => {
     expect(calendarForProject("frip-trend")).toBe("Vinted Frip&Trend");
-    expect(calendarForProject("my-flip")).toBe("Dropshipping");
+    expect(calendarForProject("my-flip")).toBe("My Flip");
     expect(calendarForProject("perso")).toBe("Personnel");
     expect(calendarForProject("sport")).toBe("Sport");
     expect(calendarForProject("webacademie")).toBe("Web@académie");
