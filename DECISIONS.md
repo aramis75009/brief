@@ -14,6 +14,31 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-18 · Le PIN mémorisé survit aux purges iOS (cookie + localStorage)
+
+**Décision.** Le PIN saisi une fois par appareil est mémorisé dans **deux**
+endroits : le `localStorage` de la PWA **et** un cookie persistant
+(`brief_pin`, ~13 mois, renouvelé à chaque connexion). « Verrouiller » efface
+les deux.
+
+**Pourquoi.** Le 18/08 au soir, l'écran PIN est réapparu sur l'iPhone d'Aramis
+sans raison apparente : le code de mémorisation (`f2ad5e4`) était déployé, le
+PIN serveur n'avait pas changé, l'API répondait correctement. Cause : iOS purge
+le stockage des PWA inutilisées — le `localStorage` peut disparaître et
+l'écran PIN réapparaître. Le cookie persistant survit à cette purge et est
+partagé entre la PWA et Safari (qui ont des `localStorage` séparés). Le PIN
+reste en clair dans les deux : c'est de l'UX, pas une barrière de sécurité
+(la seule barrière reste `guard.ts` côté serveur).
+
+**Comment.** `src/lib/pin.ts` : `setPin` écrit localStorage + cookie ;
+`getPin` lit le cookie en priorité et **migre** un PIN resté dans le
+localStorage vers le cookie ; `clearPin` efface les deux. 6 tests unitaires
+(`pin.test.ts`). Commit `3e72fbe`, déployé en prod le 18/08 (bundle vérifié).
+
+**Statut.** ✅ Fait.
+
+---
+
 ## 2026-08-18 · Les récurrences de publication Frip & Trend sont bornées — pas d'infini
 
 **Décision.** Les récurrences hebdomadaires de publication (Poster/Reposter 10/15/20

@@ -9,62 +9,57 @@ Le mode d'emploi complet est dans [`AGENTS.md`](AGENTS.md), section
 
 ---
 
-# Passation — 2026-08-18 · PIN mémorisé fiabilisé (cookie + localStorage)
+# Passation — 2026-08-18 · Récurrences de publication bornées fin août
 
 | | |
 |---|---|
 | **Agent** | Hermes Agent · `deepseek-v4-flash:0731` via Ollama Cloud |
 | **Branche** | `feat/task-completion` — **la branche que sert le VPS** |
-| **Commits récents** | `3e72fbe` (PIN cookie) · `147be77` (durationMinutes) · `b98c73d` (calendrier = source de vérité) |
+| **Commits récents** | `b98c73d` (calendrier = source de vérité) … |
 
 ## Goal — l'objectif
 
-Aramis ne pouvait plus ouvrir l'app : l'écran PIN était réapparu alors que le
-code de mémorisation « une fois par appareil » était déployé. Objectif :
-**faire en sorte que le PIN mémorisé ne disparaisse plus** et débloquer Aramis.
+Aramis a recréé à la main ses événements de publication Frip & Trend dans Apple
+Calendar (après suppression), sans récurrence. Les récurrences existantes
+tournaient **à l'infini**. Objectif : **borner toutes les récurrences de
+publication à la fin du mois d'août** (`UNTIL=20260831T235959Z`), en respectant
+le principe « le calendrier est la source de vérité ».
 
 ## Decisions — choix critiques ou irréversibles (DECISIONS.md 18/08)
 
-1. **Le PIN mémorisé vit dans un cookie persistant EN PLUS du localStorage**
-   (décision 18/08, `DECISIONS.md`). iOS purge le stockage des PWA inutilisées
-   → le localStorage seul peut disparaître. Le cookie survit et est partagé
-   entre PWA et Safari. « Verrouiller » efface les deux.
+1. **Les récurrences de publication sont bornées** (fin de mois ou date
+   explicite) — jamais d'infini. Règle de fond pour les prochaines sessions.
 2. Rappel : le calendrier Apple **gagne** (bidirectionnel, décision 18/08) —
    toute édition dans l'app Calendrier écrase Brief.
 
 ## Current state — ce qui a été fait
 
-1. **Diagnostic** : code de mémorisation (`f2ad5e4`) bien déployé sur le VPS
-   (vérifié `git merge-base`), PIN serveur inchangé depuis le 17/08, API saine
-   (GET / 200, /api/items 401 sans PIN, /api/session 200 avec le bon PIN).
-   Cause du retour de l'écran PIN : purge iOS du localStorage de la PWA.
-2. **Correctif** `src/lib/pin.ts` : `setPin` écrit localStorage + cookie
-   (`brief_pin`, Max-Age ~13 mois, SameSite=Lax, Secure en HTTPS) ; `getPin`
-   lit le cookie en priorité et **migre** un PIN resté dans le localStorage ;
-   `clearPin` efface les deux.
-3. **Tests** : `src/lib/pin.test.ts` (6 tests, mocks window/document/
-   localStorage en environnement node). Suite complète : **119 tests / 10
-   fichiers verts**, eslint et tsc propres.
-4. **Déployé en prod** : commit `3e72fbe` poussé, `git pull --ff-only` +
-   `docker compose build && up -d` sur le VPS, conteneur healthy. Vérifié :
-   le bundle servi contient `brief_pin` (chunk `15tqre8lia1lt.js`).
-5. **DECISIONS.md** : entrée « Le PIN mémorisé survit aux purges iOS » ajoutée.
+1. **Audit iCloud complet** (REPORT calendar-query brut sur « Vinted
+   Frip&Trend ») : 3 récurrences infinies identifiées :
+   - `brief-it_1787066667909_reposter15` (Reposter 15, FR,SA,SU)
+   - `brief-it_1787066667912_poster20` (Poster 20, FR,SA,SU)
+   - `1B3A002E-D9FF-4D00-8CB7-209638B12364` (Reposter 10 manuel, MO,TU,WE,TH)
+2. **PUT iCloud** (source de vérité) : `UNTIL=20260831T235959Z` ajouté aux 3
+   (HTTP 204). Les one-shots manuels des 17→27/08 et le sport (infini voulu)
+   sont intacts.
+3. **Synchro forcée** (reset garde-fou + `/api/cron/caldav-sync`) :
+   `adopted=3` — Brief a adopté les nouvelles RRULE.
+4. **Vérifié des deux côtés** : items.json prod (7 items avec rrule, 4 bornés
+   dont 3 nouveaux) + relu iCloud brute (convergence, pas d'oscillation).
+5. **DECISIONS.md** : entrée « Récurrences de publication bornées » ajoutée.
 
 ## Validations
 
 | Commande / vérif | Résultat |
 |---|---|
-| `npx eslint src/lib/pin.ts src/lib/pin.test.ts` | ✅ propre |
-| `npx tsc --noEmit` | ✅ propre |
-| `npx vitest run` | ✅ 119/119 (10 fichiers) |
-| `git push origin feat/task-completion` | ✅ `147be77..3e72fbe` |
-| Déploiement VPS (pull + build + up) | ✅ `brief-app-1 Healthy` |
-| Bundle servi contient `brief_pin` | ✅ chunk `15tqre8lia1lt.js` |
-| API prod (page / session / 401) | ✅ 200 / 200 / 401 |
+| PUT iCloud (3 événements) | ✅ HTTP 204 ×3 |
+| Synchro forcée | ✅ `adopted=3`, `failures=[]` |
+| items.json prod | ✅ `reposter15` + `poster20` → `UNTIL=20260831T235959Z` |
+| Relu iCloud brute | ✅ mêmes RRULE côté iCloud, convergence |
+| One-shots manuels Aramis | ✅ intacts (17→27/08, sans récurrence) |
 
-**Non vérifié visuellement :** le comportement réel sur l'iPhone d'Aramis
-(le PIN saisi une fois ne réapparaît plus après purge) — à confirmer par
-Aramis.
+**Non vérifié visuellement :** le rendu réel dans l'app Calendrier de l'iPhone
+(les récurrences s'arrêtent bien le 31/08) — à confirmer par Aramis.
 
 ## Blockers
 
@@ -75,9 +70,8 @@ script fichier si besoin.
 
 ## Next
 
-1. Aramis rouvre l'app sur l'iPhone : saisir le PIN **030920** une fois — il
-   sera ensuite mémorisé dans le cookie et ne réapparaîtra plus (même après
-   purge iOS du localStorage).
+1. Aramis vérifie sur l'iPhone : les récurrences poster/reposter s'arrêtent le
+   31/08, et le sport continue (infini voulu).
 2. Peau Claude Design (refonte visuelle) toujours en attente.
 
 ---
@@ -86,8 +80,7 @@ script fichier si besoin.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-18** | **PIN mémorisé fiabilisé (cookie + localStorage)** | **Hermes Agent** | *(cette passation)* |
-| 2026-08-18 | Récurrences de publication bornées fin août | Hermes Agent | [fiche](docs/handoffs/2026-08-18-recurrences-bornees.md) |
+| **2026-08-18** | **Récurrences de publication bornées fin août** | **Hermes Agent** | *(cette passation)* |
 | 2026-08-18 | Calendrier = source de vérité + semaine récurrente | Hermes Agent | [fiche](docs/handoffs/2026-08-18-caldav-source-de-verite.md) |
 | 2026-08-18 | CalDAV multi-calendriers déployé + routage vérifié | Hermes Agent | [fiche](docs/handoffs/2026-08-18-caldav-multicalendriers-deploye.md) |
 | 2026-08-18 | CalDAV multi-calendriers (un calendrier par projet) — implémenté, à déployer | Hermes Agent | [fiche](docs/handoffs/2026-08-18-caldav-multicalendriers.md) |
