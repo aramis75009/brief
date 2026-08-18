@@ -416,38 +416,29 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // événement `brief-*` resté dans un calendrier != sa cible est supprimé.
   const toSweep = new Set<string>([...byCalendar.keys(), ...calendars.keys()]);
 
+  // PHASE 1 — nettoyage. On retire d'abord de chaque calendrier tout
+  // événement qui n'y a plus sa place, AVANT d'écrire les nouveaux : iCloud
+  // renvoie 412 (conflit) si un même UID existe déjà sur le compte (ex. l'item
+  // créé à l'ancien emplacement « Personnel » puis routé vers son projet).
+  // Deux passages distincts garantissent un seul exemplaire par UID.
+  const readFailed = new Set<string>();
   for (const calName of toSweep) {
     const calUrl = calendars.get(calName);
-    const calItems = byCalendar.get(calName) ?? [];
-    if (!calUrl) {
-      // Calendrier attendu mais introuvable : on signale plutôt que d'écrire
-      // n'importe où.
-      for (const it of calItems) {
-        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: `calendrier « ${calName} » introuvable` });
-      }
-      continue;
-    }
+    if (!calUrl) continue;
     touched.push(calName);
 
     let remote: RemoteEvent[];
     try {
       remote = await listBriefEvents(calUrl);
     } catch (e) {
-      for (const it of calItems) {
+      readFailed.add(calName);
+      const items = byCalendar.get(calName) ?? [];
+      for (const it of items) {
         failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "lecture échouée" });
       }
       continue;
     }
     existing += remote.length;
-
-    for (const it of calItems) {
-      try {
-        await putEvent(calUrl, it);
-        put += 1;
-      } catch (e) {
-        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
-      }
-    }
 
     for (const ev of remote) {
       if (targetByUid.get(ev.uid) === calName) continue;
@@ -456,6 +447,29 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
         deleted += 1;
       } catch (e) {
         failures.push({ uid: ev.uid, error: e instanceof Error ? e.message : "DELETE échoué" });
+      }
+    }
+  }
+
+  // PHASE 2 — écriture des items désirés dans leur calendrier cible.
+  for (const [calName, calItems] of byCalendar) {
+    const calUrl = calendars.get(calName);
+    if (!calUrl) {
+      // Calendrier attendu mais introuvable : on signale plutôt que d'écrire
+      // n'importe où.
+      for (const it of calItems) {
+        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: `calendrier « ${calName} » introuvable` });
+      }
+      continue;
+    }
+    if (readFailed.has(calName)) continue; // non lisible → rien à faire en phase 2
+
+    for (const it of calItems) {
+      try {
+        await putEvent(calUrl, it);
+        put += 1;
+      } catch (e) {
+        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
       }
     }
   }
