@@ -97,6 +97,12 @@ export type DraftItem = {
    */
   exdates?: string[];
   notes?: string;
+  /** Sous-tâches d'un item. */
+  subtasks?: SubTask[];
+  /** Fil d'origine vocal — la dictée d'où provient cet item. */
+  audioOrigin?: AudioOrigin;
+  /** Statut : "active" par défaut. "idea" pour la boîte à idées. */
+  status?: ItemStatus;
 };
 
 /** Un item enregistré. */
@@ -125,6 +131,47 @@ export type Item = DraftItem & {
 export type SaveResult = { ok: true; id: string } | { ok: false; id: string; error: string };
 
 export type View = "capture" | "review" | "tasks" | "overview" | "settings";
+
+/**
+ * Une sous-tâche d'un item.
+ */
+export type SubTask = {
+  id: string;
+  title: string;
+  done: boolean;
+};
+
+/**
+ * Fil d'origine vocal d'un item — la note dictée d'où il provient.
+ */
+export type AudioOrigin = {
+  /** Texte complet de la transcription. */
+  text: string;
+  /** Extrait surligné dans la transcription (la partie qui a donné cet item). */
+  highlight: string;
+  /** Segment temporel dans l'enregistrement (secondes). */
+  startSec: number;
+  endSec: number;
+  /** Durée totale de l'enregistrement en secondes. */
+  durationSec: number;
+  /** Date de la dictée (ISO). */
+  date: string;
+  /** IDs des autres items issus de la même dictée. */
+  siblingIds: string[];
+};
+
+/**
+ * Statut d'un item.
+ * - "active" : tâche/RDV normal
+ * - "idea" : idée non rangée (boîte à idées)
+ * - "archived" : archivée
+ */
+export type ItemStatus = "active" | "idea" | "archived";
+
+/**
+ * Écran de l'app (design system Claude Design v1).
+ */
+export type Screen = "home" | "task" | "agenda" | "ideas" | "search";
 
 /* ---------------------------------------------------------------------------
  * Vision globale — la forme de `GET /api/overview`.
