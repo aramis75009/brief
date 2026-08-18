@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEventIcs } from "./caldav";
+import { buildEventIcs, calendarForProject } from "./caldav";
 import type { Item } from "./types";
 
 /**
@@ -80,5 +80,22 @@ describe("buildEventIcs", () => {
   it("écrit la priorité Brief (1 = la plus haute) en PRIORITY iCalendar", () => {
     expect(buildEventIcs(item({ priority: 1 }))).toContain("PRIORITY:1");
     expect(buildEventIcs(item({ priority: 4 }))).toContain("PRIORITY:4");
+  });
+});
+
+describe("calendarForProject", () => {
+  it("route chaque projet Brief vers son calendrier Apple", () => {
+    expect(calendarForProject("frip-trend")).toBe("Vinted Frip&Trend");
+    expect(calendarForProject("my-flip")).toBe("Dropshipping");
+    expect(calendarForProject("perso")).toBe("Personnel");
+    expect(calendarForProject("sport")).toBe("Sport");
+    expect(calendarForProject("webacademie")).toBe("Web@académie");
+    expect(calendarForProject("ia")).toBe("IA");
+  });
+
+  it("retombe sur Personnel pour un projet inconnu ou absent", () => {
+    expect(calendarForProject("projet-inconnu")).toBe("Personnel");
+    expect(calendarForProject(null)).toBe("Personnel");
+    expect(calendarForProject(undefined)).toBe("Personnel");
   });
 });

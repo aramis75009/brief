@@ -10,8 +10,10 @@ import type { Item } from "./types";
  *
  * Décision Aramis du 2026-08-17 (DECISIONS.md) : la latence ~15 min est
  * acceptée, les rappels à court terme restent en Web Push dans Brief. Ce
- * module ne fait qu'écrire les items datés comme événements dans un calendrier
- * iCloud, pour les résumés matin/soir sur le calendrier Apple.
+ * module écrit les items datés comme événements dans le calendrier iCloud
+ * mappé au projet de l'item (décision Aramis du 2026-08-18, DECISIONS.md) :
+ * chaque projet Brief a son calendrier de destination, donc chaque couleur
+ * dans l'app Calendrier identifie un domaine d'activité.
  *
  * PROPRIÉTÉS :
  *
@@ -27,8 +29,9 @@ import type { Item } from "./types";
  *
  *   3. DÉCOUVERTE. Le principal et le calendar-home-set sont découverts par
  *      PROPFIND (iCloud peut changer de serveur : l'URL en dur se casserait).
- *      Le calendrier cible peut être forcé par BRIEF_CALDAV_CALENDAR_PATH
- *      (chemin, ex. `/16391108573/calendars/home/`).
+ *      La liste des calendriers du compte est lue une fois par passage, et
+ *      chaque item est routé vers le calendrier de son projet (par displayname).
+ *      Un projet sans calendrier connu retombe sur « Personnel » (home/).
  */
 
 const CALDAV_ROOT = process.env.BRIEF_CALDAV_ROOT || "https://caldav.icloud.com/";
@@ -40,6 +43,42 @@ const SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20 * 1000;
 const DATA_DIR = process.env.BRIEF_DATA_DIR || join(process.cwd(), ".data");
 const LAST_SYNC_FILE = "caldav-last-sync.json";
+
+/**
+ * Mapping projet Brief → nom du calendrier iCloud de destination.
+ * Décision Aramis du 2026-08-18 : chaque projet a son calendrier (sa couleur).
+ * Surchargeable par `BRIEF_CALDAV_MAPPING` (JSON) dans l'environnement.
+ * Tout projet absent de la table retombe sur « Personnel » (home/).
+ */
+const DEFAULT_CALENDAR_MAPPING: Record<string, string> = {
+  "frip-trend": "Vinted Frip&Trend",
+  "my-flip": "Dropshipping",
+  perso: "Personnel",
+  sport: "Sport",
+  webacademie: "Web@académie",
+  ia: "IA",
+};
+
+const FALLBACK_CALENDAR = "Personnel";
+
+function loadCalendarMapping(): Record<string, string> {
+  try {
+    const raw = process.env.BRIEF_CALDAV_MAPPING;
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {
+    // mapping invalide → on garde le défaut, jamais de crash silencieux
+  }
+  return DEFAULT_CALENDAR_MAPPING;
+}
+
+/** Nom du calendrier cible pour un projet. `null` (pas de projet) → fallback. */
+export function calendarForProject(projectId: string | null | undefined): string {
+  if (!projectId) return FALLBACK_CALENDAR;
+  return loadCalendarMapping()[projectId] ?? FALLBACK_CALENDAR;
+}
 
 export type CalDavSyncRun = {
   skipped: boolean;
@@ -191,6 +230,40 @@ export async function discoverCalendarUrl(homeHref: string): Promise<string> {
   return new URL("home/", homeHref).toString();
 }
 
+/**
+ * Liste tous les calendriers du compte : displayname (normalisé, espaces de
+ * tête/queue retirés) → URL absolue. Les dossiers système (inbox/outbox/
+ * notification) sont exclus.
+ */
+export async function discoverCalendars(homeHref: string): Promise<Map<string, string>> {
+  const res = await caldavFetch(homeHref, {
+    method: "PROPFIND",
+    headers: { Depth: "1", "Content-Type": "application/xml" },
+    body:
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" ` +
+      `xmlns:ic="http://apple.com/ns/ical/">` +
+      `<d:prop><d:resourcetype/><d:displayname/><ic:calendar-color/></d:prop></d:propfind>`,
+  });
+  if (!res.ok) throw new Error(`PROPFIND calendars HTTP ${res.status}`);
+
+  const xml = await res.text();
+  const out = new Map<string, string>();
+  const responseRe = /<response[^>]*>([\s\S]*?)<\/response>/g;
+  let block: RegExpExecArray | null;
+  while ((block = responseRe.exec(xml)) !== null) {
+    const body = block[1];
+    const href = body.match(/<href[^>]*>([^<]*)<\/href>/)?.[1];
+    const name = body.match(/<displayname[^>]*>([^<]*)<\/displayname>/i)?.[1];
+    const isCalendar = body.includes("<collection/>") && body.includes("urn:ietf:params:xml:ns:caldav");
+    if (!href || !name || !isCalendar) continue;
+    const base = homeHref.replace(/\/$/, "") + "/";
+    const abs = /^https?:/i.test(href) ? href : new URL(href.replace(/^\//, ""), base).toString();
+    out.set(name.trim(), abs);
+  }
+  return out;
+}
+
 /* --- Lecture de l'existant ------------------------------------------------- */
 
 export type RemoteEvent = { href: string; uid: string };
@@ -263,9 +336,9 @@ async function deleteEvent(calendarUrl: string, href: string): Promise<void> {
 }
 
 /**
- * Un passage complet. Retourne un compte-rendu chiffré, comme le cron des
- * rappels : une sortie vide ne permettrait pas de distinguer « rien à faire »
- * de « cassé depuis trois jours ».
+ * Un passage complet sur TOUS les calendriers cibles. Retourne un compte-rendu
+ * chiffré, comme le cron des rappels : une sortie vide ne permettrait pas de
+ * distinguer « rien à faire » de « cassé depuis trois jours ».
  */
 export async function runCalDavSync(): Promise<CalDavSyncRun> {
   const lastSync = await readLastSync();
@@ -285,36 +358,75 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   }
 
   const items = await readItems();
-  const desired = items.map((i) => ({ item: i, ics: buildEventIcs(i) })).filter((d) => d.ics !== null);
+  // Tous les items datés et non terminés, avec leur calendrier cible.
+  const desired = items
+    .map((i) => ({ item: i, ics: buildEventIcs(i) }))
+    .filter((d): d is { item: Item; ics: string } => d.ics !== null);
+
+  // Grouper par calendrier cible (nom) — chaque item va dans le calendrier de
+  // son projet (fallback « Personnel »).
+  const byCalendar = new Map<string, Item[]>();
+  for (const d of desired) {
+    const calName = calendarForProject(d.item.projectId);
+    const list = byCalendar.get(calName) ?? [];
+    list.push(d.item);
+    byCalendar.set(calName, list);
+  }
 
   const principal = await discoverPrincipal();
   const home = await discoverCalendarHome(principal);
-  const calendarUrl = await discoverCalendarUrl(home);
-  const existing = await listBriefEvents(calendarUrl);
-
-  const desiredUids = new Set(desired.map((d) => `${UID_PREFIX}${d.item.id}`));
-  const existingUids = new Set(existing.map((e) => e.uid));
+  const calendars = await discoverCalendars(home);
+  // Le calendrier « Personnel » a toujours l'URL par défaut `home/`, même si
+  // la découverte par displayname ne le remonte pas proprement.
+  if (!calendars.has(FALLBACK_CALENDAR)) {
+    calendars.set(FALLBACK_CALENDAR, await discoverCalendarUrl(home));
+  }
 
   const failures: { uid: string; error: string }[] = [];
   let put = 0;
   let deleted = 0;
+  let existing = 0;
+  const touched: string[] = [];
 
-  for (const d of desired) {
-    try {
-      await putEvent(calendarUrl, d.item);
-      put += 1;
-    } catch (e) {
-      failures.push({ uid: `${UID_PREFIX}${d.item.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
+  for (const [calName, calItems] of byCalendar) {
+    const calUrl = calendars.get(calName);
+    if (!calUrl) {
+      // Calendrier introuvable : on signale plutôt que d'écrire n'importe où.
+      for (const it of calItems) failures.push({ uid: `${UID_PREFIX}${it.id}`, error: `calendrier « ${calName} » introuvable` });
+      continue;
     }
-  }
+    touched.push(calName);
 
-  for (const ev of existing) {
-    if (desiredUids.has(ev.uid)) continue;
+    const desiredUids = new Set(calItems.map((it) => `${UID_PREFIX}${it.id}`));
+
+    let remote: RemoteEvent[];
     try {
-      await deleteEvent(calendarUrl, ev.href);
-      deleted += 1;
+      remote = await listBriefEvents(calUrl);
     } catch (e) {
-      failures.push({ uid: ev.uid, error: e instanceof Error ? e.message : "DELETE échoué" });
+      for (const it of calItems) {
+        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "lecture échouée" });
+      }
+      continue;
+    }
+    existing += remote.length;
+
+    for (const it of calItems) {
+      try {
+        await putEvent(calUrl, it);
+        put += 1;
+      } catch (e) {
+        failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
+      }
+    }
+
+    for (const ev of remote) {
+      if (desiredUids.has(ev.uid)) continue;
+      try {
+        await deleteEvent(calUrl, ev.href);
+        deleted += 1;
+      } catch (e) {
+        failures.push({ uid: ev.uid, error: e instanceof Error ? e.message : "DELETE échoué" });
+      }
     }
   }
 
@@ -327,9 +439,9 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   return {
     skipped: false,
     nextSyncInSec: null,
-    discoveredCalendar: calendarUrl,
+    discoveredCalendar: touched.join(", ") || null,
     desired: desired.length,
-    existing: existingUids.size,
+    existing,
     put,
     deleted,
     failures,

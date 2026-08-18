@@ -14,6 +14,42 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-18 · CalDAV : un calendrier Apple par projet — chaque couleur identifie un domaine
+
+**Décision.** La synchro Brief → Apple ne va plus tout écrire dans « Personnel »
+(`home/`) : chaque projet Brief est routé vers **son propre calendrier iCloud**,
+dont la couleur distingue immédiatement le domaine d'activité dans l'app
+Calendrier.
+
+**Pourquoi.** Aramis, en regardant sa semaine : « toutes les tâches sont de la
+même couleur donc je n'arrive pas à séparer ce que j'ai à faire ». Le mapping
+utilise ses calendriers existants quand ils existent, et en crée de nouveaux
+sinon — l'app Calendrier devient un tableau de bord visuel par activité.
+
+**Mapping (décision Aramis du 18/08).**
+| Projet Brief | Calendrier Apple | Statut |
+|---|---|---|
+| Frip & Trend | « Vinted Frip&Trend » | existant |
+| My Flip | « Dropshipping » | existant (remplace l'usage de l'ancien projet) |
+| Perso | « Personnel » | existant (défaut) |
+| Sport | « Sport » | existant |
+| Web@académie | « Web@académie » | **créé** (rouge) — remplace l'usage de « Travail » |
+| IA | « IA » | **créé** (vert) |
+| (autre / inconnu) | « Personnel » | fallback |
+
+**Comment.** `calendarForProject(projectId)` dans `src/lib/caldav.ts` (table
+par défaut, surchargeable par `BRIEF_CALDAV_MAPPING` JSON). `runCalDavSync`
+découvre la liste des calendriers du compte une fois par passage
+(`discoverCalendars`) puis groupe les items par calendrier cible avant les
+PUT/DELETE. Un item qui change de projet est supprimé de l'ancien calendrier et
+écrit dans le nouveau au passage suivant (idempotence UID `brief-<id>` conservée
+par calendrier). L'heure exacte des calendriers créés : MKCOL avec
+`displayname` + `calendar-color`.
+
+**Statut.** ✅ Implémenté, tests 106/106, à déployer.
+
+---
+
 ## 2026-08-17 · Le PIN devient « une fois par appareil » — zéro friction à l'ouverture
 
 **Décision.** Le code PIN n'est plus demandé à chaque ouverture. L'app le
