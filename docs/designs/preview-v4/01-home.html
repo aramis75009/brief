@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Brief v4 — Accueil</title>
+<link rel="stylesheet" href="design.css">
+</head>
+<body>
+<div class="stage">
+  <p class="stage-label"><b>Accueil.</b> Une seule réponse : ce qui se fait maintenant, puis le reste, dans l'ordre.</p>
+
+  <div class="phone">
+    <div class="safe-top"></div>
+    <div class="screen">
+
+      <div class="header">
+        <div class="date">
+          <h1 class="h1">Samedi 16 août</h1>
+          <span class="clock">20:14</span>
+        </div>
+        <p class="sentence" style="margin-top:6px">Trois choses aujourd'hui. Une est en retard.</p>
+      </div>
+
+      <div class="scroll">
+
+        <div class="now">
+          <span class="label">Maintenant</span>
+          <div class="title">Photographier les polos restants</div>
+          <div class="meta">
+            <span>Frip &amp; Trend</span><span class="sep"></span>
+            <span>environ 1 h 20</span><span class="sep"></span>
+            <span>avant 18 h</span>
+          </div>
+          <div class="actions">
+            <button class="btn action" style="flex:1">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+              Fait
+            </button>
+            <button class="btn" style="flex:1">Plus tard</button>
+          </div>
+        </div>
+
+        <div class="sect"><span class="label">Ensuite</span><span class="rule"></span></div>
+
+        <div class="item">
+          <button class="tick" aria-label="Marquer comme fait"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+          <div class="body">
+            <div class="title">Préparer l'expédition Pays-Bas</div>
+            <div class="meta"><span>Frip &amp; Trend</span><span class="sep"></span><span>environ 15 min</span></div>
+          </div>
+        </div>
+
+        <div class="item">
+          <button class="tick" aria-label="Marquer comme fait"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+          <div class="body">
+            <div class="title">Tourner toutes les photos dans le bon sens</div>
+            <div class="meta"><span>Frip &amp; Trend</span><span class="sep"></span><span>environ 5 min</span></div>
+          </div>
+        </div>
+
+        <div class="sect"><span class="label">Rendez-vous</span><span class="rule"></span></div>
+
+        <div class="item">
+          <div class="body">
+            <div class="title">Entretien Epitech — Web@cadémie</div>
+            <div class="meta"><span>Web@cadémie</span><span class="sep"></span><span>lundi 25</span></div>
+          </div>
+          <span class="when">15:30</span>
+        </div>
+
+        <div class="sect"><span class="label">En retard</span><span class="rule"></span></div>
+
+        <div class="late">
+          <span class="label" style="color:var(--red)">Depuis hier</span>
+          <div class="title">Poster 20 polos sur Vinted</div>
+          <div class="q">Tu le fais maintenant, ou tu le décales ?</div>
+          <div class="actions">
+            <button class="btn action">Maintenant</button>
+            <button class="btn">Demain</button>
+            <button class="btn quiet" style="flex:0 0 46px" aria-label="Laisser tomber">✕</button>
+          </div>
+        </div>
+
+        <div class="sect"><span class="label">Plus tard</span><span class="rule"></span></div>
+
+        <div class="item">
+          <button class="tick" aria-label="Marquer comme fait"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+          <div class="body">
+            <div class="title">Mettre en vente la ceinture Gucci</div>
+            <div class="meta"><span>Perso</span><span class="sep"></span><span>cette semaine</span></div>
+          </div>
+        </div>
+
+        <div class="item">
+          <button class="tick" aria-label="Marquer comme fait"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+          <div class="body">
+            <div class="title">Vérifier les frais Vinted du trimestre</div>
+            <div class="meta"><span>Frip &amp; Trend</span><span class="sep"></span><span>sans date</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabbar">
+        <button class="tab on">Aujourd'hui</button>
+        <div class="mic-slot">
+          <button class="mic-fab" aria-label="Dicter une note">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+        </div>
+        <button class="tab">Tout</button>
+      </div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+</div>
+
+<nav class="switcher">
+  <a class="on" href="01-home.html">Accueil</a>
+  <a href="02-voice.html">Dictée</a>
+  <a href="03-noted.html">Noté</a>
+  <a href="04-triage.html">Relecture</a>
+  <a href="05-plan.html">Plan</a>
+  <a href="06-item.html">Fiche</a>
+  <a href="07-all.html">Tout</a>
+  <a href="08-states.html">États</a>
+  <a href="09-desktop.html">Desktop</a>
+  <a href="10-light.html">Clair</a>
+</nav>
+</body>
+</html>

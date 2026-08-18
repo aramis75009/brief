@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Brief v3 — Desktop</title>
+<link rel="stylesheet" href="design.css">
+<style>
+.desktop {
+  max-width: 1240px; margin: 0 auto; min-height: 100dvh;
+  display: grid; grid-template-columns: 220px minmax(0,1fr) 320px;
+}
+.rail { border-right: 1px solid var(--line); padding: 28px 16px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100dvh; }
+.rail .brand { display: flex; align-items: baseline; gap: 10px; padding: 0 10px 24px; }
+.rail .brand .name { font-family: var(--serif); font-style: italic; font-size: 20px; }
+.rail .brand .sig { width: 8px; height: 8px; background: var(--amber); flex: none; align-self: center; }
+.rail-item { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--txt-3); width: 100%; text-align: left; }
+.rail-item.on { color: var(--amber); border-left: 2px solid var(--amber); }
+.rail-item:hover:not(.on) { color: var(--txt-2); }
+.rail .spacer { flex: 1; }
+.capbox { border: 1px dashed var(--line-2); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.capbox input { border: none; outline: none; background: transparent; font-size: 13px; width: 100%; }
+.capbox input::placeholder { color: var(--txt-3); font-family: var(--serif); font-style: italic; }
+.main { padding: 28px 36px 80px; min-width: 0; }
+.side { border-left: 1px solid var(--line); padding: 28px 22px 80px; position: sticky; top: 0; height: 100dvh; overflow-y: auto; }
+.side::-webkit-scrollbar { display: none; }
+@media (max-width: 1023px) {
+  .desktop { grid-template-columns: 64px minmax(0,1fr); }
+  .side { display: none; }
+  .rail .brand .name, .rail-item .lbl, .capbox { display: none; }
+  .rail-item { justify-content: center; }
+}
+@media (max-width: 639px) {
+  .desktop { grid-template-columns: 1fr; }
+  .rail { position: fixed; left: 0; right: 0; bottom: 0; top: auto; height: auto; flex-direction: row; border-right: none; border-top: 1px solid var(--line); background: var(--bg); z-index: 50; padding: 6px 10px; }
+  .rail .brand, .rail .spacer { display: none; }
+  .rail-item { flex: 1; justify-content: center; border-left: none; }
+  .main { padding: 20px 18px 110px; }
+}
+</style>
+</head>
+<body>
+<div class="desktop">
+
+  <aside class="rail">
+    <div class="brand"><span class="sig"></span><span class="name">Brief</span></div>
+    <button class="rail-item on"><span>◉</span><span class="lbl">Tableau</span></button>
+    <button class="rail-item"><span>≡</span><span class="lbl">Tout</span></button>
+    <button class="rail-item"><span>▤</span><span class="lbl">Plan</span></button>
+    <button class="rail-item"><span>⚙</span><span class="lbl">Réglages</span></button>
+    <div class="spacer"></div>
+    <div class="capbox">
+      <span class="kicker">Capturer</span>
+      <input placeholder="écrire ici… entrée = noter">
+      <button class="btn sm amber">Dicter</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="board-head" style="margin-bottom:4px">
+      <span class="t" style="font-size:24px">Samedi 16 août</span>
+      <span class="clock"><b>20:14</b> · PARIS</span>
+    </div>
+    <p class="voice" style="font-size:16px;margin:10px 0 6px">Trois départs aujourd'hui, un en retard.</p>
+
+    <div class="nowline">
+      <div class="top"><span>Embarquement · maintenant</span><span>FT-118</span></div>
+      <div class="title">Photographier les polos restants</div>
+      <div class="meta"><span>FT</span><span>·</span><span>~1 h 20</span><span>·</span><span>avant 18 h</span></div>
+      <div class="actions" style="max-width:420px">
+        <button class="btn amber" style="flex:1">Fait ✓</button>
+        <button class="btn" style="flex:1">Plus tard</button>
+        <button class="btn" style="flex:1">Ouvrir</button>
+      </div>
+    </div>
+
+    <div class="sect"><span class="kicker">À quai</span><span class="n">2</span><span class="rule"></span></div>
+    <div class="flight">
+      <span class="time">—</span>
+      <div class="body"><div class="title">Préparer l'expédition Pays-Bas</div><div class="meta"><span class="code">FT</span><span>·</span><span>~15 min</span></div></div>
+      <span class="status st-dim">à quai</span>
+    </div>
+    <div class="flight">
+      <span class="time">—</span>
+      <div class="body"><div class="title">Tourner toutes les photos dans le bon sens</div><div class="meta"><span class="code">FT</span><span>·</span><span>~5 min</span></div></div>
+      <span class="status st-dim">à quai</span>
+    </div>
+
+    <div class="late-block">
+      <span class="sub">Retard · depuis hier · FT</span>
+      <div class="title">Poster 20 polos sur Vinted</div>
+      <div class="actions" style="max-width:420px">
+        <button class="btn amber">Maintenant</button>
+        <button class="btn">Demain</button>
+        <button class="btn" style="flex:0 0 44px">✕</button>
+      </div>
+    </div>
+  </main>
+
+  <aside class="side">
+    <div class="sect" style="margin-top:0"><span class="kicker">Embarquement</span><span class="rule"></span></div>
+    <div class="flight"><span class="time">11:30</span><div class="body"><div class="title" style="font-size:14px">Aller à la salle de sport</div><div class="meta"><span class="code">SP</span></div></div><span class="status st-dim">auj.</span></div>
+    <div class="flight" style="border-bottom:none"><span class="time">15:30</span><div class="body"><div class="title" style="font-size:14px">Entretien Epitech</div><div class="meta"><span class="code">WA</span><span>·</span><span>lundi 25</span></div></div><span class="status st-dim">rdv</span></div>
+
+    <div class="sect"><span class="kicker">Compagnies</span><span class="rule"></span></div>
+    <div class="flight"><span class="time code" style="color:var(--txt-2)">FT</span><div class="body"><div class="title" style="font-size:14px">Frip &amp; Trend</div></div><span class="status st-red">1 retard</span></div>
+    <div class="flight"><span class="time code" style="color:var(--txt-2)">MF</span><div class="body"><div class="title" style="font-size:14px">My Flip</div></div><span class="status st-dim">1 ouvert</span></div>
+    <div class="flight" style="border-bottom:none"><span class="time code" style="color:var(--txt-2)">WA</span><div class="body"><div class="title" style="font-size:14px">Web@cadémie</div></div><span class="status st-dim">1 rdv</span></div>
+
+    <div class="sect"><span class="kicker">Semaine</span><span class="rule"></span></div>
+    <div style="display:flex;gap:26px;border-top:1px solid var(--line-2);padding-top:12px">
+      <div><span class="kicker">Calées</span><div class="mono" style="font-size:20px;margin-top:2px">7</div></div>
+      <div><span class="kicker">Durée</span><div class="mono" style="font-size:20px;margin-top:2px">4 h 10</div></div>
+      <div><span class="kicker">RDV</span><div class="mono" style="font-size:20px;margin-top:2px">2</div></div>
+    </div>
+    <p class="voice" style="font-size:13px;margin-top:12px">Jeudi est le jour le plus chargé (3 éléments). Le reste de la semaine respire.</p>
+  </aside>
+</div>
+
+<nav class="switcher">
+  <a href="01-board.html">Tableau</a>
+  <a href="02-voice.html">Dictée</a>
+  <a href="03-noted.html">Noté</a>
+  <a href="04-triage.html">Triage</a>
+  <a href="05-plan.html">Plan</a>
+  <a href="06-item.html">Fiche</a>
+  <a href="07-all.html">Tout</a>
+  <a href="08-states.html">États</a>
+  <a class="on" href="09-desktop.html">Desktop</a>
+  <a href="10-light.html">Clair</a>
+</nav>
+</body>
+</html>

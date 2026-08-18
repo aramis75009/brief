@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Brief v4 — Desktop</title>
+<link rel="stylesheet" href="design.css">
+<style>
+.desktop { max-width: 1200px; margin: 0 auto; min-height: 100dvh; display: grid; grid-template-columns: 210px minmax(0,1fr) 300px; }
+.rail { border-right: 1px solid var(--line); padding: 28px 14px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100dvh; }
+.rail .brand { display: flex; align-items: center; gap: 10px; padding: 2px 12px 24px; }
+.rail .brand .mark { width: 30px; height: 30px; border-radius: 9px; background: var(--white); display: grid; place-items: center; }
+.rail .brand .name { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.rail-item { display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px; border-radius: var(--r); font-size: 14px; font-weight: 600; color: var(--txt-2); width: 100%; text-align: left; }
+.rail-item.on { background: var(--panel); color: var(--txt); }
+.rail .spacer { flex: 1; }
+.capbox { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.capbox input { border: none; outline: none; background: transparent; font-size: 14px; width: 100%; }
+.capbox input::placeholder { color: var(--txt-3); }
+.main { padding: 28px 36px 80px; min-width: 0; }
+.side { border-left: 1px solid var(--line); padding: 28px 22px 80px; position: sticky; top: 0; height: 100dvh; overflow-y: auto; }
+.side::-webkit-scrollbar { display: none; }
+@media (max-width: 1023px) {
+  .desktop { grid-template-columns: 64px minmax(0,1fr); }
+  .side { display: none; }
+  .rail .brand .name, .rail-item .lbl, .capbox { display: none; }
+  .rail-item { justify-content: center; }
+}
+@media (max-width: 639px) {
+  .desktop { grid-template-columns: 1fr; }
+  .rail { position: fixed; left: 0; right: 0; bottom: 0; top: auto; height: auto; flex-direction: row; border-right: none; border-top: 1px solid var(--line); background: var(--bg); z-index: 50; padding: 6px 10px; }
+  .rail .brand, .rail .spacer { display: none; }
+  .rail-item { flex: 1; justify-content: center; }
+  .main { padding: 20px 18px 110px; }
+}
+</style>
+</head>
+<body>
+<div class="desktop">
+
+  <aside class="rail">
+    <div class="brand">
+      <span class="mark">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--white-ink)" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </span>
+      <span class="name">Brief</span>
+    </div>
+    <button class="rail-item on"><span>●</span><span class="lbl">Aujourd'hui</span></button>
+    <button class="rail-item"><span>≡</span><span class="lbl">Tout</span></button>
+    <button class="rail-item"><span>▤</span><span class="lbl">Ta journée</span></button>
+    <button class="rail-item"><span>⚙</span><span class="lbl">Réglages</span></button>
+    <div class="spacer"></div>
+    <div class="capbox">
+      <span class="label">Noter vite</span>
+      <input placeholder="Écris ici, Entrée pour noter">
+      <button class="btn sm action">Dicter</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="date" style="display:flex;align-items:baseline;justify-content:space-between">
+      <h1 class="h1" style="font-size:30px">Samedi 16 août</h1>
+      <span class="clock">20:14</span>
+    </div>
+    <p class="sentence" style="margin:6px 0 18px">Trois choses aujourd'hui. Une est en retard.</p>
+
+    <div class="now" style="max-width:640px">
+      <span class="label">Maintenant</span>
+      <div class="title">Photographier les polos restants</div>
+      <div class="meta">
+        <span>Frip &amp; Trend</span><span class="sep"></span>
+        <span>environ 1 h 20</span><span class="sep"></span>
+        <span>avant 18 h</span>
+      </div>
+      <div class="actions" style="max-width:420px">
+        <button class="btn action" style="flex:1">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          Fait
+        </button>
+        <button class="btn" style="flex:1">Plus tard</button>
+        <button class="btn quiet" style="flex:1">Ouvrir</button>
+      </div>
+    </div>
+
+    <div class="sect"><span class="label">Ensuite</span><span class="rule"></span></div>
+    <div style="max-width:640px">
+      <div class="item">
+        <button class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+        <div class="body"><div class="title">Préparer l'expédition Pays-Bas</div><div class="meta"><span>Frip &amp; Trend</span><span class="sep"></span><span>environ 15 min</span></div></div>
+        <button class="btn sm quiet">Ouvrir</button>
+      </div>
+      <div class="item">
+        <button class="tick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+        <div class="body"><div class="title">Tourner toutes les photos dans le bon sens</div><div class="meta"><span>Frip &amp; Trend</span><span class="sep"></span><span>environ 5 min</span></div></div>
+        <button class="btn sm quiet">Ouvrir</button>
+      </div>
+    </div>
+
+    <div class="sect"><span class="label">En retard</span><span class="rule"></span></div>
+    <div class="late" style="max-width:640px">
+      <span class="label" style="color:var(--red)">Depuis hier</span>
+      <div class="title">Poster 20 polos sur Vinted</div>
+      <div class="q">Tu le fais maintenant, ou tu le décales ?</div>
+      <div class="actions" style="max-width:420px">
+        <button class="btn action">Maintenant</button>
+        <button class="btn">Demain</button>
+        <button class="btn quiet" style="flex:0 0 46px" aria-label="Laisser tomber">✕</button>
+      </div>
+    </div>
+  </main>
+
+  <aside class="side">
+    <div class="sect" style="margin-top:0"><span class="label">Rendez-vous</span><span class="rule"></span></div>
+    <div class="item"><div class="body"><div class="title" style="font-size:14px">Salle de sport</div><div class="meta"><span>Sport</span></div></div><span class="when">11:30</span></div>
+    <div class="item"><div class="body"><div class="title" style="font-size:14px">Entretien Epitech</div><div class="meta"><span>Web@cadémie</span><span class="sep"></span><span>lundi 25</span></div></div><span class="when">15:30</span></div>
+
+    <div class="sect"><span class="label">Projets</span><span class="rule"></span></div>
+    <div class="item"><div class="body"><div class="title" style="font-size:14px">Frip &amp; Trend</div></div><span class="when red">1 en retard</span></div>
+    <div class="item"><div class="body"><div class="title" style="font-size:14px">My Flip</div></div><span class="when">1 en cours</span></div>
+    <div class="item"><div class="body"><div class="title" style="font-size:14px">Web@cadémie</div></div><span class="when">1 rdv</span></div>
+
+    <div class="sect"><span class="label">Cette semaine</span><span class="rule"></span></div>
+    <div style="display:flex;gap:24px">
+      <div><span class="label">Prévues</span><div class="h1" style="font-size:22px;margin-top:2px">7</div></div>
+      <div><span class="label">Durée</span><div class="h1" style="font-size:22px;margin-top:2px">4 h 10</div></div>
+      <div><span class="label">Rdv</span><div class="h1" style="font-size:22px;margin-top:2px">2</div></div>
+    </div>
+    <p class="sentence" style="font-size:13px;margin-top:12px">Jeudi sera chargé. Le reste de la semaine respire.</p>
+  </aside>
+</div>
+
+<nav class="switcher">
+  <a href="01-home.html">Accueil</a>
+  <a href="02-voice.html">Dictée</a>
+  <a href="03-noted.html">Noté</a>
+  <a href="04-triage.html">Relecture</a>
+  <a href="05-plan.html">Plan</a>
+  <a href="06-item.html">Fiche</a>
+  <a href="07-all.html">Tout</a>
+  <a href="08-states.html">États</a>
+  <a class="on" href="09-desktop.html">Desktop</a>
+  <a href="10-light.html">Clair</a>
+</nav>
+</body>
+</html>

@@ -1,28 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import localFont from "next/font/local";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 /**
- * General Sans (Fontshare) — famille unique de l'app.
+ * Plus Jakarta Sans — famille unique de l'app (design system Claude Design v1).
  *
- * `next/font/local` et non `next/font/google` : General Sans n'est pas sur
- * Google Fonts. Les .woff2 sont versionnés dans le dépôt pour que le build ne
- * dépende pas de la disponibilité d'un CDN tiers.
- *
- * Choisie contre Outfit et Poppins pour une raison mesurable : ses ouvertures
- * plus serrées la gardent lisible à 13 px sur mobile, taille à laquelle les
- * géométriques classiques se referment. JetBrains Mono a été supprimée — les
- * chiffres alignés passent par `font-variant-numeric: tabular-nums`.
+ * `next/font/google` : Plus Jakarta Sans est sur Google Fonts, contrairement
+ * à General Sans qui nécessitait des .woff2 versionnés. JetBrains Mono est
+ * réintroduite pour les labels monospace (10px, .09em) du design system.
  */
-const generalSans = localFont({
-  variable: "--font-general-sans",
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-jakarta",
   display: "swap",
-  src: [
-    { path: "./fonts/GeneralSans-400.woff2", weight: "400", style: "normal" },
-    { path: "./fonts/GeneralSans-500.woff2", weight: "500", style: "normal" },
-    { path: "./fonts/GeneralSans-600.woff2", weight: "600", style: "normal" },
-    { path: "./fonts/GeneralSans-700.woff2", weight: "700", style: "normal" },
-  ],
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -40,38 +38,28 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Brief",
-    // `default` (et non black-translucent) : en standalone, iOS teinte alors la
-    // zone de status bar avec le theme-color crème et choisit un texte sombre.
-    // black-translucent forcerait un texte blanc, illisible sur #FAF8F5.
     statusBarStyle: "default",
   },
   other: {
-    // Next 16 n'émet que la balise standard `mobile-web-app-capable` pour
-    // appleWebApp.capable. Safari iOS lit encore la variante préfixée : sans
-    // elle, « Sur l'écran d'accueil » crée un simple marque-page, pas une app
-    // standalone. On l'ajoute donc explicitement (vérifié dans le HTML servi).
     "apple-mobile-web-app-capable": "yes",
   },
 };
 
 export const viewport: Viewport = {
-  // Aligné sur --color-page. Deux valeurs pour que la barre de statut suive le
-  // thème système au lieu de rester crème sur un fond sombre.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F5F3F0" },
-    { media: "(prefers-color-scheme: dark)", color: "#0F0E0D" },
+    { media: "(prefers-color-scheme: light)", color: "#F4F4F2" },
+    { media: "(prefers-color-scheme: dark)", color: "#101010" },
   ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  // Indispensable pour que env(safe-area-inset-*) soit non nul.
   viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${generalSans.variable} h-full antialiased`}>
+    <html lang="fr" className={`${jakarta.variable} ${mono.variable} h-full antialiased`}>
       <body className="min-h-full">{children}</body>
     </html>
   );

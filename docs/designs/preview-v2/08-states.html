@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Brief v2 — États</title>
+<link rel="stylesheet" href="design.css">
+</head>
+<body>
+<div class="stage">
+  <p class="stage-label"><b>États</b> — vide, micro refusé, hors-ligne, chargement. Chaque panne a une issue, jamais un bouton mort.</p>
+
+  <div class="phone">
+    <div class="statusbar"><span class="tnum">9:41</span><span class="battery"></span></div>
+    <div class="safe-top"></div>
+
+    <div class="screen">
+      <div class="header">
+        <div class="row">
+          <div>
+            <h1 class="h1">Maintenant</h1>
+            <p class="sub">Samedi 16 août</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="scroll">
+
+        <!-- ====== 1. État vide ====== -->
+        <div class="section"><span class="kicker">Rien à faire — état vide</span><span class="rule"></span></div>
+        <div class="card">
+          <div class="empty">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5" stroke-linejoin="round"/></svg>
+            <div class="big">Rien ne te demande.</div>
+            <p class="sub">Tout est rangé. Dicte ce qui te passe par la tête — Brief le gardera.</p>
+            <button class="btn coral sm" style="margin-top:6px">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              Dicter une note
+            </button>
+          </div>
+        </div>
+
+        <!-- ====== 2. Erreur micro ====== -->
+        <div class="section"><span class="kicker">Micro refusé</span><span class="rule"></span></div>
+        <div class="err-card">
+          <span class="e-kicker">Attention</span>
+          <div class="e-title">Accès au micro refusé.</div>
+          <ul>
+            <li>• iPhone : Réglages → Safari → Micro → Autoriser, puis recharge.</li>
+            <li>• Ou touche « aA » → Réglages du site web → Micro.</li>
+          </ul>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn sm coral" style="flex:1">Réessayer</button>
+            <button class="btn sm ghost" style="flex:1">Écrire à la place</button>
+          </div>
+        </div>
+
+        <!-- ====== 3. Hors-ligne : file d'attente ====== -->
+        <div class="section"><span class="kicker">Hors-ligne — jamais perdu</span><span class="rule"></span></div>
+
+        <div style="border-radius:var(--r-row);border:1.5px dashed var(--ink-3);padding:10px 14px;margin-bottom:8px" role="status">
+          <p style="font-size:13px;font-weight:600;line-height:1.45">1 note en attente d'envoi</p>
+          <p style="font-size:11px;color:var(--ink-2);margin-top:2px;line-height:1.45">Pas encore sur le serveur — elle partira à la prochaine ouverture avec du réseau.</p>
+        </div>
+
+        <div class="row-item pending">
+          <div style="flex:1;min-width:0">
+            <div class="row-title">Vérifier les frais Vinted du trimestre</div>
+            <div class="row-meta"><span class="chip outline">en attente</span></div>
+          </div>
+        </div>
+
+        <!-- ====== 4. Erreur de structuration ====== -->
+        <div class="section"><span class="kicker">La structuration a échoué</span><span class="rule"></span></div>
+        <div class="err-card">
+          <span class="e-kicker">Attention</span>
+          <div class="e-title">La structuration a échoué — ta note est intacte.</div>
+          <div style="border-radius:var(--r-field);background:var(--tile-2);border:1px solid var(--line);padding:10px 12px;margin-top:10px">
+            <p style="font-size:13px;line-height:1.5;color:var(--ink-2)">« Demain matin j'appelle le fournisseur belge pour confirmer les 550 polos »</p>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn sm coral" style="flex:1">Réessayer</button>
+            <button class="btn sm ghost" style="flex:1">Garder tel quel</button>
+          </div>
+        </div>
+
+        <!-- ====== 5. Chargement initial ====== -->
+        <div class="section"><span class="kicker">Premier chargement</span><span class="rule"></span></div>
+        <div class="card" style="padding:28px 20px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="spinner"></span>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600">Brief prépare ta journée…</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px">lecture des éléments et des rendez-vous</div>
+            </div>
+          </div>
+          <!-- squelettes -->
+          <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+            <div style="height:54px;border-radius:var(--r-row);background:var(--tile-2)"></div>
+            <div style="height:54px;border-radius:var(--r-row);background:var(--tile-2);opacity:0.7"></div>
+            <div style="height:34px;border-radius:var(--r-row);background:var(--tile-2);opacity:0.4;width:70%"></div>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+      </div>
+
+      <div class="tabbar">
+        <button class="tab on">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>
+          Maintenant
+        </button>
+        <div class="mic-slot">
+          <button class="mic-fab" aria-label="Capturer">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+        </div>
+        <button class="tab">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          Tout
+        </button>
+      </div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+</div>
+
+<nav class="switcher">
+  <a href="01-home.html">Maintenant</a>
+  <a href="02-capture-recording.html">Dictée</a>
+  <a href="03-capture-processing.html">Traitement</a>
+  <a href="04-triage.html">Triage</a>
+  <a href="05-plan.html">Plan du jour</a>
+  <a href="06-task-detail.html">Fiche</a>
+  <a href="07-all.html">Tout</a>
+  <a class="on" href="08-states.html">États</a>
+  <a href="09-desktop.html">Desktop</a>
+</nav>
+</body>
+</html>

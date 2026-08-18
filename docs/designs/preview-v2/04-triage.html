@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Brief v2 — Triage</title>
+<link rel="stylesheet" href="design.css">
+</head>
+<body>
+<div class="stage">
+  <p class="stage-label"><b>Triage</b> — friction proportionnelle à l'incertitude. Ce qui est sûr part tout seul ; le reste pose UNE question, jamais un formulaire.</p>
+
+  <div class="phone">
+    <div class="statusbar"><span class="tnum">9:41</span><span class="battery"></span></div>
+    <div class="safe-top"></div>
+
+    <div class="backdrop"></div>
+
+    <div class="screen" style="opacity:0.4">
+      <div class="header"><h1 class="h1">Maintenant</h1></div>
+      <div class="scroll">
+        <div class="now-card">
+          <span class="kicker">À faire en premier</span>
+          <div class="now-title">Photographier les polos restants</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== Sheet de triage ====== -->
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="sheet-head">
+        <div style="flex:1">
+          <div class="h2" style="font-size:17px">Brief a compris</div>
+          <div class="sub" style="margin-top:2px">2 éléments à valider · 1 déjà rangé</div>
+        </div>
+        <button class="iconbtn" aria-label="Fermer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="sheet-scroll">
+
+        <!-- Transcription d'origine, toujours visible -->
+        <div style="border-radius:var(--r-row);background:var(--tile-2);border:1px solid var(--line);padding:10px 14px;margin-bottom:12px">
+          <span class="kicker" style="font-size:10px">Note d'origine</span>
+          <p style="font-size:13px;line-height:1.5;color:var(--ink-2);margin-top:4px">« Demain matin j'appelle le fournisseur belge pour confirmer les 550 polos, et il faut que je prépare les 100 polos pour les mettre en vente cette semaine »</p>
+        </div>
+
+        <!-- Élément 1 : un champ incertain (heure) → UNE question -->
+        <div class="review-card">
+          <input class="review-title-input" value="Appeler le fournisseur belge pour confirmer les 550 polos">
+          <div class="field-row">
+            <span class="chip big proj-2"><span class="pdot diamond"></span>My Flip</span>
+
+            <!-- heure incertaine : oui/non -->
+            <span class="field-chip unsure">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              Demain matin — 9 h ?
+              <button class="mini-btn yes" aria-label="Oui">✓</button>
+              <button class="mini-btn no" aria-label="Non">✕</button>
+            </span>
+
+            <!-- priorité sûre, discrète -->
+            <span class="field-chip" style="opacity:0.75">p2 · Élevé</span>
+          </div>
+          <p style="font-size:11px;color:var(--ink-3);margin-top:9px;line-height:1.4">« demain matin » n'a pas d'heure précise — Brief propose 9 h, tu peux la changer.</p>
+        </div>
+
+        <!-- Élément 2 : objectif → proposition d'étapes, jamais imposée -->
+        <div class="review-card">
+          <input class="review-title-input" value="Préparer les 100 polos pour la mise en vente">
+          <div class="field-row">
+            <span class="chip big proj-1"><span class="pdot square"></span>Frip &amp; Trend</span>
+            <span class="field-chip">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18"/></svg>
+              Cette semaine
+            </span>
+          </div>
+
+          <div class="steps-box">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span class="kicker" style="font-size:10px">Brief propose 5 étapes</span>
+              <div style="display:flex;gap:6px">
+                <button class="btn sm coral" style="height:28px;font-size:12px">Tout garder</button>
+                <button class="btn sm ghost" style="height:28px;font-size:12px">Ignorer</button>
+              </div>
+            </div>
+            <ul class="steps-list">
+              <li><span class="n">1</span> Vérifier l'inventaire des 100 polos</li>
+              <li><span class="n">2</span> Photographier les polos</li>
+              <li><span class="n">3</span> Rédiger les annonces</li>
+              <li><span class="n">4</span> Publier sur Vinted &amp; Vestiaire Collective</li>
+              <li><span class="n">5</span> Relire les annonces en ligne</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Élément 3 : auto-rangé, juste pour info -->
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:0 6px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          <span style="font-size:13px;font-weight:500;color:var(--ink-2)">« Acheter du détergent » — rangé tel quel, sans échéance.</span>
+        </div>
+      </div>
+
+      <div class="sheet-foot">
+        <button class="btn primary block">
+          Confirmer
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="switcher">
+  <a href="01-home.html">Maintenant</a>
+  <a href="02-capture-recording.html">Dictée</a>
+  <a href="03-capture-processing.html">Traitement</a>
+  <a class="on" href="04-triage.html">Triage</a>
+  <a href="05-plan.html">Plan du jour</a>
+  <a href="06-task-detail.html">Fiche</a>
+  <a href="07-all.html">Tout</a>
+  <a href="08-states.html">États</a>
+  <a href="09-desktop.html">Desktop</a>
+</nav>
+</body>
+</html>
