@@ -53,7 +53,9 @@ PUT/DELETE. Un item qui change de projet est supprimé de l'ancien calendrier et
 par calendrier). L'heure exacte des calendriers créés : MKCOL avec
 `displayname` + `calendar-color`.
 
-**Statut.** ✅ Implémenté, tests 106/106, à déployer.
+**Statut.** ✅ Implémenté, tests 106/106, **déployé en prod et vérifié par relu
+iCloud indépendante** (événements `brief-*` présents dans chaque calendrier de
+projet, aucun résidu dans « Personnel », tâches cochées retirées).
 
 ---
 
