@@ -14,6 +14,33 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-18 · Le cookie PIN est posé par le serveur (Set-Cookie), pas par JavaScript
+
+**Décision.** Le cookie persistant `brief_pin` est posé **côté serveur** par
+`POST /api/session` (Set-Cookie HTTP, Max-Age ~13 mois, SameSite=Lax,
+Secure en HTTPS) à chaque vérification réussie du PIN. Le client garde
+localStorage + cookie JS (migration, fallback), mais le cookie serveur est la
+source fiable de mémorisation.
+
+**Pourquoi.** Le 18/08 au soir, après le correctif « cookie + localStorage »,
+l'écran PIN réapparaissait **à chaque fermeture/relance** de la PWA sur
+l'iPhone. Cause : sur iOS, les cookies posés par JavaScript
+(`document.cookie`) dans une PWA standalone peuvent être purgés à la fermeture
+de l'app — alors qu'un cookie posé par `Set-Cookie` HTTP persiste. Le serveur
+ne posait aucun cookie (`/api/session` renvoyait juste `{ok:true}`).
+
+**Comment.** `src/app/api/session/route.ts` : Set-Cookie `brief_pin` à chaque
+vérification réussie (le PIN est lu depuis `BRIEF_PIN`, jamais affiché).
+`src/lib/pin.ts` : `clearCookie` efface avec l'attribut `Secure` correspondant
+(un cookie Secure ne peut être effacé que par un Set-Cookie Secure — sinon
+« Verrouiller » ne déverrouillerait pas). Vérifié en prod : POST /api/session
+200 → `set-cookie: brief_pin=…; Secure`, 401 → pas de cookie. Commits
+`e2868c5` + `cb8c2c7`, déployés le 18/08.
+
+**Statut.** ✅ Fait.
+
+---
+
 ## 2026-08-18 · Les suppressions d'occurrences du calendrier sont adoptées (EXDATE)
 
 **Décision.** Quand Aramis supprime une occurrence d'une série récurrente dans
