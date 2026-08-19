@@ -157,6 +157,25 @@ raison nouvelle.
 
 ## P2 — Prévu, à faire plus tard
 
+### Tuile « Rendez-vous » de l'accueil ne compte pas les événements externes/adoptés
+- **Quoi :** `HomeScreen.tsx` compte `items.filter(kind==="event")` — les
+  événements posés directement dans Calendrier (adoptés le 19/08, décision
+  DECISIONS.md) ne sont comptés que s'ils tombent dans `items` avec `due`
+  aujourd'hui, ce qui marche pour un item adopté (il vit dans `items.json`
+  comme les autres) mais pas pour un événement `brief-*` récurrent étendu
+  seulement via l'instantané agenda (`src/lib/agenda.ts`) sur un jour qui
+  n'est pas son `due` courant.
+- **Pourquoi ce n'est pas fait :** périmètre de la session du 19/08 était la
+  vue Rendez-vous elle-même, pas la tuile d'accueil.
+- **Effort :** S (CC) · **Priorité :** P2
+
+### Bug préexistant : `<button>` imbriqué dans `TodayRow`/`RowCheckbox`
+- **Quoi :** `HomeScreen.tsx`, la ligne « Aujourd'hui » est un `<button>` qui
+  contient `RowCheckbox`, un second `<button>` — HTML invalide, erreur
+  d'hydratation React visible en console (« 2 Issues » dans l'overlay dev).
+- **Découvert :** en testant la refonte du 19/08, pas introduit par elle.
+- **Effort :** S (CC) · **Priorité :** P2
+
 **Tranché par Aramis le 2026-08-15 :**
 
 ### Version Desktop & Vue Kanban (Trello-like)

@@ -11,115 +11,180 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-19 · Crash CalDAV corrigé + coordination mergée
+# Passation — 2026-08-19 · Rendez-vous reconstruite + adoption calendrier externe
 
 | | |
 |---|---|
-| **Agent** | Hermes Agent (deepseek-v4-flash via Ollama Cloud) |
+| **Agent** | Claude Code (Sonnet 5) |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `4a1ad33` (merge fix DTSTART) · `aacea8e` (fix 3 couches) · `181c549` (coordination multi-agents, mergée) · `c8c175c` (fix cache PWA) |
-| **Prod** | https://brief.srv1899780.hstgr.cloud — **saine, bug corrigé et déployé** |
+| **Commits** | `6a8d2c7` (réconciliation CalDAV + tri) · `a3ab3ac` (merge avec le fix DTSTART de Hermes) · `64060c7` (vue Rendez-vous + adoption externe) · `6ee2052` (fix incident : fenêtre temporelle) |
+| **Prod** | https://brief.srv1899780.hstgr.cloud — saine, déployée, vérifiée en navigateur réel |
 | **GitHub** | https://github.com/aramis75009/brief/tree/feat/ui-redesign-claude |
 
 ## Goal — l'objectif
 
-Corriger le bug de prod qui empêchait l'app de s'ouvrir dans **tous** les
-navigateurs (crash React côté client sur une date invalide issue du sync
-CalDAV), redéployer, vérifier, et documenter la leçon pour tous les agents
-(Claude Code compris).
+Deux demandes d'Aramis dans la continuité l'une de l'autre : (1) fiabiliser la
+synchronisation Apple Calendar ↔ Brief et le tri chronologique dans toutes les
+vues, (2) reconstruire la vue « Rendez-vous » pour qu'elle reflète fidèlement
+Apple Calendar — y compris les événements posés directement dans l'app
+Calendrier, pas seulement ceux que Brief a créés.
 
 ## Current state — ce qui a été fait
 
-### Bug de prod : crash CalDAV DTSTART flottant — ✅ RÉSOLU, DÉPLOYÉ, VÉRIFIÉ
+### Partie 1 — Réconciliation CalDAV, idempotence, tri (commit `6a8d2c7`)
 
-- **Symptôme** : « This page couldn't load » partout, alors que le serveur
-  répondait 200 (curl OK, HTTPS OK, conteneur healthy). Le crash était dans le
-  JavaScript client — invisible pour curl.
-- **Erreur** : `RangeError: date value is not finite in DateTimeFormat.formatToParts()`
-  dans `zonedParts()` (`src/lib/zoned.ts` l.52), chunk `24gviof4sk-oz.js`.
-- **Cause racine** : l'item `it_msurvw97_6` (récurrence Frip & Trend) avait
-  `due = "20260820T140000"` — un **DTSTART ICS flottant** (sans `Z` ni tirets)
-  que `remoteDueToItem()` (`caldav.ts` l.423) renvoyait brut. `new Date("20260820T140000")`
-  → Invalid Date → `formatToParts()` → RangeError → React plantait au montage.
-- **Déclencheur** : commit `ce3cba5` (adoption des horaires CalDAV, déployé
-  13h48 UTC) + sync toutes les 60 s. Preuve par backups : 00h12 ISO valide →
-  13h46 corrompu.
-- **Fix en 3 couches** (commit `aacea8e`) :
-  1. `caldav.ts` — `remoteDueToItem()` convertit `YYYYMMDDTHHMMSS` → ISO Paris
-  2. `zoned.ts` — `zonedParts()` ne lève plus jamais (date invalide → sentinelle)
-  3. `store.ts` — `readItems()` normalise en mémoire, `due` illisible → pas d'échéance
-- **Validations** : 128/128 tests, tsc propre, eslint propre, prod déployée
-  (HEAD `4a1ad33`), page 200, ancien chunk 404, API : 0 item `due` non-ISO.
-- **Détail à connaître** : l'item « vente annuelle » Frip & Trend apparaît sans
-  échéance en attendant — le prochain sync CalDAV devrait lui réécrire une date
-  correcte. À vérifier au prochain passage.
+- **`decideSync`** (`caldav.ts`) : la Phase 2 de `runCalDavSync` PUTait
+  inconditionnellement chaque événement à *chaque* passage (`put=12` toutes
+  les 15 min même sans rien changer, preuve par les logs prod) — pas de
+  branche « rien n'a changé ». Ajouté : `create` / `adopt` / `skip` /
+  `complete`. `complete` est le vrai ajout : un item Brief dont l'événement a
+  disparu du calendrier (supprimé par Aramis) est désormais adopté comme
+  **terminé** au lieu d'être recréé — c'était la cause des tâches obsolètes
+  signalées (« organiser le stock de polos », etc., qui étaient en fait déjà
+  `doneAt` et juste non filtrées en recherche).
+- **Tri chronologique** : `compareByDue`/`isDueToday` ajoutés à `due.ts`,
+  utilisés dans `HomeScreen`, `SearchScreen`, `AgendaScreen`.
+- **`SearchScreen`** : masque les items `doneAt` en navigation libre (retrouvables
+  par le texte, étiquetés « Terminé »).
+- Root cause du « 0 tâches aujourd'hui » signalé par Aramis : **pas un bug**.
+  L'item en question (« Rush CSS Codecademy ») a `kind:"event"` dans les
+  vraies données de prod, pas `"task"` — classification LLM à la capture, pas
+  un défaut de filtrage. Logique de date vérifiée correcte par preuve directe
+  sur `items.json` de prod + tests.
 
-### Coordination multi-agents — ✅ MERGÉE dans la branche de prod
+### Partie 2 — Vue Rendez-vous reconstruite (commit `64060c7`)
 
-- `docs/coordination.md` : les 4 copies du dépôt, la branche de prod, règles
-  anti-collision, piège du panneau Hostinger, purge PWA iOS.
-- `scripts/coord/status.sh` : compare GitHub / copie locale / prod VPS.
-- `scripts/coord/pre-push.sh` : garde-fou avant push (branche de prod interdite,
-  retard sur origin, HANDOFF.md obligatoire).
-- `HANDOFF.md` restauré à la racine (contrat multi-agents).
-- `AGENTS.md` : corrigé — la prod est sur `feat/ui-redesign-claude`.
-- `DECISIONS.md` : décision « coordination multi-agents » ajoutée.
+- **`AgendaScreen`** n'avait aucun état `selectedDate` : la pastille noire sur
+  « 19 » n'était que le marqueur « aujourd'hui » (aucun `onClick` sur les
+  jours), et le contenu listait toute la semaine depuis lundi — d'où
+  l'impression « 19 sélectionné, contenu commence à Lundi 17 ». Reconstruite
+  autour de `selectedDate` comme unique source d'état : pastilles cliquables,
+  bande de 7 jours dérivée de `selectedDate` (`mondayOf`), flèches ±1 jour,
+  contenu strictement scopé au jour sélectionné.
+- **`src/lib/agenda.ts`** (nouveau) : `buildDayAgenda(items, snapshotEvents,
+  dayStart, dayEnd)` — fusionne les items Brief actifs avec un instantané
+  CalDAV pour un jour donné, sans dupliquer, en étendant les séries
+  récurrentes sur toute la fenêtre (`rrule.ts` : `occurrencesInRange`, qui
+  recule d'abord jusqu'à couvrir le jour demandé — `reminders.ts` avance déjà
+  `due` d'un item récurrent dès l'ENVOI du rappel, pas seulement à la coche,
+  donc l'ancre peut déjà pointer après le jour qu'on regarde).
+- **`caldav.ts`** : `runCalDavSync` écrit désormais, à chaque passage réel, un
+  instantané `caldav-agenda-snapshot.json` de tous les événements des 6
+  calendriers que Brief connaît (pas seulement `brief-*`) — pour afficher les
+  événements posés directement dans l'app Calendrier (« Rentre Jeanne »,
+  « Terminé Learn CSS », etc., invisibles avant car `listBriefEvents` filtre
+  strictement `brief-*`).
+- **`api/agenda/route.ts`** réécrite (l'ancienne était du code mort, jamais
+  appelée, avec des `.getHours()`/`.getDay()` en violation de l'invariant
+  fuseau). `GET ?date=AAAA-MM-JJ`.
+
+### Partie 3 — Adoption des événements externes (commit `64060c7`, décision Aramis)
+
+Aramis, après avoir vu la vue Rendez-vous : les événements posés directement
+dans Calendrier ne doivent pas juste s'AFFICHER, ils doivent devenir de
+**vraies tâches Brief** (rappel, coche). Proposition initiale d'exclure
+« Personnel » (jugé « bruit ») **rejetée par Aramis** : il y range aussi de
+vraies tâches (« relancer Revolut pour un remboursement de 1000€ »), et rien
+ne distingue programmatiquement les deux dans un même calendrier. Décision :
+**adopter tout, sans tri** — voir `DECISIONS.md`, entrée du 19/08.
+
+- **`decideExternalSync`** (`caldav.ts`, Phase 3 de `runCalDavSync`) :
+  événement sans item lié → `create` ; item adopté actif dont l'événement
+  diffère → `update` (le calendrier gagne toujours) ; événement disparu →
+  `complete` (jamais recréé) ; item coché dans Brief, événement encore
+  présent → `delete-remote` (Brief supprime l'événement d'origine — il n'y a
+  pas de PUT à arrêter comme pour un item `brief-*`).
+- `Item.externalUid`/`externalCalendar` marquent un item adopté.
+  `buildEventIcs` l'exclut du PUT `brief-<id>` (sinon duplication).
+
+### ⚠️ Incident en cours de session, corrigé et documenté (commit `6ee2052`)
+
+**Le premier passage réel de l'adoption externe en prod a créé 145 tâches
+parasites.** Cause : la requête CalDAV (`queryCalendarEvents`) n'avait **aucune
+borne temporelle** — pour « Personnel », un calendrier qu'Aramis utilise depuis
+des années, ça a remonté tout l'historique (des événements de mai-juin, avant
+même l'existence de Brief), pas juste les événements actuels.
+
+- **Remédiation immédiate** : `items.json` restauré depuis la sauvegarde prise
+  une commande avant l'incident (`deploy/backup.sh`, 29 items, zéro
+  `externalUid`), via `docker cp` + `mv` atomique dans le conteneur. Le
+  calendrier Apple lui-même n'a jamais été touché (l'action « create » n'écrit
+  que dans `items.json` ; « delete-remote » ne se déclenche que pour un item
+  déjà coché, aucun des 145 ne l'était).
+- **Fix racine** : `queryCalendarEvents` prend une fenêtre optionnelle.
+  `listBriefEvents` (réconciliation `brief-*`) reste **volontairement non
+  bornée** — zéro changement de comportement, elle tourne sans ce problème
+  depuis le 17/08 parce que Brief ne crée que des événements proches de leur
+  échéance et les nettoie une fois terminés. `listAllEvents` (agenda +
+  adoption externe, la seule à lire l'historique perso d'Aramis) est bornée à
+  `agendaWindow()` : 30 jours passés, 180 à venir.
+- **Redéployé et revérifié** : un second passage réel forcé a adopté **10**
+  items (Rentre Jeanne, Terminé Learn CSS, Réveil, Ranger appartement, Séance
+  pull, Aller courir, Rendre brief fonctionnel, Départ Jeanne, 2 vacances) —
+  compte cohérent, vérifié un par un.
 
 ## Decisions — choix critiques ou irréversibles
 
-- **GitHub = vérité centrale.** Les copies ne s'alignent que par fetch/pull/push.
-  Jamais de copie de fichiers entre dossiers.
-- **Un agent = une branche à la fois.** Pousser sur la branche de prod en
-  parallèle est interdit sans passation explicite.
-- **Le PIN reste tel quel** — décision validée du 18/08 (cookie serveur +
-  localStorage, une saisie par appareil). Le « PIN réapparu » était le cache
-  PWA iOS, pas un retour en arrière du code.
-- **Ne jamais écrire une chaîne de date non-parseable dans `due`.** Si une
-  conversion échoue, écrire `undefined` (pas d'échéance) — un rappel absent se
-  voit, un crash ne se voit pas. (Leçon du bug DTSTART, voir fiche archivée.)
+- **Apple Calendar adopté intégralement, sans tri bruit/signal** (Aramis,
+  19/08) — voir `DECISIONS.md`. Tout événement des 6 calendriers connus
+  devient une tâche Brief, y compris « Personnel ». Un faux positif
+  (« Rentre Jeanne » comme tâche) est acceptable ; un faux négatif (rater une
+  vraie tâche) ne l'est pas.
+- **La lecture CalDAV pour l'agenda/l'adoption est bornée à 30j passés / 180j
+  à venir (`agendaWindow`) ; la réconciliation `brief-*` reste non bornée.**
+  Ne JAMAIS fusionner les deux lectures dans un seul appel non borné — c'est
+  exactement ce qui a produit l'incident des 145 tâches.
+- **Un item adopté (`externalUid` posé) n'est jamais écrit sous `brief-<id>`.**
+  `buildEventIcs` retourne `null` pour ces items — la garder ainsi, sinon
+  duplication de l'événement sur le calendrier d'Aramis.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/caldav.ts` | fix cause : format flottant dans `remoteDueToItem()` |
-| `src/lib/zoned.ts` | garde-fou anti-crash dans `zonedParts()` |
-| `src/lib/store.ts` | normalisation à la lecture dans `readItems()` |
-| `src/lib/caldav.test.ts` | test du format flottant |
-| `src/lib/zoned.test.ts` | **nouveau** — test du garde-fou |
-| `docs/handoffs/2026-08-19-caldav-floating-dtstart.md` | **nouveau** — fiche du bug (cause, fix, leçons) |
-| `docs/coordination.md` | **nouveau** — cadre multi-agents (mergé) |
-| `scripts/coord/status.sh` | **nouveau** — diagnostic des copies |
-| `scripts/coord/pre-push.sh` | **nouveau** — garde-fou pre-push |
-| `HANDOFF.md` | restauré à la racine (cette passation) |
-| `AGENTS.md` | corrigé : branche de prod + lien coordination |
-| `DECISIONS.md` | entrée « coordination multi-agents » |
+| `src/lib/caldav.ts` | `decideSync`, `decideExternalSync`, `toCalendarEvent`, `agendaWindow`, instantané agenda, fenêtre temporelle |
+| `src/lib/agenda.ts` | **nouveau** — fusion items Brief + instantané pour un jour |
+| `src/lib/rrule.ts` | `occurrencesInRange` (extension récurrente bidirectionnelle) |
+| `src/lib/due.ts` | `compareByDue`, `isDueToday` |
+| `src/lib/types.ts` | `Item.externalUid`, `Item.externalCalendar` |
+| `src/app/api/agenda/route.ts` | réécrite — `GET ?date=AAAA-MM-JJ`, zoned.ts |
+| `src/components/AgendaScreen.tsx` | reconstruite — `selectedDate` unique source d'état |
+| `src/components/HomeScreen.tsx`, `SearchScreen.tsx` | tri + filtrage `doneAt` |
+| `src/components/BriefApp.tsx` | branchement `AgendaScreen` (nouvelles props) |
+| `DECISIONS.md` | entrée « adoption totale, sans tri bruit/signal » |
+| `TODOS.md` | 2 entrées P2 différées (voir Blockers) |
+| `docs/handoffs/2026-08-19-crash-caldav-corrige-coordination.md` | archive de la passation précédente (Hermes) |
 
 ## Validations — passants / échoués / non lancés
 
-- ✅ `npx vitest run` : **128/128** (3 nouveaux : DTSTART flottant, garde-fou)
-- ✅ `npx tsc --noEmit` : propre
-- ✅ `npx eslint .` : propre
-- ✅ Prod déployée : page 200, conteneur healthy, ancien chunk `24gviof4sk-oz.js` → 404
-- ✅ API `/api/items` : 0 item avec `due` non-ISO (le store normalise)
-- 🔶 **Non vérifié** : l'item « vente annuelle » Frip & Trend récupère-t-il une
-  date correcte au prochain sync CalDAV ? (à regarder au prochain passage)
-- 🔶 **Non vérifié** : l'iPhone d'Aramis — purge du cache PWA faite ? (Réglages
-  → Safari → Effacer l'historique et les données de sites → supprimer l'icône →
-  recharger → ré-ajouter)
+| Commande | Résultat |
+|---|---|
+| `npx tsc --noEmit` | ✅ propre |
+| `npx vitest run` | ✅ **177 passed \| 1 skipped** (178) — 41 nouveaux tests cette session |
+| `npx eslint .` | ✅ 23 problèmes, **tous préexistants** (aucun nouveau — vérifié par diff avant/après à chaque étape) |
+| Déploiement VPS | ✅ `brief-app-1 Healthy`, HEAD `6ee2052` |
+| Navigateur réel (prod) | ✅ aucune erreur console, PIN accepté, écran Rendez-vous testé avec les vraies données (17/18/19/20/25 août, flèche de navigation, événements adoptés) |
+| Sync CalDAV forcée (prod) | ✅ passage réel après le fix : `externalAdopted:10`, `put:0 adopted:0 deleted:0` (réconciliation `brief-*` intacte) |
+
+Non vérifié : le cron des rappels (`/api/cron/reminders`) n'a pas été observé
+en train d'envoyer un Web Push pour un item adopté — attendu au prochain
+passage naturel, pas testé en forçant.
 
 ## Blockers — ce qui bloque
 
-- **Rien** pour le code. Pour l'iPhone d'Aramis : l'action manuelle de purge du
-  cache PWA (voir plus haut) — non confirmée comme effectuée.
+Rien. Deux améliorations différées, notées dans `TODOS.md` (P2) :
+tuile « Rendez-vous » de l'accueil qui ne compte pas les événements
+externes/adoptés étendus par récurrence, et un bug préexistant (pas introduit
+cette session) de `<button>` imbriqué dans `HomeScreen.tsx` (`TodayRow` /
+`RowCheckbox`).
 
 ## Next — la prochaine action
 
-1. **Aramis** : purger le cache PWA sur l'iPhone (voir Validations) et confirmer
-   que l'app s'ouvre.
-2. **Agent suivant** : lancer `bash scripts/coord/status.sh` avant de coder,
-   vérifier que l'item Frip & Trend a récupéré sa date au prochain sync CalDAV,
-   puis reprendre les priorités listées dans `TODOS.md` (bugs UI priority 2).
+Rien d'urgent côté code. Observer les prochains passages de sync (toutes les
+15 min) : `docker logs brief-app-1 | grep caldav` — `externalAdopted` devrait
+rester bas (0-2 par passage) une fois les événements actuels absorbés ; un
+nombre élevé et répété signalerait un nouveau problème de fenêtre ou de
+déduplication à investiguer immédiatement, pas à laisser courir.
 
 ---
 
@@ -127,11 +192,12 @@ CalDAV), redéployer, vérifier, et documenter la leçon pour tous les agents
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-19** | **Crash CalDAV corrigé + coordination mergée** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-19** | **Rendez-vous reconstruite + adoption calendrier externe** | **Claude Code** | *(cette passation)* |
+| 2026-08-19 | Crash CalDAV corrigé + coordination mergée | Hermes Agent | [fiche](docs/handoffs/2026-08-19-crash-caldav-corrige-coordination.md) |
 | 2026-08-19 | Bug de prod : DTSTART flottant (cause, fix, leçons) | Hermes Agent | [fiche](docs/handoffs/2026-08-19-caldav-floating-dtstart.md) |
 | 2026-08-19 | Refonte UI Claude Design (en cours) | Hermes Agent | [fiche](docs/handoffs/2026-08-19-refonte-ui-claude-design.md) |
 | 2026-08-19 | CalDAV priorité + bugs UI | Hermes Agent | [fiche](docs/handoffs/2026-08-19-caldav-priorite-et-bugs-ui.md) |
-| 2026-08-18 | Cookie PIN posé par le serveur (Set-Cookie) | Hermes Agent | [fiche](docs/handoffs/2026-08-18-pin-cookie-server.md) |
+| 2026-08-18 | Cookie PIN posé par le serveur (Set-Cookie) | Hermes Agent | [fiche](docs/handoffs/2026-08-18-pin-cookie.md) |
 | 2026-08-18 | Suppressions d'occurrences adoptées (EXDATE) + ancre de série | Hermes Agent | [fiche](docs/handoffs/2026-08-18-exdate-adoption.md) |
 | 2026-08-18 | PIN mémorisé fiabilisé (cookie + localStorage) | Hermes Agent | [fiche](docs/handoffs/2026-08-18-pin-cookie.md) |
 | 2026-08-18 | Récurrences de publication bornées fin août | Hermes Agent | [fiche](docs/handoffs/2026-08-18-recurrences-bornees.md) |
