@@ -329,14 +329,21 @@ export function HomeScreen({
   }, []);
 
   // Items du jour : ce dont l'échéance tombe aujourd'hui dans le fuseau Paris.
+  // Triés par heure croissante (9:00 avant 14:30 avant 18:00).
   const todayItems = useMemo(() => {
     const nowParts = zonedParts(new Date());
-    return items.filter((it) => {
-      if (it.status === "idea" || it.status === "archived") return false;
-      if (!it.due) return false;
-      const parts = zonedParts(new Date(it.due));
-      return parts.y === nowParts.y && parts.m === nowParts.m && parts.d === nowParts.d;
-    });
+    return items
+      .filter((it) => {
+        if (it.status === "idea" || it.status === "archived") return false;
+        if (!it.due) return false;
+        const parts = zonedParts(new Date(it.due));
+        return parts.y === nowParts.y && parts.m === nowParts.m && parts.d === nowParts.d;
+      })
+      .sort((a, b) => {
+        const ta = a.due ? new Date(a.due).getTime() : Infinity;
+        const tb = b.due ? new Date(b.due).getTime() : Infinity;
+        return ta - tb;
+      });
   }, [items]);
 
   // Comptages pour les tuiles : aujourd'hui pour tâches et RDV, total pour idées.
@@ -370,7 +377,7 @@ export function HomeScreen({
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto" style={{ background: C.bg }}>
       {/* --- En-tête ------------------------------------------------- */}
-      <div className="safe-top flex items-center justify-between px-5">
+      <div className="safe-top flex items-center justify-between px-5" style={{ paddingBottom: 8 }}>
         <AccountAvatar
           initials="AM"
           size={46}

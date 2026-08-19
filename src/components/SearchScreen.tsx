@@ -41,14 +41,16 @@ export function SearchScreen({
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const results = useMemo(() => {
-    if (!query.trim()) return [];
-    const q = query.toLowerCase();
+    const q = query.trim().toLowerCase();
     return items.filter((item) => {
       // Filter by type
       if (filter === "task" && item.kind !== "task") return false;
       if (filter === "event" && item.kind !== "event") return false;
       if (filter === "idea" && item.status !== "idea") return false;
       if (filter === "dictated" && !item.audioOrigin) return false;
+
+      // Empty query = show all (browsing mode)
+      if (!q) return true;
 
       // Search in title, notes, audioOrigin
       const title = item.title.toLowerCase();
@@ -123,17 +125,19 @@ export function SearchScreen({
       </div>
 
       {/* Results */}
-      {!query.trim() ? null : results.length === 0 ? (
+      {results.length === 0 ? (
         <EmptyState
           icon={<SearchSmallIcon size={20} className="text-ink-faint" />}
-          title="Rien trouvé"
-          description="Essaie un mot de la dictée d'origine : Brief cherche aussi dans les transcriptions."
+          title={query.trim() ? "Rien trouvé" : "Aucun item"}
+          description={query.trim() ? "Essaie un mot de la dictée d'origine : Brief cherche aussi dans les transcriptions." : undefined}
         />
       ) : (
         <div className="flex flex-col gap-2.5">
-          <span className="mb-1.5 font-mono text-[10px] tracking-[0.1em] text-ink-faint">
-            {results.length} RÉSULTAT{results.length > 1 ? "S" : ""} · « {query.toUpperCase()} »
-          </span>
+          {query.trim() && (
+            <span className="mb-1.5 font-mono text-[10px] tracking-[0.1em] text-ink-faint">
+              {results.length} RÉSULTAT{results.length > 1 ? "S" : ""}{query.trim() ? ` · « ${query.toUpperCase()} »` : ""}
+            </span>
+          )}
           {results.map((item) => {
             const proj = projectMap.get(item.projectId);
             const isTask = item.kind === "task";
