@@ -14,6 +14,38 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-20 · L'ancien DESIGN.md est supprimé — le design system Claude Design v1 est LA source de vérité visuelle
+
+**Décision.** `DESIGN.md` (racine du repo) est **supprimé** et ne doit plus
+jamais être suivi ni cité. La source de vérité visuelle est le **design system
+Claude Design v1 (iOS)** : `/opt/data/brief-design-claude/Brief Design
+System.dc.html`, implémenté à l'identique dans `src/app/globals.css` +
+`src/components/`. Les références à `DESIGN.md` ont été retirées de
+`AGENTS.md` et `CLAUDE.md`.
+
+**Pourquoi.** DESIGN.md décrivait l'ancien système (General Sans + corail
+`#EC5230` + 8 teintes × 5 formes), écrit le 09/08 par `/design-consultation` —
+**avant** que Claude Design ne conçoive le design system v1 (18/08, Plus
+Jakarta + ink + task/meet/idea), qui l'a remplacé et a été reconstruit et
+déployé en prod. Le fichier n'a jamais été mis à jour : il contredisait la
+spec v1 ET la prod. Conséquence concrète le 20/08 : Claude Design a détecté le
+conflit (General Sans vs Plus Jakarta, corail vs ink) et a failli construire
+ses maquettes profil/urgence sur les mauvais tokens ; son audit de la veille
+accusait même `PinGate.tsx` de tokens « legacy » alors que l'écran suivait la
+spec v1. Aramis : « je veux pas du tout qu'il suive le design.md de l'ancienne
+version... Celle-là faut vraiment plus en parler. » Un fichier mort dans le
+repo est un piège permanent pour tous les agents (Claude Code, Hermes, Codex).
+
+**Comment.** `git rm DESIGN.md` ; `AGENTS.md` : ligne retirée du tableau des
+fichiers, note « design system Claude Design v1 = source de vérité, ancien
+DESIGN.md supprimé le 20/08 » ajoutée ; `CLAUDE.md` : section « Système de
+design » réécrite sur la même base. Les handoffs passés (avant le 20/08) qui
+citent DESIGN.md restent des archives — ne pas les ressusciter.
+
+**Statut.** ✅ Fait — commit `…`, poussé le 2026-08-20.
+
+---
+
 ## 2026-08-20 · Les occurrences décalées d'une série dans Calendrier sont adoptées (RECURRENCE-ID)
 
 **Décision.** Quand Aramis décale UNE occurrence d'une série récurrente dans

@@ -18,8 +18,9 @@ Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge tout seul.
   après avoir commencé à coder.
 - **`superpowers:systematic-debugging` devant un bug**, plutôt que `/investigate`
   ou `debugging-wizard`.
-- **`DESIGN.md` avant toute décision visuelle**, puis `frontend-design` pour la
-  direction.
+- **Le design system Claude Design v1 est la source de vérité visuelle** (le
+  fichier `.dc.html` + `globals.css`) — l'ancien `DESIGN.md` est supprimé, ne
+  plus s'y référer. Pour une direction nouvelle, `frontend-design`.
 - Documentation d'une bibliothèque : MCP `context7`, jamais la mémoire du
   modèle. Next.js 16 et React 19 sont postérieurs à beaucoup de ce que tu crois
   savoir — et `AGENTS.md` rappelle que les guides font foi dans
@@ -49,9 +50,15 @@ qui se périme séparément.
 
 ## Système de design
 
-Lire `DESIGN.md` avant toute décision visuelle ou d'UI. Les polices, couleurs,
-échelles d'espacement, rayons, durées d'animation et l'icône y sont définis.
+Le design system **Claude Design v1 (iOS)** est LA source de vérité visuelle :
+`/opt/data/brief-design-claude/Brief Design System.dc.html` (tokens, composants,
+écrans), implémentée à l'identique dans `src/app/globals.css` + `src/components/`
+(voir `DECISIONS.md` — l'ancien `DESIGN.md` a été **supprimé** le 20/08 : il
+décrivait l'ancien système corail/General Sans, abandonné, ne plus jamais s'y
+référer).
 
-Ne pas s'en écarter sans accord explicite. En revue ou en QA, signaler tout code
-qui ne s'y conforme pas — la section « Ce qu'il reste à faire côté code » liste
-les écarts connus et assumés.
+Les polices, couleurs, échelles d'espacement, rayons, durées d'animation et
+l'icône sont définis dans le fichier de design system. Ne pas s'en écarter sans
+accord explicite. En revue ou en QA, signaler tout code qui ne s'y conforme pas
+— la section « Ce qu'il reste à faire côté code » liste les écarts connus et
+assumés.

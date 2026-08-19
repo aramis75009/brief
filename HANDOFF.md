@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | Hermes Agent |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `c0d0c23` — déployé |
+| **Commits** | `c0d0c23` (fix overrides, déployé) + `…` (suppression DESIGN.md) |
 | **Prod** | https://brief.srv1899780.hstgr.cloud — `brief-app-1 Healthy`, vérifiée saine post-déploiement |
 
 ## Goal — l'objectif
@@ -29,6 +29,12 @@ comme aller à la salle de sport et la séance push ça ne marche pas sur Brief,
 pareil pour les post et repost ». Les événements ponctuels passaient, les
 séries récurrentes non. Ensuite : « prépare le terrain pour un autre agent
 comme toujours pour ne pas avoir de problème de synchro ».
+
+En cours de session, deuxième chantier : **suppression de l'ancien
+`DESIGN.md`** (système corail/General Sans d'avant la spec v1) — Claude
+Design l'a détecté en conflit avec la prod pendant ses maquettes
+profil/urgence, et Aramis a confirmé : « Celle-là faut vraiment plus en
+parler ».
 
 ## Current state — ce qui a été fait
 
@@ -78,15 +84,26 @@ cron suivant (les overrides sont dans items.json).
 
 ## Decisions — choix critiques ou irréversibles
 
-Une nouvelle entrée `DECISIONS.md` (2026-08-20) : **les occurrences décalées
-d'une série dans Calendrier sont adoptées (RECURRENCE-ID)** — le calendrier
-gagne par occurrence, pas seulement pour le master. Voir le POURQUOI complet
-dans le fichier — ne pas re-débattre.
+Deux nouvelles entrées `DECISIONS.md` (2026-08-20) :
+- **Les occurrences décalées d'une série dans Calendrier sont adoptées
+  (RECURRENCE-ID)** — le calendrier gagne par occurrence, pas seulement pour
+  le master. Voir le POURQUOI complet dans le fichier — ne pas re-débattre.
+- **L'ancien `DESIGN.md` est supprimé** (20/08) — le design system Claude
+  Design v1 est LA source de vérité visuelle. DESIGN.md décrivait l'ancien
+  système (General Sans + corail + 8 teintes × 5 formes) d'AVANT la spec v1 ;
+  il contredisait la spec ET la prod, et a failli faire construire les
+  maquettes profil/urgence à Claude Design sur les mauvais tokens. Aramis :
+  « je veux pas du tout qu'il suive le design.md de l'ancienne version...
+  Celle-là faut vraiment plus en parler. » `git rm DESIGN.md`, références
+  retirées d'`AGENTS.md` + `CLAUDE.md`.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
+| `DESIGN.md` | **supprimé** (ancien système corail/General Sans — voir Decisions) |
+| `AGENTS.md` | ligne DESIGN.md retirée du tableau ; note « design system Claude Design v1 = source de vérité, DESIGN.md supprimé » ajoutée ; règle Interface mise à jour |
+| `CLAUDE.md` | section « Système de design » + règle top réécrites sur le design system v1 |
 | `src/lib/types.ts` | `Item.overrides` (RECURRENCE-ID → nouveau DTSTART) |
 | `src/lib/overrides.ts` | **nouveau** — fonctions pures partagées client/serveur (`applyOverride`, `icalUtc`, `remoteDueToItem`) |
 | `src/lib/caldav.ts` | `splitVeEvents` + parse des overrides ; `remoteDiffers`/`calendarPatch`/`decideExternalSync` adoptent ; `buildEventIcs` réécrit ; `CalendarEvent` porte `overrides`+`exdates` ; ré-export depuis `overrides.ts` |
@@ -94,7 +111,7 @@ dans le fichier — ne pas re-débattre.
 | `src/lib/reminders.ts` | `pendingReminders`/`payloadFor` heure effective ; avancement depuis `seriesAnchor` + override appliqué |
 | `src/app/api/items/[id]/route.ts` | `sanitizePatch` accepte `overrides` |
 | `src/components/HomeScreen.tsx` | `TodayRow` affiche l'heure effective de l'entrée agenda |
-| `DECISIONS.md` | nouvelle entrée 2026-08-20 (voir Decisions) |
+| `DECISIONS.md` | 2 nouvelles entrées 2026-08-20 (voir Decisions) |
 | Tests | `caldav.test.ts` (+7), `agenda.test.ts` (+3), `route.test.ts` (+4) |
 
 ## Validations — passants / échoués / non lancés
