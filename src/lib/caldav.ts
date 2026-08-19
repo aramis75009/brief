@@ -830,7 +830,7 @@ type SyncState = { lastSyncAt: number; deletedExternalUids: string[] };
  * recrée à l'identique (même `id` déterministe `caldav-<uid>`) au passage
  * suivant. Un item supprimé dans Brief ne doit jamais revenir tout seul.
  */
-async function readSyncState(): Promise<SyncState> {
+export async function readSyncState(): Promise<SyncState> {
   try {
     const raw = await readFile(join(DATA_DIR, LAST_SYNC_FILE), "utf8");
     const parsed = JSON.parse(raw) as { lastSyncAt?: unknown; deletedExternalUids?: unknown };

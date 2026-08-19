@@ -8,11 +8,23 @@ import type { ReactNode } from "react";
  * AccountSheet — compte & réglages (sheet modal).
  */
 
+/** Texte d'âge de synchro à partir du VRAI dernier passage CalDAV (ms epoch). */
+function formatSyncAge(lastSyncAt: number | null): string {
+  if (lastSyncAt === null) return "Pas encore synchronisé";
+  const minutes = Math.max(0, Math.round((Date.now() - lastSyncAt) / 60_000));
+  if (minutes < 1) return "Synchronisé à l'instant";
+  if (minutes < 60) return `Synchronisé il y a ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return `Synchronisé il y a ${hours} h`;
+}
+
 export function AccountSheet({
   open,
+  calendarSyncAt,
   onClose,
 }: {
   open: boolean;
+  calendarSyncAt: number | null;
   onClose: () => void;
 }) {
   if (!open) return null;
@@ -57,7 +69,7 @@ export function AccountSheet({
           <SettingRow
             icon={<SettingIcon bg="var(--color-meet-100)"><CalendarIcon size={15} className="text-meet-700" /></SettingIcon>}
             title="Calendrier Apple"
-            subtitle="Synchronisé il y a 4 min"
+            subtitle={formatSyncAge(calendarSyncAt)}
             toggleOn={true}
           />
           <div className="mx-3.5 h-px bg-ink/[.06]" />

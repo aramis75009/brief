@@ -22,6 +22,7 @@ import {
   deleteItem,
   deleteProject,
   fetchAgendaDay,
+  fetchCalDavStatus,
   fetchProjects,
   fetchItems,
   fetchOverview,
@@ -72,6 +73,7 @@ export function BriefApp() {
   const [returnScreen, setReturnScreen] = useState<Screen>("home");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [calendarSyncAt, setCalendarSyncAt] = useState<number | null>(null);
   const [captureStage, setCaptureStage] = useState<CaptureStage>("idle");
 
   // Data
@@ -115,6 +117,14 @@ export function BriefApp() {
     setSelectedTaskId(id);
     setScreen("task");
   }, [screen]);
+
+  /** Ouvre le compte, avec l'âge RÉEL du dernier passage CalDAV — jamais un texte figé. */
+  const openAccount = useCallback(() => {
+    setAccountOpen(true);
+    void fetchCalDavStatus()
+      .then(({ lastSyncAt }) => setCalendarSyncAt(lastSyncAt))
+      .catch(() => {}); // non bloquant : l'écran Compte reste utilisable sans cette info
+  }, []);
 
   const flash = useCallback((msg: string, kind: ToastKind = "ok") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -415,7 +425,7 @@ export function BriefApp() {
             onOpenTask={openTask}
             onOpenAgenda={() => setScreen("agenda")}
             onOpenIdeas={() => setScreen("ideas")}
-            onOpenAccount={() => setAccountOpen(true)}
+            onOpenAccount={openAccount}
             onCapture={openCapture}
             onAskAI={openCapture}
           />
@@ -481,7 +491,7 @@ export function BriefApp() {
             onOpenItem={openTask}
             onVoiceSearch={() => {/* TODO: voice search */}}
             onBack={() => setScreen("home")}
-            onOpenAccount={() => setAccountOpen(true)}
+            onOpenAccount={openAccount}
           />
         )}
 
@@ -519,6 +529,7 @@ export function BriefApp() {
       {accountOpen && (
         <AccountSheet
           open={accountOpen}
+          calendarSyncAt={calendarSyncAt}
           onClose={() => setAccountOpen(false)}
         />
       )}

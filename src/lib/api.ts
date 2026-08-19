@@ -20,6 +20,7 @@ const TIMEOUTS = {
   items: 15_000,
   overview: 15_000,
   agenda: 15_000,
+  caldavStatus: 10_000,
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
@@ -109,6 +110,11 @@ export async function fetchAgendaDay(date: string): Promise<AgendaItem[]> {
     TIMEOUTS.agenda,
   );
   return data.events ?? [];
+}
+
+/** Âge réel du dernier passage CalDAV — `null` si jamais synchronisé. */
+export async function fetchCalDavStatus(): Promise<{ lastSyncAt: number | null }> {
+  return jsonFetch("/api/caldav-status", {}, TIMEOUTS.caldavStatus);
 }
 
 /** Les projets ne transitent plus par le client : le serveur les possède. */
