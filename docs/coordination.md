@@ -90,3 +90,40 @@ sudo /docker/brief/deploy/backup.sh
 2. `git fetch origin` sur la copie concernée, regarder l'écart.
 3. Reconstruire la branche prod à partir de `origin/feat/ui-redesign-claude`.
 4. Tester `scripts/coord/status.sh` → toutes les copies alignées = OK.
+
+---
+
+## ⚠️ Le panneau Hostinger (hPanel « Gestionnaire Docker »)
+
+**NE PAS TOUCHER au Gestionnaire Docker du panneau Hostinger** (VPS →
+srv1899780 → Gestionnaire Docker). Constaté le 2026-08-19 : le panneau
+n'arrive pas à traiter le `docker-compose.yml` de Brief (« Le fichier YAML ne
+peut pas être traité ») — il bute sur les variables `${...:?...}` avec accents
+et les backticks des labels Traefik. En essayant de « gérer » le projet, il a
+**redémarré les conteneurs** avec ses propres réglages (risque de casser la
+config Traefik/labels). Le déploiement se fait UNIQUEMENT en SSH :
+
+```bash
+ssh root@186.241.16.37 'cd /docker/brief && docker compose --env-file .env.production up -d --build'
+```
+
+Après un passage du panneau, vérifier que les labels Traefik sont intacts :
+`docker inspect brief-app-1 --format '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' | grep traefik`
+
+### PWA iOS en cache — le test décisif
+
+Quand un utilisateur signale « l'app ne s'ouvre plus » alors que le serveur
+répond 200 et que `curl` depuis le Mac donne 200 aussi : le problème est le
+**cache du vieux shell PWA** sur l'iPhone (ancien service worker + HTML avec
+`Cache-Control: s-maxage=31536000` — corrigé depuis `c8c175c` mais l'iPhone
+garde l'ancienne version). Test depuis le Mac :
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" -X POST -H "x-brief-pin: <PIN>" \
+  https://brief.srv1899780.hstgr.cloud/api/session   # 200 = serveur OK
+```
+
+Si 200, la manœuvre iPhone : Réglages → Safari → **Effacer l'historique et les
+données de sites** (purge le service worker) → supprimer l'icône Brief de
+l'écran d'accueil → recharger l'URL dans Safari → ressaisir le PIN → ré-ajouter
+à l'écran d'accueil.
