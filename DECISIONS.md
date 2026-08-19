@@ -14,6 +14,42 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-20 · Les occurrences décalées d'une série dans Calendrier sont adoptées (RECURRENCE-ID)
+
+**Décision.** Quand Aramis décale UNE occurrence d'une série récurrente dans
+l'app Calendrier (ex. Séance push du jeudi 16h→17h, Poster/Reposter 10
+18h→19h), Brief **adopte le décalage** : l'occurrence s'affiche à sa nouvelle
+heure dans l'accueil et l'agenda, le rappel sonne à la nouvelle heure, et le
+prochain PUT de Brief **réécrit l'override** dans l'ICS au lieu de l'écraser.
+Même règle pour les occurrences supprimées (EXDATE) : déjà adoptées depuis le
+18/08, elles sont désormais aussi **appliquées à l'affichage et aux rappels**
+(avant, seule la réécriture ICS les protégeait).
+
+**Pourquoi.** Constaté en prod le 2026-08-20 : iCloud écrit un VEVENT override
+avec `RECURRENCE-ID` dans le même ICS que le master quand on déplace une
+occurrence. `parseRemoteEvent` ne lisait que le premier VEVENT (le master) →
+Brief voyait la série « identique » → `skip` → l'édition n'était jamais
+adoptée, l'agenda affichait l'ancienne heure, les rappels sonnaient à
+l'ancienne heure, et un PUT réécrivait l'ICS SANS les overrides (perte
+définitive des décalages d'Aramis). Le calendrier est la source de vérité
+(décision 18/08) : il doit gagner **par occurrence**, pas seulement pour le
+master.
+
+**Comment.** Nouveau champ `Item.overrides` (`RECURRENCE-ID` → nouveau DTSTART,
+UTC RFC 5545), adopté par `calendarPatch`/`decideExternalSync` et réécrit par
+`buildEventIcs` (un VEVENT override par occurrence décalée). Fonctions pures
+(`applyOverride`, `icalUtc`, `remoteDueToItem`) extraites dans
+`src/lib/overrides.ts` — partageables avec le client (HomeScreen) sans
+importer `caldav.ts` (server-only). Appliqué à : `buildDayAgenda` (accueil +
+Rendez-vous), `pendingReminders`/`payloadFor`/avancement des séries
+(`reminders.ts`), `sanitizePatch` (PATCH `/api/items/[id]`). L'avancement des
+séries part désormais de `seriesAnchor` (l'ancre stable), pas de `due` qui
+peut être décalé par un override.
+
+**Statut.** ✅ Fait — commit `…`, déployé en prod le 2026-08-20.
+
+---
+
 ## 2026-08-19 (soir) · Le calendrier Apple reste intouché — Brief n'y supprime plus jamais rien
 
 **Décision.** Brief peut AJOUTER et METTRE À JOUR des événements dans le

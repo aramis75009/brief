@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildEventIcs, calendarForProject } from "./caldav";
 import {
   agendaWindow,
+  applyOverride,
+  buildEventIcs,
+  calendarForProject,
   calendarPatch,
   decideExternalSync,
   decideSync,
@@ -183,6 +185,7 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
       dtend: null,
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH,SU",
       exdates: [],
+      overrides: {},
     });
   });
 
@@ -195,6 +198,97 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
       "20260818T160000Z",
       "20260819T160000Z",
     ]);
+  });
+
+  it("parse les overrides (occurrences décalées dans l'app Calendrier, RECURRENCE-ID)", () => {
+    // iCloud renvoie le master ET l'override dans le même ICS quand Aramis
+    // décale UNE occurrence d'une série (constaté en prod le 2026-08-20 :
+    // Séance push jeudi 16h→17h, Poster/Reposter 10).
+    const ics =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-x\r\n" +
+      "DTSTART:20260820T140000Z\r\nDTEND:20260820T150000Z\r\n" +
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,TH\r\nSUMMARY:Séance push\r\nEND:VEVENT\r\n" +
+      "BEGIN:VEVENT\r\nUID:brief-x\r\nDTSTART:20260820T150000Z\r\n" +
+      "DTEND:20260820T160000Z\r\nRECURRENCE-ID:20260820T140000Z\r\n" +
+      "SUMMARY:Séance push\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(parseRemoteEvent(ics)).toEqual({
+      summary: "Séance push",
+      dtstart: "20260820T140000Z",
+      dtend: "20260820T150000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      exdates: [],
+      overrides: { "20260820T140000Z": "20260820T150000Z" },
+    });
+  });
+
+  it("détecte qu'une occurrence décalée dans le calendrier diffère de l'item Brief", () => {
+    const it = item({
+      allDay: false,
+      due: "2026-08-20T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      durationMinutes: 30,
+      caldavSyncedDue: "20260820T160000Z",
+    });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260820T160000Z",
+      dtend: "20260820T163000Z",
+      rrule: it.rrule,
+      exdates: [],
+      overrides: { "20260820T160000Z": "20260820T170000Z" },
+    };
+    expect(remoteDiffers(it, remote)).toBe(true);
+    const patch = calendarPatch(it, remote);
+    expect(patch).toEqual({
+      overrides: { "20260820T160000Z": "20260820T170000Z" },
+    });
+  });
+
+  it("adopte les overrides sans toucher au master (horaire de la série inchangé)", () => {
+    const it = item({
+      allDay: false,
+      due: "2026-08-20T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      durationMinutes: 30,
+      caldavSyncedDue: "20260820T160000Z",
+    });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260820T160000Z",
+      dtend: "20260820T163000Z",
+      rrule: it.rrule,
+      exdates: [],
+      overrides: { "20260820T160000Z": "20260820T170000Z" },
+    };
+    const patch = calendarPatch(it, remote);
+    // Le master ne bouge pas : pas de due/seriesAnchor/caldavSyncedDue.
+    expect(patch).toEqual({ overrides: { "20260820T160000Z": "20260820T170000Z" } });
+  });
+
+  it("réécrit les overrides dans l'ICS (sinon le PUT les perdrait définitivement)", () => {
+    const it = item({
+      allDay: false,
+      due: "2026-08-20T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      durationMinutes: 30,
+      seriesAnchor: "2026-08-20T16:00:00Z",
+      overrides: { "20260820T160000Z": "20260820T170000Z" },
+    });
+    const ics = buildEventIcs(it)!;
+    expect(ics).toContain("RECURRENCE-ID:20260820T160000Z");
+    expect(ics).toContain("DTSTART:20260820T170000Z");
+    expect(ics).toContain("DTEND:20260820T173000Z");
+    // Le master garde son DTSTART d'origine.
+    expect(ics.indexOf("DTSTART:20260820T160000Z")).toBeLessThan(ics.indexOf("RECURRENCE-ID"));
+  });
+
+  it("applyOverride : occurrence décalée → nouvelle heure ; EXDATE → null ; sinon inchangée", () => {
+    const occ = new Date("2026-08-20T16:00:00Z");
+    expect(applyOverride(occ, { "20260820T160000Z": "20260820T170000Z" }, [])?.toISOString()).toBe(
+      "2026-08-20T17:00:00.000Z",
+    );
+    expect(applyOverride(occ, {}, ["20260820T160000Z"])).toBeNull();
+    expect(applyOverride(occ, {}, [])?.toISOString()).toBe("2026-08-20T16:00:00.000Z");
   });
 
   it("détecte qu'un horaire distant discorde de celui de Brief (édition manuelle)", () => {
@@ -523,6 +617,8 @@ describe("toCalendarEvent — événements posés directement dans l'app Calendr
       allDay: true,
       durationMinutes: null,
       rrule: null,
+      overrides: {},
+      exdates: [],
     });
   });
 

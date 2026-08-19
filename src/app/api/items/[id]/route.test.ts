@@ -98,3 +98,33 @@ describe("sanitizePatch — conversion complète type + champs associés", () =>
     });
   });
 });
+
+describe("sanitizePatch — overrides (occurrences décalées adoptées du calendrier)", () => {
+  it("applique un objet overrides valide", () => {
+    const out = sanitizePatch(
+      { overrides: { "20260820T160000Z": "20260820T170000Z" } },
+      KNOWN,
+      FALLBACK,
+    );
+    expect(out.overrides).toEqual({ "20260820T160000Z": "20260820T170000Z" });
+  });
+
+  it("ignore les clés/valeurs malformées, garde les valides", () => {
+    const out = sanitizePatch(
+      { overrides: { "20260820T160000Z": "20260820T170000Z", bogus: "20260820T180000Z", "20260821T160000Z": "nope" } },
+      KNOWN,
+      FALLBACK,
+    );
+    expect(out.overrides).toEqual({ "20260820T160000Z": "20260820T170000Z" });
+  });
+
+  it("overrides absent du body ne touche pas le champ (piège PATCH 18/08)", () => {
+    const out = sanitizePatch({ due: "2026-08-20T18:00:00+02:00" }, KNOWN, FALLBACK);
+    expect(out.overrides).toBeUndefined();
+  });
+
+  it("overrides: null efface explicitement", () => {
+    const out = sanitizePatch({ overrides: null }, KNOWN, FALLBACK);
+    expect(out.overrides).toBeUndefined();
+  });
+});

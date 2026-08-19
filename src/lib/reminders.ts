@@ -1,4 +1,5 @@
 import "server-only";
+import { applyOverride } from "./caldav";
 import { formatDue } from "./due";
 import { readSubscriptions } from "./push-store";
 import { nextOccurrence } from "./rrule";
@@ -78,7 +79,12 @@ export function pendingReminders(
 
     const due = new Date(item.due);
     if (Number.isNaN(due.getTime())) continue;
-    if (due > now) continue;
+    // L'heure RÉELLE de l'occurrence : une occurrence décalée dans l'app
+    // Calendrier (override) doit sonner à sa nouvelle heure, jamais à
+    // l'ancienne de `due` ; une occurrence supprimée (EXDATE) ne sonne pas.
+    const effective = applyOverride(due, item.overrides, item.exdates);
+    if (!effective) continue;
+    if (effective > now) continue;
 
     if (item.seriesAnchor) {
       const anchor = new Date(item.seriesAnchor);
@@ -89,9 +95,9 @@ export function pendingReminders(
     }
 
     // Déjà notifié pour CETTE échéance : `remindedAt` postérieur à l'échéance.
-    if (item.remindedAt && new Date(item.remindedAt) >= due) continue;
+    if (item.remindedAt && new Date(item.remindedAt) >= effective) continue;
 
-    if (now.getTime() - due.getTime() > GRACE_MS) stale.push(item);
+    if (now.getTime() - effective.getTime() > GRACE_MS) stale.push(item);
     else ready.push(item);
   }
 
@@ -100,9 +106,12 @@ export function pendingReminders(
 
 /** Corps de la notification. Le `tag` évite l'empilement de doublons visuels. */
 function payloadFor(item: Item) {
+  // L'heure affichée est l'heure RÉELLE de l'occurrence (override appliqué) —
+  // jamais l'ancienne heure de `due` quand Aramis l'a décalée dans Calendrier.
+  const effective = item.due ? applyOverride(new Date(item.due), item.overrides, item.exdates) : null;
   return {
     title: item.kind === "event" ? "Rendez-vous" : "Rappel",
-    body: `${item.title} — ${formatDue(item.due, item.allDay)}`,
+    body: `${item.title} — ${formatDue(effective?.toISOString() ?? item.due, item.allDay)}`,
     tag: `item-${item.id}`,
     url: "/",
     id: item.id,
@@ -161,9 +170,19 @@ export async function runReminders(now: Date = new Date()): Promise<ReminderRun>
           const patch: Partial<Item> = { remindedAt: now.toISOString() };
 
           if (item.rrule && item.due) {
-            const next = nextOccurrence(new Date(item.due), item.rrule, now);
+            // L'avancement part de l'ANCRE de la série (`seriesAnchor`), pas
+            // de `due` : `due` peut avoir été décalé par un override (une
+            // occurrence déplacée dans l'app Calendrier) — avancer depuis
+            // `due` ferait dériver toute la série. L'ancre est le DTSTART
+            // réellement écrit sur iCloud, stable par construction.
+            const anchor = item.seriesAnchor ? new Date(item.seriesAnchor) : new Date(item.due);
+            const next = nextOccurrence(anchor, item.rrule, now);
             if (next) {
-              patch.due = next.toISOString();
+              // L'occurrence suivante peut elle-même être décalée (override)
+              // ou supprimée (EXDATE) dans le calendrier : le rappel doit
+              // sonner à l'heure du calendrier, jamais à celle de la RRULE.
+              const effective = applyOverride(next, item.overrides, item.exdates);
+              patch.due = (effective ?? next).toISOString();
               run.advanced += 1;
             } else {
               // Série terminée ou règle non comprise : on retire la récurrence

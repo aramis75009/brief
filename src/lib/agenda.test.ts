@@ -38,6 +38,8 @@ function calEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     allDay: true,
     durationMinutes: null,
     rrule: null,
+    overrides: {},
+    exdates: [],
     ...overrides,
   };
 }
@@ -148,5 +150,66 @@ describe("buildDayAgenda", () => {
     });
     const ev = calEvent({ uid: "91A2AEE9", briefItemId: null });
     expect(buildDayAgenda([done], [ev], DAY_START, DAY_END)).toHaveLength(0);
+  });
+
+  it("affiche une occurrence DÉCALÉE dans l'app Calendrier à sa nouvelle heure (RECURRENCE-ID)", () => {
+    // Séance push : la série est à 16:00 (14:00Z) mais Aramis a décalé
+    // l'occurrence du jeudi 20 à 17:00 (15:00Z) — l'agenda doit montrer 17:00.
+    // L'item Brief est ancré sur un AUTRE jour (avancement interne) : c'est
+    // l'événement calendrier qui porte l'occurrence du jour, avec l'override.
+    const it1 = item({
+      id: "it_push",
+      due: "2026-08-24T16:00:00+02:00", // ancré au lundi suivant
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      kind: "event",
+    });
+    const ev = calEvent({
+      uid: "brief-it_push",
+      briefItemId: "it_push",
+      title: "Séance push",
+      start: "2026-08-24T14:00:00.000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      overrides: { "20260820T140000Z": "20260820T150000Z" },
+    });
+    const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
+    expect(out).toHaveLength(1);
+    expect(out[0].due).toBe("2026-08-20T15:00:00.000Z"); // 17:00 Paris
+  });
+
+  it("applique l'override aussi quand l'item Brief porte lui-même l'occurrence du jour", () => {
+    // Cas réel prod 2026-08-20 : `due` de l'item est DANS la fenêtre (16:00
+    // Paris) et l'override du calendrier le décale à 17:00 — l'affichage via
+    // `items` doit montrer 17:00, pas 16:00.
+    const it1 = item({
+      id: "it_push",
+      due: "2026-08-20T16:00:00+02:00",
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      kind: "event",
+      overrides: { "20260820T140000Z": "20260820T150000Z" },
+    });
+    const out = buildDayAgenda([it1], [], DAY_START, DAY_END);
+    expect(out).toHaveLength(1);
+    expect(out[0].due).toBe("2026-08-20T15:00:00.000Z"); // 17:00 Paris
+  });
+
+  it("n'affiche pas une occurrence SUPPRIMÉE dans l'app Calendrier (EXDATE)", () => {
+    const it1 = item({
+      id: "it_push",
+      due: "2026-08-24T16:00:00+02:00", // ancré au lundi suivant
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      kind: "event",
+    });
+    const ev = calEvent({
+      uid: "brief-it_push",
+      briefItemId: "it_push",
+      title: "Séance push",
+      start: "2026-08-24T14:00:00.000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      exdates: ["20260820T140000Z"],
+    });
+    expect(buildDayAgenda([it1], [ev], DAY_START, DAY_END)).toHaveLength(0);
   });
 });

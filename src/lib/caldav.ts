@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { patchItem, readItems, saveItems } from "./store";
 import { shiftDays, zonedParts } from "./zoned";
 import type { Item } from "./types";
+// Conversions de dates et application des overrides : pures, partagées avec
+// le client (HomeScreen) — voir `overrides.ts`. Ré-exportées ici pour que les
+// modules serveur et les tests continuent d'importer depuis `./caldav`.
+export { applyOverride, icalUtc, remoteDueToItem } from "./overrides";
+import { icalUtc, remoteDueToItem } from "./overrides";
 
 /**
  * Synchro CalDAV — Brief → calendrier Apple (iCloud).
@@ -153,11 +158,6 @@ function icalDate(date: Date): string {
   return `${y}${String(m).padStart(2, "0")}${String(d).padStart(2, "0")}`;
 }
 
-/** `20260818T090000Z` — l'instant en UTC, format iCalendar. */
-function icalUtc(date: Date): string {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-}
-
 /**
  * Construit l'événement iCalendar d'un item Brief.
  *
@@ -218,6 +218,31 @@ export function buildEventIcs(item: Item): string | null {
   }
   // Priorité 1 (Brief) = priorité 1 (RFC 5545, la plus haute).
   lines.push(`PRIORITY:${item.priority}`);
+
+  // Occurrences DÉCALÉES dans l'app Calendrier (adoptées depuis les VEVENT
+  // override du master) : sans elles, le PUT suivant réécrirait l'ICS SANS
+  // les overrides et les décalages d'Aramis seraient perdus définitivement.
+  // Chaque override est un VEVENT séparé portant RECURRENCE-ID (l'occurrence
+  // d'origine) et son propre DTSTART/DTEND (la nouvelle heure). Garde : la
+  // série doit exister encore (`rrule`) — sans elle, des VEVENT orphelins
+  // seraient écrits.
+  if (item.rrule && item.overrides && Object.keys(item.overrides).length > 0) {
+    for (const [rid, moved] of Object.entries(item.overrides)) {
+      const movedDate = new Date(remoteDueToItem(moved));
+      if (Number.isNaN(movedDate.getTime())) continue;
+      const minutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
+      lines.push(
+        "BEGIN:VEVENT",
+        `UID:${UID_PREFIX}${item.id}`,
+        `DTSTAMP:${icalUtc(new Date())}`,
+        `DTSTART:${moved}`,
+        `DTEND:${icalUtc(new Date(movedDate.getTime() + minutes * 60 * 1000))}`,
+        `RECURRENCE-ID:${rid}`,
+        `SUMMARY:${escapeText(item.title)}`,
+        "END:VEVENT",
+      );
+    }
+  }
 
   lines.push("END:VEVENT", "END:VCALENDAR");
   return lines.join("\r\n");
@@ -415,25 +440,63 @@ export type RemoteEventFields = {
   rrule: string | null;
   /** Occurrences supprimées (EXDATE), en UTC RFC 5545. */
   exdates: string[];
+  /**
+   * Occurrences DÉCALÉES (VEVENT override avec `RECURRENCE-ID` dans le même
+   * ICS que le master) : clé = `RECURRENCE-ID` (UTC RFC 5545), valeur = le
+   * nouveau DTSTART de l'override. iCloud écrit un override quand Aramis
+   * déplace UNE occurrence d'une série dans l'app Calendrier — le master
+   * garde son DTSTART/RRULE d'origine. Absent = aucun override.
+   */
+  overrides?: Record<string, string>;
 };
 
+/**
+ * Découpe un ICS en blocs VEVENT. iCloud renvoie le master ET ses overrides
+ * (`RECURRENCE-ID`) dans le même ICS — le master est le premier VEVENT, les
+ * overrides suivent. Sans cette découpe, `parseRemoteEvent` ne lirait que le
+ * master et ignorerait les occurrences décalées par Aramis.
+ */
+function splitVeEvents(ics: string): string[] {
+  const blocks: string[] = [];
+  const re = /BEGIN:VEVENT\r?\n([\s\S]*?)\r?\nEND:VEVENT/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(ics)) !== null) blocks.push(m[1]);
+  return blocks;
+}
+
 export function parseRemoteEvent(ics: string): RemoteEventFields {
-  const title = ics.match(/^SUMMARY:([^\r\n]*)/m);
-  const dt = ics.match(/^DTSTART(?:;[^:]*)?:([^\r\n]+)/m);
-  const de = ics.match(/^DTEND(?:;[^:]*)?:([^\r\n]+)/m);
-  const rr = ics.match(/^RRULE:([^\r\n]+)/m);
+  const blocks = splitVeEvents(ics);
+  const master = blocks[0] ?? "";
+  const title = master.match(/^SUMMARY:([^\r\n]*)/m);
+  const dt = master.match(/^DTSTART(?:;[^:]*)?:([^\r\n]+)/m);
+  const de = master.match(/^DTEND(?:;[^:]*)?:([^\r\n]+)/m);
+  const rr = master.match(/^RRULE:([^\r\n]+)/m);
   // EXDATE peut être une ligne unique (`EXDATE:20260818T160000Z`) ou une
   // ligne pliée RFC 5545 (`EXDATE:20260818T160000Z,20260819T160000Z`).
-  const exdates = (ics.match(/^EXDATE(?:;[^:]*)?:([^\r\n]+)/gm) ?? [])
+  const exdates = (master.match(/^EXDATE(?:;[^:]*)?:([^\r\n]+)/gm) ?? [])
     .flatMap((line) => line.replace(/^EXDATE(?:;[^:]*)?:/, "").split(","))
     .map((v) => v.trim())
     .filter((v) => /^\d{8}T\d{6}Z?$/.test(v));
+
+  // Overrides : chaque VEVENT supplémentaire portant un RECURRENCE-ID est une
+  // occurrence décalée. La clé est le RECURRENCE-ID (l'occurrence d'origine),
+  // la valeur le DTSTART de l'override (la nouvelle heure).
+  const overrides: Record<string, string> = {};
+  for (const block of blocks.slice(1)) {
+    const rid = block.match(/^RECURRENCE-ID(?:;[^:]*)?:([^\r\n]+)/m)?.[1]?.trim();
+    const odt = block.match(/^DTSTART(?:;[^:]*)?:([^\r\n]+)/m)?.[1]?.trim();
+    if (rid && odt && /^\d{8}T\d{6}Z$/.test(rid) && /^\d{8}T\d{6}Z$/.test(odt)) {
+      overrides[rid] = odt;
+    }
+  }
+
   return {
     summary: title ? unescapeText(title[1].trim()) : "",
     dtstart: dt ? dt[1].trim() : null,
     dtend: de ? de[1].trim() : null,
     rrule: rr ? rr[1].trim() : null,
     exdates,
+    overrides,
   };
 }
 
@@ -490,35 +553,28 @@ export function remoteDiffers(item: Item, remote: RemoteEventFields): boolean {
     remote.exdates.length !== itemExdates.length ||
     remote.exdates.some((d) => !itemExdates.includes(d)) ||
     itemExdates.some((d) => !remote.exdates.includes(d));
+  const itemOverrides = item.overrides ?? {};
+  const overridesDiffer = overridesDifferFrom(itemOverrides, remote.overrides ?? {});
   return (
     remote.summary !== item.title ||
     (remote.rrule ?? null) !== (item.rrule ?? null) ||
     (remote.dtstart ?? null) !== dtstartBaseline(item, remote) ||
     (remoteMinutes !== null && remoteMinutes !== itemMinutes) ||
-    exdatesDiffer
+    exdatesDiffer ||
+    overridesDiffer
   );
 }
 
-/** `20260819T140000Z` → `2026-08-19T14:00:00Z` ; `20260819` → `2026-08-19T09:00:00+02:00` (allDay Brief). */
-export function remoteDueToItem(dtstart: string): string {
-  const utc = dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
-  if (utc) {
-    return `${utc[1]}-${utc[2]}-${utc[3]}T${utc[4]}:${utc[5]}:${utc[6]}Z`;
+/** Vrai si les occurrences décalées de l'item diffèrent de celles du calendrier. */
+export function overridesDifferFrom(
+  itemOverrides: Record<string, string>,
+  remoteOverrides: Record<string, string>,
+): boolean {
+  const keys = new Set([...Object.keys(itemOverrides), ...Object.keys(remoteOverrides)]);
+  for (const k of keys) {
+    if ((itemOverrides[k] ?? null) !== (remoteOverrides[k] ?? null)) return true;
   }
-  // DTSTART « flottant » (sans Z) : heure LOCALE du calendrier, à traiter
-  // comme une heure de Paris — sinon `new Date()` reçoit une chaîne
-  // illisible et l'item entier fait planter le rendu (RangeError
-  // formatToParts, constaté en prod le 2026-08-19).
-  const floating = dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
-  if (floating) {
-    const [, y, mo, d, h, mi, s] = floating.map(Number);
-    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}:${String(s).padStart(2, "0")}+02:00`;
-  }
-  const day = dtstart.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (day) {
-    return `${day[1]}-${day[2]}-${day[3]}T09:00:00+02:00`;
-  }
-  return dtstart;
+  return false;
 }
 
 /**
@@ -560,6 +616,10 @@ export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<It
   if (exdatesDiffer) {
     patch.exdates = remote.exdates.length > 0 ? remote.exdates : undefined;
   }
+  const itemOverrides = item.overrides ?? {};
+  if (overridesDifferFrom(itemOverrides, remote.overrides ?? {})) {
+    patch.overrides = Object.keys(remote.overrides ?? {}).length > 0 ? remote.overrides : undefined;
+  }
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
@@ -585,6 +645,14 @@ export type CalendarEvent = {
   allDay: boolean;
   durationMinutes: number | null;
   rrule: string | null;
+  /**
+   * Occurrences décalées (RECURRENCE-ID → nouveau DTSTART, UTC RFC 5545) —
+   * présentes quand Aramis a déplacé une occurrence d'une série dans l'app
+   * Calendrier. `buildDayAgenda` les applique occurrence par occurrence.
+   */
+  overrides: Record<string, string>;
+  /** Occurrences supprimées (EXDATE, UTC RFC 5545) — à ne pas afficher. */
+  exdates: string[];
 };
 
 /**
@@ -610,6 +678,8 @@ export function toCalendarEvent(remote: RemoteEvent, calendarName: string): Cale
     allDay: !fields.dtstart.includes("T"),
     durationMinutes: remoteDurationMinutes(fields),
     rrule: fields.rrule,
+    overrides: fields.overrides ?? {},
+    exdates: fields.exdates,
   };
 }
 
@@ -786,6 +856,8 @@ export function decideExternalSync(
         priority: 4,
         rrule: fields.rrule,
         durationMinutes: remoteDurationMinutes(fields) ?? undefined,
+        exdates: fields.exdates.length > 0 ? fields.exdates : undefined,
+        overrides: Object.keys(fields.overrides ?? {}).length > 0 ? fields.overrides : undefined,
         externalUid: remote.uid,
         externalCalendar: calendarName,
       },
@@ -811,6 +883,18 @@ export function decideExternalSync(
   if ((fields.rrule ?? null) !== (existing.rrule ?? null)) patch.rrule = fields.rrule;
   const minutes = remoteDurationMinutes(fields);
   if (minutes !== null && minutes !== (existing.durationMinutes ?? null)) patch.durationMinutes = minutes;
+  const existingExdates = existing.exdates ?? [];
+  if (
+    fields.exdates.length !== existingExdates.length ||
+    fields.exdates.some((d) => !existingExdates.includes(d)) ||
+    existingExdates.some((d) => !fields.exdates.includes(d))
+  ) {
+    patch.exdates = fields.exdates.length > 0 ? fields.exdates : undefined;
+  }
+  const existingOverrides = existing.overrides ?? {};
+  if (overridesDifferFrom(existingOverrides, fields.overrides ?? {})) {
+    patch.overrides = Object.keys(fields.overrides ?? {}).length > 0 ? fields.overrides : undefined;
+  }
 
   return Object.keys(patch).length > 0 ? { action: "update", patch } : { action: "noop" };
 }

@@ -96,6 +96,20 @@ export type DraftItem = {
    * sinon le PUT suivant du sync les réécrit et l'occurrence réapparaît.
    */
   exdates?: string[];
+  /**
+   * Occurrences DÉCALÉES d'une série récurrente, adoptées depuis le
+   * calendrier quand Aramis déplace une occurrence dans l'app Calendrier
+   * (VEVENT override avec `RECURRENCE-ID` dans le même ICS que le master).
+   *
+   * Clé = `RECURRENCE-ID` (UTC RFC 5545, `YYYYMMDDTHHMMSSZ`) — l'occurrence
+   * d'origine ; valeur = le nouveau DTSTART (UTC RFC 5545). Sans ce champ,
+   * Brief ne voit que le master (premier VEVENT) et considère la série
+   * « identique » → l'édition n'est jamais adoptée, l'agenda affiche
+   * l'ancienne heure, les rappels sonnent à l'ancienne heure, et un PUT
+   * réécrirait l'ICS SANS les overrides (perte définitive). Constaté en
+   * prod le 2026-08-20 (Séance push, Poster/Reposter 10).
+   */
+  overrides?: Record<string, string>;
   notes?: string;
   /** Sous-tâches d'un item. */
   subtasks?: SubTask[];

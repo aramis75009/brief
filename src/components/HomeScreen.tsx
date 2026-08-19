@@ -225,11 +225,14 @@ function RowCheckbox({
 function TodayRow({
   item,
   project,
+  due,
   onToggle,
   onOpen,
 }: {
   item: Item;
   project: Project | undefined;
+  /** L'heure EFFECTIVE de l'occurrence (déjà corrigée des overrides par `buildDayAgenda`). */
+  due: string;
   onToggle: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
@@ -239,8 +242,8 @@ function TodayRow({
 
   // Heure formatée depuis l'échéance (fuseau Europe/Paris).
   const time = useMemo(() => {
-    if (!item.due) return "";
-    const d = new Date(item.due);
+    if (!due) return "";
+    const d = new Date(due);
     if (Number.isNaN(d.getTime())) return "";
     if (item.allDay) return "journée";
     return new Intl.DateTimeFormat("fr-FR", {
@@ -248,7 +251,7 @@ function TodayRow({
       minute: "2-digit",
       timeZone: TIMEZONE,
     }).format(d);
-  }, [item.due, item.allDay]);
+  }, [due, item.allDay]);
 
   const isVocal = !!item.audioOrigin;
 
@@ -394,7 +397,7 @@ function TodayAgendaGroup({
           return (
             <div key={entry.id}>
               {item ? (
-                <TodayRow item={item} project={projectMap.get(item.projectId)} onToggle={onToggle} onOpen={onOpen} />
+                <TodayRow item={item} project={projectMap.get(item.projectId)} due={entry.due} onToggle={onToggle} onOpen={onOpen} />
               ) : (
                 <TodayAgendaFallbackRow entry={entry} />
               )}

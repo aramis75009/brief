@@ -1,4 +1,5 @@
 import "server-only";
+import { applyOverride } from "./caldav";
 import { occurrencesInRange } from "./rrule";
 import type { CalendarEvent } from "./caldav";
 import type { Item, ItemKind } from "./types";
@@ -65,13 +66,18 @@ export function buildDayAgenda(
     if (!isActiveBriefItem(it) || !it.due) continue;
     const due = new Date(it.due);
     if (Number.isNaN(due.getTime()) || due < dayStart || due >= dayEnd) continue;
+    // Occurrence décalée (RECURRENCE-ID) ou supprimée (EXDATE) dans l'app
+    // Calendrier : l'heure affichée est celle du calendrier, jamais celle de
+    // `due` — le calendrier gagne (décision 18/08), y compris par occurrence.
+    const effective = applyOverride(due, it.overrides, it.exdates);
+    if (!effective) continue;
     out.push({
       id: `brief:${it.id}`,
       source: "brief",
       briefItemId: it.id,
       kind: it.kind,
       title: it.title,
-      due: it.due,
+      due: effective.toISOString(),
       allDay: it.allDay,
       durationMinutes: it.durationMinutes ?? null,
       projectId: it.projectId,
@@ -96,13 +102,19 @@ export function buildDayAgenda(
       : inWindow(new Date(ev.start), dayStart, dayEnd);
 
     for (const occ of occurrences) {
+      // Occurrence décalée dans l'app Calendrier (RECURRENCE-ID) ou supprimée
+      // (EXDATE) : l'heure affichée est celle du calendrier, jamais celle de
+      // la RRULE — le calendrier gagne (décision 18/08), y compris par
+      // occurrence. `null` = occurrence supprimée, on ne l'affiche pas.
+      const effective = applyOverride(occ, ev.overrides, ev.exdates);
+      if (!effective) continue;
       out.push({
-        id: `cal:${ev.uid}:${occ.toISOString()}`,
+        id: `cal:${ev.uid}:${effective.toISOString()}`,
         source: "calendar",
         briefItemId: linkedItem?.id ?? null,
         kind: linkedItem ? linkedItem.kind : "external",
         title: linkedItem ? linkedItem.title : ev.title,
-        due: occ.toISOString(),
+        due: effective.toISOString(),
         allDay: ev.allDay,
         durationMinutes: ev.durationMinutes,
         projectId: linkedItem ? linkedItem.projectId : null,

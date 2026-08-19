@@ -91,6 +91,20 @@ export function sanitizePatch(
     );
     out.exdates = clean.length > 0 ? clean : undefined;
   }
+  // Occurrences décalées (adoptées depuis le calendrier) : objet
+  // `RECURRENCE-ID` → nouveau DTSTART (UTC RFC 5545). `null` = effacement
+  // explicite ; ABSENT = on ne touche pas (même règle que `exdates`).
+  if (v.overrides === null) {
+    out.overrides = undefined;
+  } else if (typeof v.overrides === "object" && v.overrides !== null && !Array.isArray(v.overrides)) {
+    const clean: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v.overrides as Record<string, unknown>)) {
+      if (/^\d{8}T\d{6}Z$/.test(k) && typeof val === "string" && /^\d{8}T\d{6}Z$/.test(val)) {
+        clean[k] = val;
+      }
+    }
+    out.overrides = Object.keys(clean).length > 0 ? clean : undefined;
+  }
   return out;
 }
 
