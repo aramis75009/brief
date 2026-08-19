@@ -549,7 +549,7 @@ export function HomeScreen({
           bg={C.meet100}
           icon={<CalendarIcon size={20} />}
           label="Rendez-vous"
-          subtitle={`${counts.events} · Calendrier Apple`}
+          subtitle={`${counts.events} aujourd'hui`}
           onClick={onOpenAgenda}
         />
         <DestinationTile
