@@ -169,6 +169,27 @@ raison nouvelle.
   vue Rendez-vous elle-même, pas la tuile d'accueil.
 - **Effort :** S (CC) · **Priorité :** P2
 
+### Comprendre le mécanisme exact de la dérive DTSTART du 2026-08-19
+- **Quoi :** l'item récurrent « Aller courir » a vu son DTSTART calendrier
+  passer du mercredi 19 au samedi 22 en moins de 30h après sa création, alors
+  que la suite de tests EXISTANTE (`caldav.test.ts`, avant le fix du 19/08)
+  affirme que ce scénario précis (`due` avancé, calendrier non rattrapé) doit
+  produire un `skip` — donc aucun PUT. Non reproduit, non expliqué : les logs
+  Docker ne remontaient qu'au dernier redéploiement du jour, tout l'historique
+  antérieur est perdu.
+- **Pourquoi ce n'est pas bloquant :** le fix du 19/08 (`Item.seriesAnchor`)
+  retire la dépendance à `due` pour le DTSTART écrit, donc n'a plus besoin de
+  savoir POURQUOI la dérive a eu lieu pour cesser de se reproduire.
+- **Pourquoi le garder en tête :** si un item dérive à nouveau après ce fix
+  malgré `seriesAnchor`, ce serait le signe qu'un AUTRE chemin de code écrit
+  aussi au calendrier — voir la passation « DTSTART mobile des séries
+  récurrentes corrigé » (`HANDOFF.md`, ou son archive dans
+  `docs/handoffs/` une fois la prochaine session ouverte) pour la trace
+  complète de l'investigation.
+- **Effort :** S (CC), si ça se reproduit avec des logs disponibles cette
+  fois · **Priorité :** P2
+- **Dépend de :** une récidive observée, logs à l'appui.
+
 ### Bug préexistant : `<button>` imbriqué dans `TodayRow`/`RowCheckbox`
 - **Quoi :** `HomeScreen.tsx`, la ligne « Aujourd'hui » est un `<button>` qui
   contient `RowCheckbox`, un second `<button>` — HTML invalide, erreur
