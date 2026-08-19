@@ -1,6 +1,7 @@
 "use client";
 
 import { PIN_HEADER, UnauthorizedError, clearPin, getPin } from "./pin";
+import type { AgendaItem } from "./agenda";
 import type { DraftItem, Item, Overview, Project, SaveResult } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
@@ -18,6 +19,7 @@ const TIMEOUTS = {
   save: 30_000,
   items: 15_000,
   overview: 15_000,
+  agenda: 15_000,
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
@@ -92,6 +94,21 @@ export async function fetchItems(): Promise<Item[]> {
  */
 export async function fetchOverview(): Promise<Overview> {
   return jsonFetch<Overview>("/api/overview", {}, TIMEOUTS.overview);
+}
+
+/**
+ * Le Rendez-vous d'UN jour (`AAAA-MM-JJ`), fusionné côté serveur : items
+ * Brief actifs + événements posés directement dans l'app Calendrier. Voir
+ * `src/lib/agenda.ts` — c'est la même fonction que la route appelle, jamais
+ * une seconde logique côté client.
+ */
+export async function fetchAgendaDay(date: string): Promise<AgendaItem[]> {
+  const data = await jsonFetch<{ events: AgendaItem[] }>(
+    `/api/agenda?date=${encodeURIComponent(date)}`,
+    {},
+    TIMEOUTS.agenda,
+  );
+  return data.events ?? [];
 }
 
 /** Les projets ne transitent plus par le client : le serveur les possède. */

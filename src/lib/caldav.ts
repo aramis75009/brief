@@ -1,7 +1,7 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { patchItem, readItems } from "./store";
+import { patchItem, readItems, saveItems } from "./store";
 import { shiftDays, zonedParts } from "./zoned";
 import type { Item } from "./types";
 
@@ -91,6 +91,14 @@ export type CalDavSyncRun = {
   deleted: number;
   /** Items marqués `doneAt` parce que leur événement a disparu du calendrier. */
   completedFromCalendar: number;
+  /** Nouveaux items Brief créés depuis un événement posé directement dans Calendrier. */
+  externalAdopted: number;
+  /** Items adoptés mis à jour parce que leur événement a changé dans Calendrier. */
+  externalUpdated: number;
+  /** Items adoptés marqués terminés parce que leur événement a disparu de Calendrier. */
+  externalCompleted: number;
+  /** Événements supprimés de Calendrier parce que l'item adopté a été coché dans Brief. */
+  externalDeleted: number;
   failures: { uid: string; error: string }[];
 };
 
@@ -147,6 +155,10 @@ function icalUtc(date: Date): string {
  */
 export function buildEventIcs(item: Item): string | null {
   if (item.doneAt) return null;
+  // Adopté d'un événement posé directement dans Calendrier : son UID
+  // d'origine EST déjà l'événement — un PUT sous `brief-<id>` en créerait
+  // un second, en double. Voir `decideExternalSync`.
+  if (item.externalUid) return null;
   if (!item.due) return null;
 
   const due = new Date(item.due);
@@ -294,8 +306,13 @@ export async function discoverCalendars(homeHref: string): Promise<Map<string, s
 
 export type RemoteEvent = { href: string; uid: string; ics: string };
 
-/** Liste les événements déjà présents dont l'UID commence par `brief-`. */
-export async function listBriefEvents(calendarUrl: string): Promise<RemoteEvent[]> {
+/**
+ * Liste TOUS les événements d'un calendrier (n'importe quel UID). Un seul
+ * appel réseau, réutilisé par `listBriefEvents` (filtre `brief-*`, pour la
+ * réconciliation) et par l'instantané agenda (garde tout, pour afficher les
+ * événements posés directement dans l'app Calendrier — voir `agenda.ts`).
+ */
+async function queryCalendarEvents(calendarUrl: string): Promise<RemoteEvent[]> {
   const res = await caldavFetch(calendarUrl, {
     method: "REPORT",
     headers: { Depth: "1", "Content-Type": "application/xml" },
@@ -316,15 +333,25 @@ export async function listBriefEvents(calendarUrl: string): Promise<RemoteEvent[
     const body = block[1];
     const href = body.match(/<href[^>]*>([^<]*)<\/href>/)?.[1];
     if (!href) continue;
-    // L'UID est dans le calendar-data ; on ne garde que les nôtres.
     const uid = body.match(/UID:([^\r\n]+)/)?.[1];
-    if (!uid?.startsWith(UID_PREFIX)) continue;
+    if (!uid) continue;
     // On garde l'ICS complet (désencodé) : c'est la vérité qu'Aramis a posée
     // dans l'app Calendrier — elle peut différer de celle de Brief.
     const data = body.match(/<calendar-data[^>]*>([\s\S]*?)<\/calendar-data>/i);
     events.push({ href, uid, ics: data ? decodeXml(data[1]) : "" });
   }
   return events;
+}
+
+/** Liste les événements déjà présents dont l'UID commence par `brief-`. */
+export async function listBriefEvents(calendarUrl: string): Promise<RemoteEvent[]> {
+  const events = await queryCalendarEvents(calendarUrl);
+  return events.filter((e) => e.uid.startsWith(UID_PREFIX));
+}
+
+/** Tous les événements d'un calendrier, `brief-*` compris — pour l'instantané agenda. */
+export async function listAllEvents(calendarUrl: string): Promise<RemoteEvent[]> {
+  return queryCalendarEvents(calendarUrl);
 }
 
 /* --- « Le calendrier gagne » (décision Aramis 18/08) -------------------- */
@@ -481,6 +508,94 @@ export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<It
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+/* --- Instantané agenda ------------------------------------------------------
+ *
+ * Ce que la vue « Rendez-vous » affiche ne peut pas se limiter aux items que
+ * Brief a lui-même créés : Aramis pose aussi des événements DIRECTEMENT dans
+ * l'app Calendrier (Siri, saisie manuelle) que Brief n'a jamais écrits et ne
+ * possède donc pas dans `items.json`. Le calendrier Apple étant la source de
+ * vérité (décision 18/08), l'agenda doit les montrer aussi — sans les
+ * transformer en items Brief, juste pour l'affichage.
+ * -------------------------------------------------------------------------- */
+
+/** Un événement de calendrier, brief ou non, prêt pour l'affichage agenda. */
+export type CalendarEvent = {
+  uid: string;
+  /** `null` pour un événement posé directement dans l'app Calendrier. */
+  briefItemId: string | null;
+  calendar: string;
+  title: string;
+  /** ISO 8601 avec décalage ou en UTC — jamais un DTSTART brut. */
+  start: string;
+  allDay: boolean;
+  durationMinutes: number | null;
+  rrule: string | null;
+};
+
+/**
+ * Convertit un événement distant brut en `CalendarEvent`. `null` si le titre
+ * ou le DTSTART sont illisibles — jamais un événement fantôme à une date
+ * approchée (même principe que `isRealCalendarDate` : une donnée absente se
+ * voit, une donnée fausse ne se voit pas).
+ */
+export function toCalendarEvent(remote: RemoteEvent, calendarName: string): CalendarEvent | null {
+  if (!remote.ics) return null;
+  const fields = parseRemoteEvent(remote.ics);
+  if (!fields.dtstart || !fields.summary) return null;
+
+  const start = new Date(remoteDueToItem(fields.dtstart));
+  if (Number.isNaN(start.getTime())) return null;
+
+  return {
+    uid: remote.uid,
+    briefItemId: remote.uid.startsWith(UID_PREFIX) ? remote.uid.slice(UID_PREFIX.length) : null,
+    calendar: calendarName,
+    title: fields.summary,
+    start: start.toISOString(),
+    allDay: !fields.dtstart.includes("T"),
+    durationMinutes: remoteDurationMinutes(fields),
+    rrule: fields.rrule,
+  };
+}
+
+const AGENDA_SNAPSHOT_FILE = "caldav-agenda-snapshot.json";
+
+export type AgendaSnapshot = { generatedAt: string; events: CalendarEvent[] };
+
+async function writeAgendaSnapshot(events: CalendarEvent[]): Promise<void> {
+  const path = join(DATA_DIR, AGENDA_SNAPSHOT_FILE);
+  const tmp = `${path}.${process.pid}.tmp`;
+  const snapshot: AgendaSnapshot = { generatedAt: new Date().toISOString(), events };
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(tmp, JSON.stringify(snapshot), "utf8");
+  await rename(tmp, path);
+}
+
+/**
+ * Le dernier instantané agenda écrit par `runCalDavSync`. `null` si aucun
+ * passage n'a encore réussi (juste après un déploiement, par exemple) — la
+ * route agenda retombe alors sur les items Brief seuls, jamais une erreur.
+ */
+export async function readAgendaSnapshot(): Promise<AgendaSnapshot | null> {
+  try {
+    const raw = await readFile(join(DATA_DIR, AGENDA_SNAPSHOT_FILE), "utf8");
+    return JSON.parse(raw) as AgendaSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Calendriers dont l'agenda doit tenir compte : ceux que Brief mappe à un
+ * projet, plus le repli « Personnel ». Le compte iCloud d'Aramis contient
+ * d'autres calendriers (Permis, Fake, Anniversaires, Fêtes de France,
+ * Suggestions de Siri…) qui n'ont rien à faire dans un organiseur de tâches —
+ * on les balaie déjà pour le nettoyage `brief-*`, mais on ne les affiche pas.
+ */
+function agendaCalendarNames(): Set<string> {
+  return new Set([...Object.values(loadCalendarMapping()), FALLBACK_CALENDAR]);
+}
+
 /* --- Réconciliation --------------------------------------------------------
  *
  * Ce que fait `runCalDavSync` pour CHAQUE item désiré (daté, non terminé) face
@@ -547,6 +662,99 @@ export function decideSync(item: Item, remote: RemoteEvent | undefined): SyncAct
   return { action: "skip" };
 }
 
+/* --- Adoption externe (décision Aramis 2026-08-19) -------------------------
+ *
+ * « Adopte tout, on verra à l'usage. » Aucun événement posé dans un
+ * calendrier connu de Brief n'est trié par pertinence — un item personnel
+ * réel (« Relancer Revolut ») et une note sans suite (« Rentre Jeanne »)
+ * n'ont aucun signal fiable qui les distingue. Brief adopte les deux comme
+ * de vraies tâches ; celles qui ne comptent pas se cochent ou se suppriment,
+ * comme n'importe quelle autre tâche.
+ * -------------------------------------------------------------------------- */
+
+/** Calendrier iCloud → projet Brief, l'inverse de `calendarForProject`. */
+export function projectForCalendar(calendarName: string): string | null {
+  for (const [projectId, calName] of Object.entries(loadCalendarMapping())) {
+    if (calName === calendarName) return projectId;
+  }
+  return null;
+}
+
+export type ExternalSyncAction =
+  | { action: "create"; item: Omit<Item, "id" | "createdAt" | "remindedAt" | "doneAt"> }
+  | { action: "update"; patch: Partial<Item> }
+  | { action: "complete" }
+  | { action: "delete-remote" }
+  | { action: "noop" };
+
+/**
+ * Décide quoi faire pour UN événement d'un calendrier connu, face à l'item
+ * Brief déjà adopté (ou son absence) :
+ *
+ *   - rien côté Brief, événement présent et lisible → `create` (adoption).
+ *   - item adopté ACTIF, événement absent → `complete` (supprimé dans
+ *     Calendrier → on le marque terminé, jamais recréé).
+ *   - item adopté ACTIF, événement présent mais différent (titre, horaire,
+ *     récurrence) → `update` — le calendrier gagne TOUJOURS pour un item
+ *     externe, il n'y a pas d'avancement interne à distinguer d'une édition
+ *     comme pour `dtstartBaseline`.
+ *   - item adopté TERMINÉ (coché dans Brief), événement encore présent →
+ *     `delete-remote` — contrairement à un item `brief-*`, il n'y a pas de
+ *     PUT à simplement arrêter de faire : l'événement existe indépendamment,
+ *     Brief doit le supprimer explicitement pour que la coche se voie dans
+ *     Calendrier.
+ *   - item adopté TERMINÉ, événement déjà absent → `noop` (déjà convergé).
+ */
+export function decideExternalSync(
+  existing: Item | undefined,
+  remote: RemoteEvent | undefined,
+  calendarName: string,
+  projectId: string,
+): ExternalSyncAction {
+  if (!existing) {
+    if (!remote?.ics) return { action: "noop" };
+    const fields = parseRemoteEvent(remote.ics);
+    if (!fields.dtstart || !fields.summary) return { action: "noop" };
+    return {
+      action: "create",
+      item: {
+        kind: "task",
+        title: fields.summary,
+        projectId,
+        due: remoteDueToItem(fields.dtstart),
+        allDay: !fields.dtstart.includes("T"),
+        priority: 4,
+        rrule: fields.rrule,
+        durationMinutes: remoteDurationMinutes(fields) ?? undefined,
+        externalUid: remote.uid,
+        externalCalendar: calendarName,
+      },
+    };
+  }
+
+  if (existing.doneAt) {
+    return remote ? { action: "delete-remote" } : { action: "noop" };
+  }
+
+  if (!remote?.ics) return { action: "complete" };
+
+  const fields = parseRemoteEvent(remote.ics);
+  if (!fields.dtstart || !fields.summary) return { action: "complete" };
+
+  const patch: Partial<Item> = {};
+  if (fields.summary !== existing.title) patch.title = fields.summary;
+  const due = remoteDueToItem(fields.dtstart);
+  if (due !== existing.due) {
+    patch.due = due;
+    patch.allDay = !fields.dtstart.includes("T");
+  }
+  if ((fields.rrule ?? null) !== (existing.rrule ?? null)) patch.rrule = fields.rrule;
+  const minutes = remoteDurationMinutes(fields);
+  if (minutes !== null && minutes !== (existing.durationMinutes ?? null)) patch.durationMinutes = minutes;
+
+  return Object.keys(patch).length > 0 ? { action: "update", patch } : { action: "noop" };
+}
+
 /* --- Garde-fou ------------------------------------------------------------ */
 
 async function readLastSync(): Promise<number> {
@@ -605,6 +813,10 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       adopted: 0,
       deleted: 0,
       completedFromCalendar: 0,
+      externalAdopted: 0,
+      externalUpdated: 0,
+      externalCompleted: 0,
+      externalDeleted: 0,
       failures: [],
     };
   }
@@ -645,6 +857,10 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   let deleted = 0;
   let existing = 0;
   let completedFromCalendar = 0;
+  let externalAdopted = 0;
+  let externalUpdated = 0;
+  let externalCompleted = 0;
+  let externalDeleted = 0;
   const touched: string[] = [];
 
   // On balaie TOUS les calendriers découverts (pas seulement ceux qui ont
@@ -663,14 +879,21 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // uid -> événement distant (avec son ICS) par calendrier : sert à la phase 2
   // pour détecter les éditions qu'Aramis a faites dans l'app Calendrier.
   const remoteByCal = new Map<string, Map<string, RemoteEvent>>();
+  // Instantané pour la vue agenda : TOUS les événements (pas seulement
+  // `brief-*`) des calendriers qu'elle affiche — voir `agendaCalendarNames`.
+  const agendaCalendars = agendaCalendarNames();
+  const snapshotEvents: CalendarEvent[] = [];
+  // uid -> événement + calendrier d'origine, pour l'adoption externe (Phase 3) —
+  // uniquement les calendriers que Brief affiche, jamais Permis/Fake/Fêtes…
+  const externalByUid = new Map<string, { remote: RemoteEvent; calendarName: string; calendarUrl: string }>();
   for (const calName of toSweep) {
     const calUrl = calendars.get(calName);
     if (!calUrl) continue;
     touched.push(calName);
 
-    let remote: RemoteEvent[];
+    let all: RemoteEvent[];
     try {
-      remote = await listBriefEvents(calUrl);
+      all = await listAllEvents(calUrl);
     } catch (e) {
       readFailed.add(calName);
       const items = byCalendar.get(calName) ?? [];
@@ -679,6 +902,16 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       }
       continue;
     }
+    if (agendaCalendars.has(calName)) {
+      for (const ev of all) {
+        const parsed = toCalendarEvent(ev, calName);
+        if (parsed) snapshotEvents.push(parsed);
+        if (!ev.uid.startsWith(UID_PREFIX)) {
+          externalByUid.set(ev.uid, { remote: ev, calendarName: calName, calendarUrl: calUrl });
+        }
+      }
+    }
+    const remote = all.filter((ev) => ev.uid.startsWith(UID_PREFIX));
     existing += remote.length;
     remoteByCal.set(calName, new Map(remote.map((ev) => [ev.uid, ev])));
 
@@ -763,6 +996,58 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     }
   }
 
+  // PHASE 3 — adoption externe (décision Aramis 2026-08-19, DECISIONS.md) :
+  // les événements posés directement dans Calendrier deviennent de vraies
+  // tâches Brief, et les cocher dans Brief supprime l'événement d'origine.
+  // Tourne sur `externalByUid`, déjà lu en Phase 1 — aucun appel réseau de
+  // plus pour la lecture.
+  const adoptedByUid = new Map(
+    items.filter((it): it is Item & { externalUid: string } => !!it.externalUid).map((it) => [it.externalUid, it]),
+  );
+
+  for (const [uid, { remote, calendarName, calendarUrl }] of externalByUid) {
+    const existingItem = adoptedByUid.get(uid);
+    const projectId = projectForCalendar(calendarName) ?? "perso";
+    const decision = decideExternalSync(existingItem, remote, calendarName, projectId);
+
+    try {
+      if (decision.action === "create") {
+        const now = new Date().toISOString();
+        await saveItems([{ ...decision.item, id: `caldav-${uid}`, createdAt: now, remindedAt: null, doneAt: null }]);
+        externalAdopted += 1;
+      } else if (decision.action === "update") {
+        await patchItem(existingItem!.id, decision.patch);
+        externalUpdated += 1;
+      } else if (decision.action === "delete-remote") {
+        await deleteEvent(calendarUrl, remote.href);
+        externalDeleted += 1;
+      }
+    } catch (e) {
+      failures.push({ uid, error: e instanceof Error ? e.message : "adoption externe échouée" });
+    }
+  }
+
+  // Items adoptés actifs dont l'événement est absent de TOUS les calendriers
+  // balayés cette fois-ci (donc pas seulement d'un calendrier lu en échec) :
+  // supprimé dans Calendrier → terminé dans Brief, jamais recréé.
+  for (const it of items) {
+    if (!it.externalUid || it.doneAt) continue;
+    if (externalByUid.has(it.externalUid)) continue; // déjà traité ci-dessus
+    if (it.externalCalendar && readFailed.has(it.externalCalendar)) continue;
+    try {
+      await patchItem(it.id, { doneAt: new Date().toISOString() });
+      externalCompleted += 1;
+    } catch (e) {
+      failures.push({ uid: it.externalUid, error: e instanceof Error ? e.message : "complétion externe échouée" });
+    }
+  }
+
+  // L'instantané agenda s'écrit même si d'autres calendriers ont échoué : les
+  // événements déjà lus restent plus utiles à la vue Rendez-vous qu'un
+  // instantané vide ou périmé. Chaque événement porte son calendrier
+  // d'origine, une lecture partielle ne mélange donc jamais deux passages.
+  await writeAgendaSnapshot(snapshotEvents);
+
   // On ne marque le passage réussi qu'une fois TOUT terminé : un échec réseau
   // laisse le timestamp ancien et le passage suivant réessaie.
   if (failures.length === 0) {
@@ -779,6 +1064,10 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     adopted,
     deleted,
     completedFromCalendar,
+    externalAdopted,
+    externalUpdated,
+    externalCompleted,
+    externalDeleted,
     failures,
   };
 }

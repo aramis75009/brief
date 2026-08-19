@@ -14,6 +14,41 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-19 · Calendrier Apple → Brief : adoption totale, sans tri bruit/signal
+
+**Décision.** Tout événement posé directement dans l'app Calendrier, dans un
+des 6 calendriers que Brief connaît (Personnel, Sport, Vinted Frip&Trend, My
+Flip, Web@académie, IA), devient une **vraie tâche Brief** au prochain sync —
+rappel Web Push, coche, sous-tâches possibles. Aucun tri automatique par
+calendrier, par forme (journée entière ou non) ou par contenu : « adopte tout,
+on verra à l'usage » (Aramis).
+
+**Pourquoi.** En construisant la vue Rendez-vous, la proposition initiale était
+d'exclure le calendrier « Personnel » (jugé « bruit » — ex. « Rentre Jeanne »).
+Aramis a corrigé : « c'est dangereux ce que tu dis » — il y range aussi de
+vraies tâches importantes (ex. « Relancer Revolut pour le remboursement de
+1000€ »). Rien ne distingue programmatiquement les deux dans un même
+calendrier : même forme, souvent journée entière. Le risque d'un faux négatif
+(rater une vraie tâche) est pire que celui d'un faux positif (une tâche
+ignorable de plus à cocher ou supprimer).
+
+**Comment.** `src/lib/caldav.ts` : `decideExternalSync` (nouvelle Phase 3 de
+`runCalDavSync`) — événement sans item lié → `create` ; item adopté actif dont
+l'événement diffère → `update` (le calendrier gagne toujours, pas
+d'avancement interne à distinguer comme pour un item `brief-*`) ; événement
+disparu → item marqué terminé (jamais recréé) ; item coché dans Brief →
+événement supprimé du calendrier. `Item.externalUid`/`externalCalendar`
+marquent un item adopté ; `buildEventIcs` l'exclut du PUT `brief-<id>` (il vit
+déjà sous son UID d'origine, un second PUT dupliquerait l'événement).
+`src/lib/agenda.ts` déduplique par `externalUid` en plus de `brief-<id>`.
+
+**Statut.** ✅ Implémenté, testé (`caldav.test.ts`, `agenda.test.ts`). Premier
+passage réel en prod : ~6 événements existants (Rentre Jeanne, Terminé Learn
+CSS, Réveil, Ranger appartement, deux séances sport historiques) seront
+adoptés comme tâches — attendu, pas un bug.
+
+---
+
 ## 2026-08-19 · Coordination multi-agents — GitHub est la vérité centrale
 
 **Décision.** Brief est désormais travaillé par **plusieurs agents en

@@ -370,10 +370,9 @@ export function BriefApp() {
 
         {screen === "agenda" && (
           <AgendaScreen
-            items={activeItems}
-            projects={projects}
             onBack={() => setScreen("home")}
-            loading={loading}
+            onOpenTask={(id) => { setSelectedTaskId(id); setScreen("task"); }}
+            onUnauthorized={() => { clearPin(); setUnlocked(false); }}
           />
         )}
 

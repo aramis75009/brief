@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildEventIcs, calendarForProject } from "./caldav";
 import {
   calendarPatch,
+  decideExternalSync,
   decideSync,
   parseRemoteEvent,
+  projectForCalendar,
   remoteDiffers,
   remoteDueToItem,
+  toCalendarEvent,
   unescapeText,
 } from "./caldav";
 import type { RemoteEvent } from "./caldav";
@@ -373,5 +376,155 @@ describe("decideSync — réconciliation Apple Calendar ↔ Brief", () => {
       "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
       "DTSTART:20260818T120000Z\r\nDTEND:20260818T130000Z\r\nSUMMARY:Préparer la réunion\r\nEND:VEVENT\r\nEND:VCALENDAR";
     expect(decideSync(synced, remote({ ics: remoteIcs })).action).toBe("skip");
+  });
+});
+
+describe("toCalendarEvent — événements posés directement dans l'app Calendrier", () => {
+  function remoteEvent(ics: string, uid = "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86"): RemoteEvent {
+    return { href: `/${uid}.ics`, uid, ics };
+  }
+
+  it("reconnaît un événement posé DIRECTEMENT dans l'app Calendrier (pas d'UID brief-*)", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n" +
+      "UID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
+      "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    const ev = toCalendarEvent(remoteEvent(ics), "Personnel");
+    expect(ev).toEqual({
+      uid: "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86",
+      briefItemId: null,
+      calendar: "Personnel",
+      title: "Rentre Jeanne",
+      start: "2026-08-20T07:00:00.000Z", // 09:00 Paris par défaut pour une journée entière
+      allDay: true,
+      durationMinutes: null,
+      rrule: null,
+    });
+  });
+
+  it("reconnaît un événement `brief-*` et retrouve l'id de l'item", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
+      "DTSTART:20260820T140000Z\r\nDTEND:20260820T150000Z\r\nSUMMARY:Séance push\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    const ev = toCalendarEvent(remoteEvent(ics, "brief-it_123"), "Sport");
+    expect(ev?.briefItemId).toBe("it_123");
+    expect(ev?.durationMinutes).toBe(60);
+    expect(ev?.allDay).toBe(false);
+  });
+
+  it("rend null pour un événement sans DTSTART ou sans titre — jamais un fantôme daté au hasard", () => {
+    const noStart = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nSUMMARY:Sans date\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(toCalendarEvent(remoteEvent(noStart), "Personnel")).toBeNull();
+
+    const noTitle = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTART:20260820T140000Z\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(toCalendarEvent(remoteEvent(noTitle), "Personnel")).toBeNull();
+  });
+
+  it("rend null pour un ICS vide (réponse CalDAV partielle)", () => {
+    expect(toCalendarEvent(remoteEvent(""), "Personnel")).toBeNull();
+  });
+
+  it("porte la RRULE telle quelle, pour que l'agenda l'étende lui-même", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTART:20260817T140000Z\r\n" +
+      "SUMMARY:Séance pull\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,TH\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(toCalendarEvent(remoteEvent(ics), "Sport")?.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,TH");
+  });
+});
+
+describe("projectForCalendar", () => {
+  it("route chaque calendrier connu vers son projet — l'inverse de calendarForProject", () => {
+    expect(projectForCalendar("Personnel")).toBe("perso");
+    expect(projectForCalendar("Sport")).toBe("sport");
+    expect(projectForCalendar("Web@académie")).toBe("webacademie");
+  });
+
+  it("rend null pour un calendrier inconnu (Permis, Fake, Fêtes de France…)", () => {
+    expect(projectForCalendar("Permis")).toBeNull();
+  });
+});
+
+describe("decideExternalSync — adoption des événements posés dans Calendrier (décision Aramis 2026-08-19)", () => {
+  function remoteEvent(ics: string, uid = "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86"): RemoteEvent {
+    return { href: `/${uid}.ics`, uid, ics };
+  }
+  function adopted(overrides: Partial<Item> = {}): Item {
+    return {
+      id: "caldav-91A2AEE9-AD19-42EB-AD7E-ABFF79178A86",
+      kind: "task",
+      title: "Rentre Jeanne",
+      projectId: "perso",
+      due: "2026-08-20T09:00:00+02:00",
+      allDay: true,
+      priority: 4,
+      rrule: null,
+      createdAt: "2026-08-19T18:00:00Z",
+      remindedAt: null,
+      doneAt: null,
+      externalUid: "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86",
+      externalCalendar: "Personnel",
+      ...overrides,
+    };
+  }
+
+  it("adopte un événement jamais vu comme une VRAIE tâche Brief — pas de tri bruit/signal", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
+      "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    const decision = decideExternalSync(undefined, remoteEvent(ics), "Personnel", "perso");
+    expect(decision.action).toBe("create");
+    if (decision.action === "create") {
+      expect(decision.item).toMatchObject({
+        kind: "task",
+        title: "Rentre Jeanne",
+        projectId: "perso",
+        allDay: true,
+        externalUid: "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86",
+        externalCalendar: "Personnel",
+      });
+    }
+  });
+
+  it("ne fait rien si l'événement est illisible et jamais adopté — jamais de tâche fantôme", () => {
+    const noTitle = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTART:20260820T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(decideExternalSync(undefined, remoteEvent(noTitle), "Personnel", "perso")).toEqual({ action: "noop" });
+    expect(decideExternalSync(undefined, undefined, "Personnel", "perso")).toEqual({ action: "noop" });
+  });
+
+  it("le calendrier gagne TOUJOURS pour un item adopté actif — titre édité dans Calendrier", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
+      "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne (vol retardé)\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    const decision = decideExternalSync(adopted(), remoteEvent(ics), "Personnel", "perso");
+    expect(decision).toEqual({ action: "update", patch: { title: "Rentre Jeanne (vol retardé)" } });
+  });
+
+  it("rien à faire si l'item adopté et l'événement sont déjà identiques", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
+      "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(decideExternalSync(adopted(), remoteEvent(ics), "Personnel", "perso")).toEqual({ action: "noop" });
+  });
+
+  it("le bug « Relancer Anais » côté externe : événement disparu de Calendrier → item adopté marqué terminé, jamais recréé", () => {
+    expect(decideExternalSync(adopted(), undefined, "Personnel", "perso")).toEqual({ action: "complete" });
+  });
+
+  it("item adopté coché dans Brief, événement encore présent → supprime l'événement d'origine", () => {
+    const done = adopted({ doneAt: "2026-08-19T20:00:00Z" });
+    const ics =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
+      "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(decideExternalSync(done, remoteEvent(ics), "Personnel", "perso")).toEqual({ action: "delete-remote" });
+  });
+
+  it("item adopté coché ET événement déjà absent → convergé, rien à faire", () => {
+    const done = adopted({ doneAt: "2026-08-19T20:00:00Z" });
+    expect(decideExternalSync(done, undefined, "Personnel", "perso")).toEqual({ action: "noop" });
+  });
+
+  it("un item `brief-*` n'est JAMAIS écrit dans le calendrier — buildEventIcs l'exclut", () => {
+    const it = adopted({ externalUid: "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86" });
+    expect(buildEventIcs(it)).toBeNull();
   });
 });

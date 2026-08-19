@@ -138,6 +138,22 @@ export type Item = DraftItem & {
    * la contourner. Écrit uniquement par `src/lib/caldav.ts`.
    */
   caldavSyncedDue?: string | null;
+  /**
+   * UID de l'événement Apple Calendar dont cet item a été ADOPTÉ — posé
+   * directement dans l'app Calendrier, pas par Brief (décision Aramis du
+   * 2026-08-19 : « adopte tout, on verra à l'usage » — aucun tri fiable
+   * n'existe entre bruit et vraie tâche dans un même calendrier).
+   *
+   * Change tout le sens de la synchro pour CET item : Brief ne le PUT
+   * jamais sous `brief-<id>` (`buildEventIcs` retourne `null`) — l'événement
+   * garde son UID d'origine, que Brief suit et édite à sa place. Cocher
+   * l'item dans Brief SUPPRIME l'événement original (pas de statut
+   * « terminé » côté iCalendar) ; l'événement disparu du calendrier adopte
+   * l'item comme terminé. Écrit uniquement par `src/lib/caldav.ts`.
+   */
+  externalUid?: string | null;
+  /** Le calendrier iCloud où vit l'événement de `externalUid`. */
+  externalCalendar?: string | null;
 };
 
 /** Résultat d'enregistrement, item par item. */

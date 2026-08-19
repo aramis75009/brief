@@ -32,6 +32,8 @@ async function handle(req: Request): Promise<Response> {
         `[caldav] calendar=${run.discoveredCalendar} desired=${run.desired} ` +
           `existing=${run.existing} put=${run.put} adopted=${run.adopted} ` +
           `deleted=${run.deleted} completedFromCalendar=${run.completedFromCalendar} ` +
+          `externalAdopted=${run.externalAdopted} externalUpdated=${run.externalUpdated} ` +
+          `externalCompleted=${run.externalCompleted} externalDeleted=${run.externalDeleted} ` +
           `failures=${run.failures.length} ms=${durationMs}`,
       );
     }
