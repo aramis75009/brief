@@ -157,6 +157,38 @@ raison nouvelle.
 
 ## P2 — Prévu, à faire plus tard
 
+### Stocker les enregistrements vocaux — annoncé par Aramis comme le prochain chantier (2026-08-19 soir)
+- **Quoi :** garder l'audio brut de chaque dictée, pas seulement le texte
+  transcrit, pour pouvoir ré-écouter l'original derrière un item. Le bouton
+  « Écouter l'extrait » existe déjà dans `TaskDetailScreen.tsx` (à côté du
+  fil d'origine) mais n'a **aucun handler** — conçu pour ça dès le départ,
+  jamais branché faute de quoi que ce soit à lire.
+- **État actuel, vérifié dans le code :** `src/app/api/transcribe/route.ts`
+  reçoit le fichier audio en multipart et le transmet tel quel à Groq
+  Whisper — **il n'est enregistré nulle part**, perdu dès que la réponse
+  HTTP part. `Item.audioOrigin` (`src/lib/types.ts`) ne garde que des
+  métadonnées texte (transcription complète, extrait surligné, `startSec`/
+  `endSec`/`durationSec`) — jamais le blob audio lui-même.
+- **Prérequis explicites d'Aramis avant de s'y attaquer**, dans ses mots :
+  « il va falloir bien vérifier que l'IA qui s'occupe de transcrire le vocal
+  à l'écrit fonctionne bien, que l'enregistrement fonctionne bien, etc. » —
+  fiabiliser l'existant (`useRecorder.ts` côté client, `/api/transcribe`
+  côté serveur) avant d'ajouter le stockage par-dessus, pas en même temps.
+- **Questions à trancher avant de coder** (brainstorming architectural,
+  pas un fix ponctuel — voir `superpowers:brainstorming`) : où stocker
+  (volume `brief-data` existant vs stockage objet dédié — les fichiers
+  audio pèsent nettement plus que le JSON actuel, qui reste minuscule) ;
+  taille/rétention (garder indéfiniment ou purger après N jours ?) ; format
+  exact du lien `AudioOrigin` → fichier stocké ; câblage réel du bouton Play
+  déjà présent dans l'UI ; confidentialité (ce sont des enregistrements
+  vocaux personnels, sur un VPS auto-hébergé — pas de tiers, mais un vrai
+  volume de données sensibles qui grossit).
+- **Effort :** M-L, nécessite un vrai brainstorming architectural avant
+  d'écrire du code · **Priorité :** annoncée par Aramis comme le prochain
+  chantier — à traiter avant les autres entrées P2 ci-dessous.
+- **Dépend de :** fiabilité vérifiée de l'enregistrement et de la
+  transcription en premier (prérequis explicite d'Aramis, voir ci-dessus).
+
 ### Bug préexistant : `<button>` imbriqué dans `TodayRow`/`RowCheckbox`
 - **Quoi :** `HomeScreen.tsx`, la ligne « Aujourd'hui » est un `<button>` qui
   contient `RowCheckbox`, un second `<button>` — HTML invalide, erreur
