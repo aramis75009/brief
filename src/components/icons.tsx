@@ -212,8 +212,6 @@ export function TaskCheckIcon({ size = 20, className }: IconProps) {
     </svg>
   );
 }
-
-/* --- Legacy icons (temporaire — supprimés avec les anciens composants) --- */
 import type { Shape } from "@/lib/types";
 
 export function ProjectDot({ size = 10, className, shape }: IconProps & { shape?: Shape }) {

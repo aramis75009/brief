@@ -3,9 +3,7 @@
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { VoiceBadge } from "./VoiceBadge";
-import { CheckIcon, ChevronLeftIcon, CloseIcon } from "./icons";
-import type { IdeaIcon as IdeaIconType } from "./icons";
-import { IdeaIcon } from "./icons";
+import { CheckIcon, ChevronLeftIcon, CloseIcon, IdeaIcon } from "./icons";
 import type { Item, Project } from "@/lib/types";
 
 /**
@@ -53,7 +51,7 @@ export function IdeasScreen({
       {/* Title */}
       <h2 className="mb-1 text-[30px] font-extrabold tracking-[-0.035em]">Idées</h2>
       <p className="mb-5 text-[13.5px] font-medium leading-[1.45] text-ink-muted">
-        Tout ce que tu as capturé sans le ranger. Convertis en tâche d'un geste.
+        Tout ce que tu as capturé sans le ranger. Convertis en tâche d&apos;un geste.
       </p>
 
       {/* States */}

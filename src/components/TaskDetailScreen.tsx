@@ -109,7 +109,7 @@ export function TaskDetailScreen({
           {/* Header */}
           <div className="mb-3 flex items-center justify-between gap-2.5">
             <span className="font-mono text-[10px] tracking-[0.09em] text-ink-faint">
-              FIL D'ORIGINE · {new Date(audio.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }).toUpperCase()} · {audio.durationSec} S
+              FIL D&apos;ORIGINE · {new Date(audio.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }).toUpperCase()} · {audio.durationSec} S
             </span>
             <button
               aria-label="Écouter l'extrait"

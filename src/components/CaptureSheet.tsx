@@ -188,7 +188,7 @@ function ListeningStage({ seconds, onStop }: { seconds: number; onStop: () => vo
           <span className="absolute inset-0 rounded-full bg-danger" style={{ animation: "ping 1.4s ease-out infinite" }} />
           <span className="absolute inset-0 rounded-full bg-danger" />
         </span>
-        <span className="text-[14px] font-bold">J'écoute…</span>
+        <span className="text-[14px] font-bold">J&apos;écoute…</span>
         <span className="font-mono text-[13px] font-medium text-ink-faint">{fmtClock(seconds)}</span>
       </div>
 
