@@ -117,12 +117,37 @@ BottomNav flottante, widgets iOS (section 05 — retirée du périmètre, PWA on
 
 ## Ce qui n'est PAS fait (prochain agent)
 
-### Bugs restants signalés par Aramis
-1. **Tuile "Tâches"** : `onScrollToTasks` est un no-op (`() => {/* scroll to list section */}`). Il faut implémenter le scroll vers la section "Aujourd'hui" ou naviguer vers la recherche filtrée "Tâches".
-2. **Tâches déjà faites** : des anciennes tâches (ex. "relancer analyse de la mission locale") apparaissent toujours car elles n'ont jamais été marquées `doneAt` dans le JSON. Ce n'est pas un bug UI — c'est un problème de données. L'utilisateur peut les cocher dans l'app.
-3. **Heures CalDAV** : le sync CalDAV tourne (cron 60s) mais les heures affichées peuvent encore être incorrectes pour certains items si les dates stockées sont en UTC sans offset. Vérifier le format des `due` dans `data/items.json` sur le VPS.
-4. **"Demander à l'IA"** : ouvre le CaptureSheet au lieu d'un assistant dédié. Pour l'instant c volontaire (pas d'assistant IA implémenté).
-5. **Voice search** : `onVoiceSearch` est un TODO dans SearchScreen.
+### Priorité 1 — Synchronisation CalDAV (bloquant)
+Le problème central : les tâches/RDV synchronisés avec Apple Calendar ne remontent pas correctement dans Brief. Aramis a reporté une tâche "Rush CSS Codecademy — finir la leçon" pour le 19 août 07:00-10:00 (9h-12h en Paris), mais rien n'apparaît dans l'app. Le cron CalDAV tourne (toutes les 60s) mais les events ne sont pas visibles.
+
+**Investigations à mener :**
+1. Vérifier le contenu de `data/items.json` sur le VPS — est-ce que les events CalDAV sont bien écrits par le sync ?
+2. Vérifier les logs du cron : `docker exec brief-cron-1` et les logs de l'app pour les erreurs caldav-sync
+3. Vérifier que `src/lib/caldav.ts` lit bien les events (VEVENT) et pas juste les VTODO
+4. Vérifier le format des dates : les events CalDAV reviennent en UTC, il faut s'assurer qu'ils sont stockés avec l'offset et affichés en Europe/Paris
+5. Vérifier que les events Apple Calendar (qui viennent de Google Calendar sync vers Apple) apparaissent dans le calendrier iCloud CalDAV
+6. L'agenda affiche des tâches mais elles sont "mauvaises" (anciennes, mauvaises heures) — c'est lié au fait que le sync ne fonctionne pas correctement
+
+**Commandes utiles :**
+```bash
+# Voir les données sur le VPS
+HOME=/opt/data/home ssh -i /opt/data/home/.ssh/id_ed25519 root@186.241.16.37 \
+  "docker exec brief-app-1 cat /app/data/items.json | head -200"
+
+# Voir les logs caldav
+HOME=/opt/data/home ssh -i /opt/data/home/.ssh/id_ed25519 root@186.241.16.37 \
+  "docker logs brief-app-1 2>&1 | grep -i caldav | tail -20"
+
+# Lancer le sync manuellement
+HOME=/opt/data/home ssh -i /opt/data/home/.ssh/id_ed25519 root@186.241.16.37 \
+  "curl -fsS -m 30 -H 'Authorization: Bearer \$BRIEF_MACHINE_TOKEN' http://127.0.0.1:3000/api/cron/caldav-sync"
+```
+
+### Priorité 2 — Bugs UI mineurs
+1. **Avatar Recherche débordement** : l'AccountAvatar (46px + anneau -3px) dans le header de SearchScreen déborde sur le haut de l'écran. Réduire la taille ou ajouter du padding-top.
+2. **Agenda : cliquer sur les jours** : la grille de la semaine affiche les jours mais on ne peut pas cliquer dessus pour voir les events d'un jour spécifique. Ajouter un onClick qui filtre les events par jour sélectionné.
+3. **Tuile "Demander à l'IA"** : ouvre le CaptureSheet au lieu d'un assistant dédié (volontaire pour l'instant).
+4. **Voice search** : `onVoiceSearch` est un TODO dans SearchScreen.
 
 ### Manquants vs le brief v4 (reportés volontairement)
 - Hiérarchie temporelle NOW/Ensuite/RDV/En retard/Plus tard (le design a une liste plate "Aujourd'hui")
