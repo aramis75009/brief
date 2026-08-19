@@ -13,6 +13,8 @@
  * est visible.
  */
 
+import { type CalendarDate, shiftDays, shiftMonths, weekdayOf, zonedParts, zonedTime } from "./zoned";
+
 const DAY_CODES: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
 
 export type ParsedRrule = {
@@ -78,9 +80,20 @@ export function nextOccurrence(start: Date, rrule: string, from: Date = start): 
   const rule = parseRrule(rrule);
   if (!rule) return null;
 
-  const candidate = new Date(start);
+  // ⚠️ Toute l'avance se fait sur le CALENDRIER d'Europe/Paris, pas avec les
+  // méthodes locales de `Date` : voir l'avertissement en tête de `zoned.ts`.
+  // Une récurrence hebdomadaire dont l'heure tombe entre minuit et 2 h à Paris
+  // change de jour de la semaine en UTC — le rappel partait alors le mauvais
+  // jour, chaque semaine, en production seulement.
+  const origin = zonedParts(start);
+  const { hour, minute } = origin;
+  let cal: CalendarDate = { y: origin.y, m: origin.m, d: origin.d };
+
   // On avance depuis `start` pour rester aligné sur l'heure d'origine, jamais
   // depuis `from` : sinon un rappel envoyé en retard décalerait toute la série.
+  // Conserver l'heure LOCALE de Paris fait aussi qu'une série de 9 h reste à
+  // 9 h en traversant le changement d'heure, au lieu de glisser à 8 h ou 10 h.
+  let candidate = zonedTime(cal.y, cal.m, cal.d, hour, minute);
   let guard = 0;
   const LIMIT = 1000;
 
@@ -91,23 +104,23 @@ export function nextOccurrence(start: Date, rrule: string, from: Date = start): 
     if (rule.freq === "WEEKLY" && rule.byDay.length) {
       // Jour suivant de la liste, en respectant l'intervalle de semaines.
       const sorted = [...rule.byDay].sort((a, b) => a - b);
-      const currentDay = candidate.getDay();
+      const currentDay = weekdayOf(cal);
       const nextDay = sorted.find((d) => d > currentDay);
-      if (nextDay !== undefined) {
-        candidate.setDate(candidate.getDate() + (nextDay - currentDay));
-      } else {
-        const jumpToFirst = 7 * rule.interval - (currentDay - sorted[0]);
-        candidate.setDate(candidate.getDate() + jumpToFirst);
-      }
+      cal =
+        nextDay !== undefined
+          ? shiftDays(cal, nextDay - currentDay)
+          : shiftDays(cal, 7 * rule.interval - (currentDay - sorted[0]));
     } else if (rule.freq === "DAILY") {
-      candidate.setDate(candidate.getDate() + rule.interval);
+      cal = shiftDays(cal, rule.interval);
     } else if (rule.freq === "WEEKLY") {
-      candidate.setDate(candidate.getDate() + 7 * rule.interval);
+      cal = shiftDays(cal, 7 * rule.interval);
     } else if (rule.freq === "MONTHLY") {
-      candidate.setMonth(candidate.getMonth() + rule.interval);
+      cal = shiftMonths(cal, rule.interval);
     } else {
-      candidate.setFullYear(candidate.getFullYear() + rule.interval);
+      cal = shiftMonths(cal, 12 * rule.interval);
     }
+
+    candidate = zonedTime(cal.y, cal.m, cal.d, hour, minute);
   }
 
   if (rule.until && candidate > rule.until) return null;

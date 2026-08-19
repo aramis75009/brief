@@ -1,5 +1,8 @@
+import { makeBucketOf, midnightAt } from "@/lib/buckets";
+import { TIMEZONE } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
 import { readItems, readProjects } from "@/lib/store";
+import { zonedParts } from "@/lib/zoned";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,16 +20,31 @@ export const dynamic = "force-dynamic";
  * le dire, ce qui est exactement la défaillance qu'on cherche à éviter ici.
  */
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d);
-  out.setHours(0, 0, 0, 0);
-  return out;
+/**
+ * `midnightAt` et `makeBucketOf` vivent dans `src/lib/buckets.ts`.
+ *
+ * ⚠️ Surtout pas `setHours(0,0,0,0)` : ça donne minuit dans le fuseau de la
+ * MACHINE. Les conteneurs tournent en UTC, donc les journées de la Vision
+ * commençaient à 2 h du matin heure de Paris — une tâche due à 1 h passait pour
+ * en retard, et l'horizon 7 jours était décalé d'un cran pour tout ce qui tombe
+ * entre minuit et 2 h. Voir `src/lib/zoned.ts`.
+ *
+ * Ces deux fonctions étaient définies ici. `/api/digest` a eu besoin du même
+ * découpage : les partager évite deux définitions d'« aujourd'hui » capables de
+ * diverger en silence, la Vision et le récap du matin ne comptant alors pas
+ * pareil.
+ */
+
+/** Clé du jour calendaire dans `TIMEZONE`, pour dire si deux instants tombent le même jour. */
+function dayKey(date: Date): string {
+  const { y, m, d } = zonedParts(date);
+  return `${y}-${m}-${d}`;
 }
 
 /** « auj. » pour aujourd'hui, sinon « jeu », « ven »… — sans le point d'abréviation. */
 function weekdayLabel(d: Date, isToday: boolean): string {
   if (isToday) return "auj.";
-  return new Intl.DateTimeFormat("fr-FR", { weekday: "short" })
+  return new Intl.DateTimeFormat("fr-FR", { weekday: "short", timeZone: TIMEZONE })
     .format(d)
     .replace(/\.$/, "");
 }
@@ -37,23 +55,10 @@ export async function GET(req: Request): Promise<Response> {
 
   const [items, projects] = await Promise.all([readItems(), readProjects()]);
   const now = new Date();
-  const today = startOfDay(now);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const inSevenDays = new Date(today);
-  inSevenDays.setDate(inSevenDays.getDate() + 7);
+  const today = midnightAt(now, 0);
 
   const open = items.filter((i) => !i.doneAt);
-
-  const bucketOf = (due: string | null): "overdue" | "today" | "week" | "later" | "none" => {
-    if (!due) return "none";
-    const d = new Date(due);
-    if (Number.isNaN(d.getTime())) return "none";
-    if (d < today) return "overdue";
-    if (d < tomorrow) return "today";
-    if (d < inSevenDays) return "week";
-    return "later";
-  };
+  const bucketOf = makeBucketOf(now);
 
   const byProject = projects.map((p) => {
     const mine = open.filter((i) => i.projectId === p.id);
@@ -74,10 +79,8 @@ export async function GET(req: Request): Promise<Response> {
   // aujourd'hui : c'est la barre mise en avant.
   const activity: number[] = [];
   for (let offset = 6; offset >= 0; offset--) {
-    const from = new Date(today);
-    from.setDate(from.getDate() - offset);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 1);
+    const from = midnightAt(now, -offset);
+    const to = midnightAt(now, -offset + 1);
     activity.push(
       items.filter((i) => {
         const created = new Date(i.createdAt);
@@ -108,10 +111,8 @@ export async function GET(req: Request): Promise<Response> {
 
   const horizon = [];
   for (let offset = 0; offset < 7; offset++) {
-    const from = new Date(today);
-    from.setDate(from.getDate() + offset);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 1);
+    const from = midnightAt(now, offset);
+    const to = midnightAt(now, offset + 1);
 
     const dayItems = open.filter((i) => {
       if (!i.due) return false;
@@ -126,6 +127,15 @@ export async function GET(req: Request): Promise<Response> {
       total: dayItems.length,
       events: dayItems.filter((i) => i.kind === "event").length,
       stacks: stacksOf(dayItems),
+      items: dayItems.map((i) => ({
+        id: i.id,
+        title: i.title,
+        projectId: i.projectId,
+        kind: i.kind,
+        due: i.due,
+        allDay: i.allDay,
+        priority: i.priority,
+      })),
     });
   }
 
@@ -146,7 +156,7 @@ export async function GET(req: Request): Promise<Response> {
             .filter((i) => {
               if (!i.due) return false;
               const d = new Date(i.due);
-              return !Number.isNaN(d.getTime()) && startOfDay(d).getTime() === startOfDay(new Date(peakDay.date)).getTime();
+              return !Number.isNaN(d.getTime()) && dayKey(d) === dayKey(new Date(peakDay.date));
             })
             .map((i) => ({
               id: i.id,

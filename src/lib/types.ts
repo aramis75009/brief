@@ -82,7 +82,27 @@ export type DraftItem = {
   priority: Priority;
   /** Règle de récurrence RFC 5545, ex. `FREQ=WEEKLY;BYDAY=TU`. */
   rrule: string | null;
+  /**
+   * Durée du créneau en minutes (événements horaires uniquement).
+   * Absent = 60 min par défaut à l'écriture CalDAV. Décision 18/08 :
+   * « toutes les tâches doivent avoir un temps » — les créneaux de
+   * publication Frip & Trend font 30 min (17:30→18:00, 18:00→18:30).
+   */
+  durationMinutes?: number;
+  /**
+   * Occurrences supprimées d'une série récurrente, en UTC RFC 5545
+   * (`YYYYMMDDTHHMMSSZ`). Adoptées depuis le calendrier quand Aramis
+   * supprime une occurrence dans l'app Calendrier (EXDATE du master) —
+   * sinon le PUT suivant du sync les réécrit et l'occurrence réapparaît.
+   */
+  exdates?: string[];
   notes?: string;
+  /** Sous-tâches d'un item. */
+  subtasks?: SubTask[];
+  /** Fil d'origine vocal — la dictée d'où provient cet item. */
+  audioOrigin?: AudioOrigin;
+  /** Statut : "active" par défaut. "idea" pour la boîte à idées. */
+  status?: ItemStatus;
 };
 
 /** Un item enregistré. */
@@ -112,6 +132,47 @@ export type SaveResult = { ok: true; id: string } | { ok: false; id: string; err
 
 export type View = "capture" | "review" | "tasks" | "overview" | "settings";
 
+/**
+ * Une sous-tâche d'un item.
+ */
+export type SubTask = {
+  id: string;
+  title: string;
+  done: boolean;
+};
+
+/**
+ * Fil d'origine vocal d'un item — la note dictée d'où il provient.
+ */
+export type AudioOrigin = {
+  /** Texte complet de la transcription. */
+  text: string;
+  /** Extrait surligné dans la transcription (la partie qui a donné cet item). */
+  highlight: string;
+  /** Segment temporel dans l'enregistrement (secondes). */
+  startSec: number;
+  endSec: number;
+  /** Durée totale de l'enregistrement en secondes. */
+  durationSec: number;
+  /** Date de la dictée (ISO). */
+  date: string;
+  /** IDs des autres items issus de la même dictée. */
+  siblingIds: string[];
+};
+
+/**
+ * Statut d'un item.
+ * - "active" : tâche/RDV normal
+ * - "idea" : idée non rangée (boîte à idées)
+ * - "archived" : archivée
+ */
+export type ItemStatus = "active" | "idea" | "archived";
+
+/**
+ * Écran de l'app (design system Claude Design v1).
+ */
+export type Screen = "home" | "task" | "agenda" | "ideas" | "search";
+
 /* ---------------------------------------------------------------------------
  * Vision globale — la forme de `GET /api/overview`.
  *
@@ -138,6 +199,15 @@ export type OverviewDay = {
   total: number;
   events: number;
   stacks: OverviewStack[];
+  items: {
+    id: string;
+    title: string;
+    projectId: string;
+    kind: ItemKind;
+    due: string | null;
+    allDay: boolean;
+    priority: Priority;
+  }[];
 };
 
 export type OverviewProject = {

@@ -115,6 +115,50 @@ export async function saveItems(
 }
 
 /**
+ * Coche ou décoche un item.
+ *
+ * Renvoie l'item tel que le serveur l'a écrit, jamais une reconstruction
+ * locale : sur une tâche récurrente c'est le serveur qui calcule la nouvelle
+ * échéance, et `outcome` dit laquelle des deux choses vient de se produire.
+ */
+export async function setItemDone(
+  id: string,
+  done: boolean,
+): Promise<{ item: Item; outcome: "advanced" | "done" | "reopened" }> {
+  return jsonFetch(
+    "/api/items",
+    { method: "PATCH", body: JSON.stringify({ id, done }) },
+    TIMEOUTS.save,
+  );
+}
+
+/** Suppression définitive. Rien n'en garde de trace — contrairement à la coche. */
+export async function deleteItem(id: string): Promise<{ ok: boolean; id: string }> {
+  return jsonFetch(
+    `/api/items/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    TIMEOUTS.save,
+  );
+}
+
+/**
+ * Modifie un item déjà enregistré. Renvoie l'item mis à jour tel que le serveur
+ * l'a persisté. Une échéance/titre vide côté client aboutit ici soit à un
+ * 400 (titre), soit à « pas d'échéance » (résolu par le serveur).
+ */
+export async function updateItem(
+  id: string,
+  patch: Partial<DraftItem>,
+): Promise<Item> {
+  const data = await jsonFetch<{ item: Item }>(
+    `/api/items/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+    TIMEOUTS.save,
+  );
+  return data.item;
+}
+
+/**
  * Envoi de l'audio en XHR — et non en fetch — pour distinguer réellement deux
  * phases : `uploading` tant que le corps monte, `transcribing` une fois qu'il
  * est parti. Avec fetch, cette bascule ne serait qu'une temporisation inventée.

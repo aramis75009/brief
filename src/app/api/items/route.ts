@@ -1,7 +1,8 @@
+import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
-import { readItems, readProjects, saveItems } from "@/lib/store";
+import { patchItem, readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
 
 /**
@@ -43,14 +44,46 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     allDay: v.allDay === true,
     priority: isPriority(v.priority) ? v.priority : 4,
     rrule: typeof v.rrule === "string" && /^FREQ=/i.test(v.rrule) ? v.rrule : null,
+    durationMinutes:
+      typeof v.durationMinutes === "number" && Number.isFinite(v.durationMinutes) && v.durationMinutes > 0
+        ? Math.round(v.durationMinutes)
+        : undefined,
     notes: typeof v.notes === "string" ? v.notes : undefined,
+    subtasks: Array.isArray(v.subtasks) ? v.subtasks.filter(isSubTask) : undefined,
+    audioOrigin: isAudioOrigin(v.audioOrigin) ? v.audioOrigin : undefined,
+    status: v.status === "idea" || v.status === "archived" ? v.status : undefined,
   };
+}
+
+function isSubTask(s: unknown): s is { id: string; title: string; done: boolean } {
+  if (typeof s !== "object" || s === null) return false;
+  const o = s as Record<string, unknown>;
+  return typeof o.id === "string" && typeof o.title === "string" && typeof o.done === "boolean";
+}
+
+function isAudioOrigin(v: unknown): v is import("@/lib/types").AudioOrigin {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.text === "string" && typeof o.highlight === "string"
+    && typeof o.startSec === "number" && typeof o.endSec === "number"
+    && typeof o.durationSec === "number" && typeof o.date === "string"
+    && Array.isArray(o.siblingIds);
 }
 
 export async function GET(req: Request): Promise<Response> {
   const denied = requirePin(req);
   if (denied) return denied;
-  return Response.json({ items: await readItems() });
+
+  const url = new URL(req.url);
+  const statusFilter = url.searchParams.get("status");
+  let items = await readItems();
+  if (statusFilter === "idea" || statusFilter === "active" || statusFilter === "archived") {
+    items = items.filter((i) => (i.status || "active") === statusFilter);
+  } else if (statusFilter === "not-idea") {
+    items = items.filter((i) => i.status !== "idea" && i.status !== "archived");
+  }
+
+  return Response.json({ items });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -110,3 +143,65 @@ export async function POST(req: Request): Promise<Response> {
   const status = saved === 0 ? 400 : saved === rows.length ? 200 : 207;
   return Response.json({ results, saved, total: rows.length }, { status });
 }
+
+/**
+ * Coche « fait » d'un item — `{ id, done }`.
+ *
+ * Route séparée de POST à dessein : POST remplace un item entier et remet
+ * `doneAt` à `null` par construction, ce qui rend impossible d'enregistrer une
+ * complétion par ce chemin. Deux intentions différentes, deux verbes.
+ *
+ * L'écriture passe par `patchItem`, qui sérialise et renomme atomiquement : le
+ * cron des rappels écrit le même fichier toutes les 60 secondes, et une
+ * lecture-modification-écriture concurrente perdrait l'une des deux.
+ */
+export async function PATCH(req: Request): Promise<Response> {
+  const denied = requirePin(req);
+  if (denied) return denied;
+
+  let body: { id?: unknown; done?: unknown };
+  try {
+    body = (await req.json()) as { id?: unknown; done?: unknown };
+  } catch {
+    return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
+  }
+
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
+  if (typeof body.done !== "boolean") {
+    return Response.json({ error: "`done` doit être un booléen." }, { status: 400 });
+  }
+
+  const item = (await readItems()).find((i) => i.id === id);
+  if (!item) return Response.json({ error: "Item introuvable." }, { status: 404 });
+
+  const { kind, patch } = completionPatch(item, body.done, new Date());
+
+  try {
+    const updated = await patchItem(id, patch);
+    if (!updated) return Response.json({ error: "Item introuvable." }, { status: 404 });
+    // `kind` permet au client de dire « repoussé à mardi » plutôt que « fait »
+    // sur une récurrence — sans ça, cocher paraîtrait ne rien faire.
+    return Response.json({ item: updated, outcome: kind });
+  } catch (e) {
+    return Response.json(
+      {
+        error: "Modification non enregistrée côté serveur.",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 503 },
+    );
+  }
+}
+
+/*
+ * La suppression vit dans `/api/items/[id]`, pas ici.
+ *
+ * Un `DELETE` de collection portant l'id dans le corps a existé à cet endroit.
+ * Quand `DELETE /api/items/[id]` est arrivé, les deux ont coexisté sans que
+ * rien ne les départage — et c'est le nouveau que personne n'appelait. Un
+ * chemin d'écriture jamais exercé finit par diverger de celui qui sert.
+ *
+ * `PATCH` reste ici parce qu'il fait autre chose : il coche et décoche, et
+ * c'est le serveur qui décide si une tâche récurrente avance ou se termine.
+ */

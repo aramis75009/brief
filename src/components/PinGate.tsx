@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BrandMark } from "./icons";
 import { setPin, verifyPin } from "@/lib/pin";
 
 const LENGTH = 6;
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"] as const;
 
-/** Retour haptique quand la plateforme le propose. iOS Safari ne l'expose pas. */
 function buzz(pattern: number | number[]) {
   if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
     try {
@@ -22,11 +20,11 @@ function BackspaceIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width={26}
-      height={26}
+      width={24}
+      height={24}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.7}
+      strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -36,16 +34,6 @@ function BackspaceIcon() {
   );
 }
 
-/**
- * Écran de saisie du PIN — pavé numérique dessiné, à la manière du
- * déverrouillage iOS.
- *
- * ⚠️ Aucun élément de saisie natif (`<input>`) : le clavier système ne doit
- * jamais s'ouvrir. Ne pas « simplifier » en réintroduisant un champ masqué.
- *
- * L'écran ne déverrouille rien localement : il valide le code auprès de
- * /api/session puis le range en sessionStorage pour les appels suivants.
- */
 export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
   const [value, setValue] = useState("");
   const [checking, setChecking] = useState(false);
@@ -100,7 +88,6 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
     [submit],
   );
 
-  // Confort clavier physique (bureau). N'ouvre aucun clavier logiciel sur iOS.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (/^[0-9]$/.test(e.key)) press(e.key);
@@ -111,20 +98,24 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
   }, [press]);
 
   return (
-    // Centré verticalement, et non collé en haut et en bas : l'espace restant
-    // sous la barre d'état varie beaucoup entre un iPhone à encoche et un écran
-    // sans. Centrer est la seule disposition où rien ne passe sous l'encoche.
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[52px] px-[30px] pb-6">
-      <div className="flex flex-col items-center">
-        <BrandMark size={72} />
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-between px-6 py-10 safe-top safe-bottom">
+      {/* Header Bento & Pastilles de sécurité */}
+      <div className="flex flex-col items-center mt-4">
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-2xl shadow-[var(--e2)]"
+          style={{ background: "var(--color-ink)", color: "var(--color-page)" }}
+        >
+          <span className="text-24 font-bold tracking-tight text-white">B</span>
+        </div>
 
-        <h1 className="mt-5 mb-0 text-27 font-semibold tracking-[-0.5px] text-ink">Brief</h1>
-        <p className="mt-1.5 mb-0 text-center text-13 leading-[1.45] font-normal text-ink-2">
-          Saisis ton code pour ouvrir l&apos;app.
+        <h1 className="mt-4 mb-0 text-27 font-bold tracking-tight text-ink">Brief</h1>
+        <p className="mt-1 mb-0 text-center text-13 font-normal text-ink-2">
+          Une seule fois sur cet appareil — ensuite Brief s&apos;ouvre direct
         </p>
 
+        {/* Indicateurs de saisie PIN */}
         <div
-          className="mt-7 flex gap-3.5"
+          className="mt-6 flex gap-3.5"
           role="status"
           aria-label={`${value.length} chiffre(s) sur ${LENGTH}`}
         >
@@ -133,13 +124,11 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
             return (
               <span
                 key={i}
-                className="h-[15px] w-[15px] rounded-full transition-all duration-150"
+                className="h-3.5 w-3.5 rounded-full transition-all duration-150"
                 style={{
                   background: filled ? "var(--color-action)" : "transparent",
-                  // `--line-2` est défini dans les DEUX thèmes. L'ancien
-                  // `#D8CFC9` en dur disparaissait sur la page sombre.
                   border: filled ? "none" : "1.5px solid var(--line-2)",
-                  transform: shake ? `translateX(${i % 2 ? 5 : -5}px)` : "none",
+                  transform: shake ? `translateX(${i % 2 ? 6 : -6}px)` : "none",
                   transitionDuration: shake ? "60ms" : "150ms",
                 }}
               />
@@ -147,20 +136,22 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
           })}
         </div>
 
-        <div className="mt-4 flex h-5 items-center">
+        {/* Zone de feedback */}
+        <div className="mt-3.5 flex h-5 items-center">
           {checking && (
-            <span className="animate-br-spin block h-[17px] w-[17px] rounded-full border-2 border-[var(--line-2)] border-t-action" />
+            <span className="animate-br-spin block h-4 w-4 rounded-full border-2 border-[var(--line-2)] border-t-action" />
           )}
           {!checking && error && (
-            <span className="animate-br-in text-13 font-semibold text-error">
+            <span className="animate-br-in text-12 font-semibold text-error">
               {error}
             </span>
           )}
         </div>
       </div>
 
+      {/* Pavé numérique tactile Bento */}
       <div
-        className="grid w-full max-w-[280px] grid-cols-3 gap-x-5 gap-y-4 transition-opacity duration-200"
+        className="grid w-full max-w-[280px] grid-cols-3 gap-x-4 gap-y-3.5 mb-2 transition-opacity duration-200"
         style={{ opacity: checking ? 0.4 : 1 }}
       >
         {KEYS.map((key, i) => {
@@ -173,18 +164,12 @@ export function PinGate({ onUnlocked }: { onUnlocked: () => void }) {
               onClick={() => press(key)}
               disabled={checking}
               aria-label={isDel ? "Effacer le dernier chiffre" : key}
-              // Contour, pas surface. Une tuile `--tile` (#1C1A19) sur une page
-              // `--page` (#0F0E0D) donne 1,1:1 de contraste : les touches
-              // étaient littéralement invisibles en mode sombre. Le cercle vide
-              // se lit dans les deux thèmes, et le remplissage à l'appui rend le
-              // retour visuel que la tuile assurait.
-              // 72px : très au-dessus des 44px minimum d'iOS.
               className={
-                "flex h-[72px] w-full cursor-pointer items-center justify-center rounded-full " +
+                "flex h-[66px] w-full cursor-pointer items-center justify-center rounded-2xl " +
                 "transition-all duration-150 select-none disabled:cursor-default " +
                 (isDel
-                  ? "border-none bg-transparent text-ink-2"
-                  : "border-[1.5px] border-[var(--line-2)] bg-transparent text-27 font-medium text-ink active:scale-95 active:bg-tile")
+                  ? "border-none bg-transparent text-ink-2 active:scale-90"
+                  : "border border-[var(--line)] bg-tile text-24 font-bold text-ink shadow-[var(--e1)] active:scale-95 active:bg-page")
               }
             >
               {isDel ? <BackspaceIcon /> : key}

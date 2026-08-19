@@ -44,9 +44,17 @@ USER brief
 EXPOSE 3000
 VOLUME ["/app/data"]
 
-# Sonde de vie : /api/session sans PIN doit répondre 401. Un 401 prouve que le
-# serveur ET le garde fonctionnent ; un 200 signalerait une porte ouverte.
+# Sonde de vie : /api/session sans PIN doit répondre 401. Un 401 prouve d'un
+# coup que le serveur répond, que le garde fonctionne, et que BRIEF_PIN est bien
+# chargé — sans PIN, `requirePin` renvoie 503 et la sonde échoue à raison.
+# Un 200 signalerait une porte ouverte.
+#
+# ⚠️ Deux pièges déjà payés ici :
+#   - la route n'expose que POST ; un GET renvoie 405, jamais 401 ;
+#   - le wget d'Alpine est celui de busybox, qui ignore les options GNU comme
+#     `--server-response`. On passe donc par `node`, déjà présent dans l'image,
+#     qui donne le code de statut exact sans dépendance ni ambiguïté.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -q -O /dev/null --server-response http://127.0.0.1:3000/api/session 2>&1 | grep -q "401" || exit 1
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/session',{method:'POST'}).then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]

@@ -1,27 +1,61 @@
 # ---------------------------------------------------------------------------
 # Brief sur VPS.
 #
-#   docker compose up -d --build
+#   docker compose --env-file .env.production up -d --build
+#
+# ⚠️ `--env-file .env.production` N'EST PAS FACULTATIF, et c'est le piège le
+# plus coûteux de ce fichier. `env_file:` ne fait qu'injecter des variables
+# DANS un conteneur au démarrage ; il n'alimente PAS l'interpolation `${...}`
+# ci-dessous, que Compose ne lit que depuis l'environnement du shell ou d'un
+# fichier nommé `.env`. Sans le drapeau, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` arrive
+# vide au build, se retrouve inlinée à `undefined` dans le bundle, et
+# l'abonnement aux notifications échoue côté navigateur sans que le serveur
+# n'en voie rien. Les `:?` plus bas font échouer Compose au lieu de laisser
+# passer ce silence.
 #
 # Le cron des rappels tourne dans un conteneur séparé plutôt que dans l'app :
 # un planificateur en mémoire disparaîtrait à chaque redémarrage du serveur, et
 # c'est exactement ce qu'il ne doit pas faire.
+#
+# Le TLS est délégué au Traefik déjà présent sur le VPS (voir les labels de
+# `app`). Sur une machine SANS reverse proxy, prendre `deploy/Caddyfile` à la
+# place — il est écrit pour ce cas.
 # ---------------------------------------------------------------------------
 services:
   app:
     build:
       context: .
       args:
-        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:?absente — lancer avec --env-file .env.production}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Brief}
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      # Ceinture ET bretelles. Depuis le 2026-08-14, `src/lib/due.ts` calcule
+      # les échéances dans Europe/Paris quel que soit le fuseau de la machine,
+      # donc cette ligne ne corrige plus rien — elle protège le code qui serait
+      # écrit demain sans cette précaution, et rend les journaux du conteneur
+      # lisibles à l'heure d'Aramis. Ne pas la retirer en croyant simplifier.
+      TZ: Europe/Paris
     volumes:
       - brief-data:/app/data
     ports:
       # Écoute en local seulement : c'est le reverse proxy qui expose en HTTPS.
       # Le micro exige un contexte sécurisé, donc pas d'accès en clair.
+      # Sert au diagnostic depuis le VPS ; Traefik, lui, joint le conteneur par
+      # son IP de bridge et n'a pas besoin de ce port publié.
       - "127.0.0.1:3000:3000"
+    # Publication par le Traefik déjà installé sur le VPS (/docker/traefik,
+    # réseau host, ports 80/443, résolveur Let's Encrypt `letsencrypt`). Il
+    # tourne en `exposedbydefault=false` : sans ces labels, rien n'est exposé.
+    # Monter un second proxy ici échouerait sur « port already allocated » et
+    # sortir Traefik casserait n8n, qui partage la même instance.
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.brief.rule: "Host(`${BRIEF_DOMAIN:?domaine manquant — lancer avec --env-file .env.production}`)"
+      traefik.http.routers.brief.entrypoints: "websecure"
+      traefik.http.routers.brief.tls.certresolver: "letsencrypt"
+      traefik.http.services.brief.loadbalancer.server.port: "3000"
 
   cron:
     image: alpine:3.20
@@ -30,13 +64,24 @@ services:
       app:
         condition: service_healthy
     env_file: .env.production
-    command: >
-      sh -c "apk add --no-cache curl >/dev/null &&
-             while true; do
-               curl -fsS -m 30 -H \"Authorization: Bearer $$BRIEF_CRON_TOKEN\" \
-                 http://app:3000/api/cron/reminders || echo '[cron] passage échoué';
-               sleep 60;
-             done"
+    # ⚠️ Forme LISTE + bloc littéral `|`, jamais `command: >` avec des `\`.
+    # En chaîne, Compose découpe lui-même en argv et consomme l'antislash de
+    # continuation ; il reste un saut de ligne nu, `sh` coupe la commande en
+    # deux, curl part sans URL et l'URL s'exécute comme une commande. Panne
+    # silencieuse : le conteneur reste « up » et aucun rappel n'est jamais
+    # envoyé. Constaté en production le 2026-08-13.
+    # Ici chaque élément est passé verbatim et le script garde ses vrais sauts
+    # de ligne — donc pas une seule continuation à écrire.
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache curl >/dev/null
+        while true; do
+          curl -fsS -m 30 -H "Authorization: Bearer $$BRIEF_CRON_TOKEN" http://app:3000/api/cron/reminders || echo '[cron] passage échoué'
+          curl -fsS -m 30 -H "Authorization: Bearer $$BRIEF_CALDAV_TOKEN" http://app:3000/api/cron/caldav-sync || echo '[cron] caldav échoué'
+          sleep 60
+        done
 
 volumes:
   brief-data:

@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# Reverse proxy TLS de Brief — POUR UNE MACHINE SANS PROXY EXISTANT.
+#
+# ⚠️ Ce n'est PAS ce qui tourne sur le VPS actuel. Celui-ci a déjà un Traefik
+# en réseau host qui occupe 80/443 et sert aussi n8n : Brief s'y branche par
+# des labels (voir docker-compose.yml), et démarrer Caddy à côté échouerait
+# sur « port already allocated ». Ce fichier sert le jour où Brief déménage
+# sur une machine nue.
+#
+# Pour l'utiliser : ajouter un service `caddy` (image caddy:2-alpine) montant
+# ce fichier sur /etc/caddy/Caddyfile, publiant 80 et 443, avec un volume
+# persistant sur /data — les certificats ET la clé de compte ACME y vivent.
+#
+# Caddy obtient et renouvelle seul le certificat Let's Encrypt. Il n'y a rien
+# à lancer à la main, aucun certbot, aucun cron de renouvellement.
+#
+# ⚠️ Deux conditions, sinon l'obtention échoue en boucle :
+#   1. BRIEF_DOMAIN doit déjà pointer (enregistrement A) vers l'IP du VPS —
+#      Let's Encrypt vérifie depuis l'extérieur, pas depuis la machine.
+#   2. Les ports 80 ET 443 doivent être ouverts. Le 80 sert au défi HTTP-01 :
+#      le fermer « parce qu'on est en HTTPS » casse le renouvellement.
+#
+# Le HTTPS n'est pas un confort ici : `getUserMedia` et les notifications
+# exigent un contexte sécurisé. En http:// sur une IP nue, l'API micro
+# n'existe même pas dans le navigateur.
+# ---------------------------------------------------------------------------
+{
+	# Adresse de contact Let's Encrypt (avis d'expiration).
+	email {$BRIEF_TLS_EMAIL}
+}
+
+{$BRIEF_DOMAIN} {
+	encode zstd gzip
+
+	# `app` est le nom du service dans docker-compose.yml, résolu par le DNS
+	# interne de Docker. Le conteneur n'est jamais exposé en clair.
+	reverse_proxy app:3000
+
+	# Pas de limite de taille de corps : /api/transcribe reçoit de l'audio.
+	# (nginx aurait coupé à 1 Mo par défaut ; Caddy, lui, ne limite pas.)
+
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -15,10 +15,11 @@ n'a donc aucun plafond de projets.
 | Hébergement | VPS Hostinger, `docker-compose.yml` (app + cron + volume `brief-data`), sauvegarde par `deploy/backup.sh`. |
 | Client | PWA installée sur iPhone. Dictée → Whisper → structuration LLM → revue → enregistrement. |
 
-**CalDAV a été écarté** et ne doit pas revenir sans nouvelle décision : un compte
-CalDAV tiers sur iOS n'a pas de push APNs, donc un plancher de synchronisation
-d'environ 15 minutes qui casse tout rappel à court terme. Un serveur qui tourne
-24 h/24 pousse à l'instant exact.
+**CalDAV Apple a été réactivé le 2026-08-17** (décision Aramis, `DECISIONS.md`) :
+la synchro Brief → calendrier Apple est **implémentée et déployée**
+(`src/lib/caldav.ts` + `/api/cron/caldav-sync`). La latence ~15 min d'un compte
+CalDAV tiers est acceptée car les rappels à court terme restent en Web Push
+dans Brief — le calendrier Apple sert les résumés matin/soir, pas les rappels.
 
 ⚠️ Le journal de décisions mentionne encore « Postgres » et un « flux
 `calendar.ics` en lecture seule ». **Ni l'un ni l'autre n'existe dans le code.**
@@ -26,48 +27,68 @@ Voir la section « Décisions à trancher » plus bas.
 
 ---
 
-## P0 — Bloquant : rien ne marche sans ça
+## P0 — ✅ Entièrement soldé le 2026-08-13
 
-### Prouver que le Web Push arrive sur un iPhone verrouillé
-- **Quoi :** un rappel programmé qui sonne réellement, téléphone verrouillé, app fermée.
-- **Pourquoi :** c'est **le risque numéro un du produit**. Toute la promesse des
-  rappels repose là-dessus, et seuls les chemins d'ÉCHEC ont été vérifiés en
-  conditions réelles. Le succès n'est couvert que par des tests unitaires.
-- **Contexte :** iOS ne donne aucune API de notification programmée à une PWA —
-  ni Notification Triggers, ni Background Sync, ni Periodic Background Sync, ni
-  Background Fetch. D'où le serveur qui possède l'horloge. Exige une PWA
-  installée depuis l'écran d'accueil (iOS 16.4+) et un abonnement push valide.
-- **Si ça échoue :** le produit n'a plus de raison d'être sous cette forme. À
-  faire AVANT toute autre fonctionnalité.
-- **Effort :** S (humain) → S (CC) · **Priorité :** P0
-- **Statut :** ✅ **VALIDÉ LE 2026-08-13** (Notification reçue avec succès sur écran verrouillé).
-- **Dépend de :** VPS en ligne, clés VAPID posées.
+**Les trois blocages sont levés le même jour** : l'app est en ligne en HTTPS, elle
+garde ses données, et un rappel sonne réellement sur un iPhone verrouillé. Brief
+est désormais un produit utilisable, pas une maquette.
 
-### Déployer sur le VPS avec un vrai domaine et TLS
-- **Quoi :** `docker compose up`, domaine, certificat, sauvegardes vérifiées.
-- **Pourquoi :** sur Vercel le disque est en lecture seule, donc `POST /api/items`
-  échoue : on peut dicter, structurer, relire, et rien ne se sauvegarde.
-- **Piège :** `getUserMedia` exige un **contexte sécurisé**. Servi en `http://`
-  sur une IP nue, le micro ne fonctionnera pas du tout, l'API n'existera même
-  pas. Il faut un domaine et un certificat réel (Caddy le fait seul).
-- **Contexte :** `BRIEF_DATA_DIR=/app/data`, qui est le point de montage du volume
-  `brief-data` — jamais `/tmp`, qui s'efface. Le conteneur `cron` appelle
-  `/api/cron/reminders` toutes les 60 s avec `BRIEF_CRON_TOKEN`. Vérifier que
-  `deploy/backup.sh` tourne ET qu'une restauration fonctionne : une sauvegarde
-  jamais restaurée n'est pas une sauvegarde.
-- **Effort :** M (humain) → S (CC) · **Priorité :** P0
-- **Dépend de :** VPS Hostinger actif.
+**Le sujet le plus urgent est donc le P1 ci-dessous** — l'autorisation micro que
+Safari redemande à chaque ouverture. C'est ce qui décide si Aramis continue à
+s'en servir.
 
-### Variables d'environnement absentes en production
-- **Quoi :** `BRIEF_DATA_DIR`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
-  `BRIEF_CRON_TOKEN`, `BRIEF_CAPTURE_TOKEN`.
-- **Pourquoi :** constaté le 2026-08-11 sur Vercel — `BRIEF_DATA_DIR` n'est posé
-  que sur Preview, les clés VAPID manquent en Production, `BRIEF_CAPTURE_TOKEN`
-  n'existe nulle part et `/api/capture` répond donc 503.
-- **Contexte :** `NEXT_PUBLIC_*` doit être **non-sensitive**, sinon Vercel ne
-  l'expose pas au build et la valeur est inlinée à `undefined`.
-- **Effort :** S (humain) → S (CC) · **Priorité :** P0
-- **Dépend de :** cible d'hébergement arrêtée.
+Conservé ici plutôt qu'effacé : ces entrées disent *comment* ça a été prouvé, et
+ce qu'il ne faut pas casser.
+
+### ~~Prouver que le Web Push arrive sur un iPhone verrouillé~~ — RÉUSSI le 2026-08-13
+**Aramis a fait le test : téléphone verrouillé, la notification arrive.**
+
+C'était **le risque numéro un du produit** — toute la promesse des rappels
+reposait dessus, et seuls les chemins d'ÉCHEC avaient été vérifiés en conditions
+réelles. Le pari est gagné, en production, sur son matériel.
+
+Ce que ça valide et qu'il ne faut plus re-débattre : le choix du Web Push contre
+CalDAV, et le serveur qui possède l'horloge. iOS ne donne aucune API de
+notification programmée à une PWA — ni Notification Triggers, ni Background
+Sync, ni Periodic Background Sync, ni Background Fetch. C'est pour ça que le
+conteneur `cron` appelle `/api/cron/reminders` toutes les 60 s.
+
+⚠️ Conditions qui restent nécessaires, à ne pas casser par inadvertance : PWA
+installée depuis l'écran d'accueil (iOS 16.4+, l'abonnement est impossible
+depuis un onglet Safari), abonnement push valide, et HTTPS réel.
+
+### ~~Déployer sur le VPS avec un vrai domaine et TLS~~ — FAIT le 2026-08-13
+En ligne sur **https://brief.srv1899780.hstgr.cloud**, PIN d'accès actif.
+
+Ce qui a été vérifié, pas supposé : certificat Let's Encrypt valide (chaîne
+`ssl_verify=0`, expire le 2026-11-11), redirection HTTP→HTTPS, garde PIN
+(401 sans, 200 avec), écriture d'un item **survivant à un `docker compose down`**,
+conteneur `app` *healthy*, cron des rappels journalisant chaque minute, et le
+cycle sauvegarde → destruction → restauration exercé en entier.
+
+Le VPS avait déjà un **Traefik** en réseau host tenant 80/443 et servant n8n :
+Brief s'y branche par labels. Pas de Caddy — il aurait échoué sur « port already
+allocated », et sortir Traefik aurait cassé n8n. `deploy/Caddyfile` reste pour
+une machine nue. Aucun domaine acheté : `*.srv1899780.hstgr.cloud` est un
+wildcard, et `hstgr.cloud` est sur la Public Suffix List.
+
+Trois pannes silencieuses corrigées au passage, toutes dans le dépôt :
+- `command: >` avec des `\` dans le service `cron` — Compose consommait
+  l'antislash, curl partait sans URL. **Aucun rappel n'aurait jamais sonné**,
+  conteneur « up » compris.
+- La sonde de vie visait `GET /api/session`, qui répond 405 : la route n'expose
+  que POST. Le conteneur restait *unhealthy* et le cron ne démarrait pas.
+- `docker compose up` sans `--env-file .env.production` construisait l'image
+  avec une clé VAPID vide, inlinée à `undefined`. Des gardes `:?` bloquent
+  désormais le build.
+
+### ~~Variables d'environnement absentes en production~~ — SANS OBJET
+La cible d'hébergement est le VPS, plus Vercel. Les cinq variables sont dans
+`/docker/brief/.env.production` et vérifiées chargées : `BRIEF_DATA_DIR=/app/data`
+pointe sur le volume, la clé VAPID publique est confirmée présente **dans le
+bundle** (`.next/static/chunks/`), et `/api/capture` a son jeton.
+
+Vercel reste utilisable pour regarder l'interface, sans plus.
 
 ---
 
@@ -104,12 +125,54 @@ risque produit, pas une gêne cosmétique. Deux échappatoires, aucune construit
 
 ---
 
+## P1 bis — Le récap du matin sonne, mais son échec est muet
+
+`GET /api/digest` est déployée et le workflow n8n **Brief — récap du matin**
+(`H9f6EWHUzUmi9JDV`) est **complet et publié** : cron 8h30 Europe/Paris → lecture
+→ filtre → mise en forme → **Telegram**. Envoi prouvé le 2026-08-14.
+
+**WhatsApp est abandonné pour ce besoin** — Telegram fait le travail sans compte
+Meta, sans numéro dédié et sans template à faire approuver. Ne pas y revenir sans
+raison nouvelle.
+
+### Donner un chemin d'erreur au workflow
+- **Quoi :** brancher la sortie d'erreur du nœud « Lire le récap Brief » vers un
+  second envoi Telegram, ou poser un Error Workflow dans les réglages.
+- **Pourquoi :** si Brief redémarre ou répond 401 à 8h30, le workflow échoue et
+  **rien ne le dit**. Un récap absent est indiscernable d'une journée vide —
+  c'est exactement la panne silencieuse que le projet combat partout ailleurs,
+  et le nœud « Quelque chose à dire ? » rend justement le silence normal.
+- **Contexte :** le canal existe désormais, donc plus rien ne bloque.
+- **Effort :** S (humain) → S (CC) · **Priorité :** P1
+
+### Surveiller la fraîcheur du jeton et du credential
+- **Quoi :** rien à construire, juste à savoir : `BRIEF_DIGEST_TOKEN` vit dans
+  `/docker/brief/.env.production` **et** dans le credential n8n
+  `THLHqJ0euzjzwBm7`. Les deux doivent rester identiques.
+- **Pourquoi :** les changer d'un seul côté produit un 401 à 8h30, donc un récap
+  absent — encore une fois silencieux tant que le point ci-dessus n'est pas fait.
+- **Priorité :** P2
+
+---
+
 ## P2 — Prévu, à faire plus tard
 
-**Tranché par Aramis le 2026-08-11 :** ces deux chantiers sont validés, ils
-avaient simplement été oubliés. Ce ne sont donc pas des questions ouvertes. Le
-pour et le contre restent écrits parce qu'ils décrivent les pièges de mise en
-œuvre, pas parce que la décision serait à reprendre.
+**Tranché par Aramis le 2026-08-15 :**
+
+### Version Desktop & Vue Kanban (Trello-like)
+- Refonte / layout adapté grand écran (navigation latérale, vue d'ensemble étendue).
+- Vue en colonnes Kanban / Board interactif avec glisser-déposer (Drag & Drop) d'un statut/horizon à un autre.
+- Prototype préliminaire / preview HTML via Claude Design.
+
+### Workflow Conversationnel Telegram ↔ Hermes ↔ Brief
+- Consultation des tâches en langage naturel (synthèse ultra lisible, priorités, deadlines).
+- Actions directes depuis Telegram : cocher/valider une tâche ("la 1 est faite"), reporter/décaler une date, ajouter une tâche sur un projet ("sur Trezo", "sur Frip & Trend").
+- Intégration directe VPS via les endpoints API de Brief.
+
+### Évolutions n8n & Automatisations
+- Digest du matin (8h30) amélioré avec gestion d'erreurs (alertes en cas de fail).
+- Automatisation du bilan du soir (récap à 19h30 des tâches faites vs reportées).
+- Webhook d'ingestion rapide (transférer un message Telegram ou un vocal pour créer une tâche).
 
 ### Passer le stockage à Postgres
 - **État :** annoncé dans le journal de décisions, jamais construit. Le code livré
@@ -197,6 +260,7 @@ pour et le contre restent écrits parce qu'ils décrivent les pièges de mise en
 
 ## Retiré — ne pas réintroduire
 
-Ces éléments dépendaient d'un noyau CalDAV qui ne sera pas construit :
-**cible CalDAV générique** (Nextcloud, Fastmail) et **sous-tâches par
-`RELATED-TO`**, dont l'intention survit sous une autre forme ci-dessus.
+Ces éléments dépendaient d'un noyau CalDAV générique, abandonné : **cible
+CalDAV générique** (Nextcloud, Fastmail) — la synchro du 17/08 vise iCloud
+Apple uniquement, par décision — et **sous-tâches par `RELATED-TO`**, dont
+l'intention survit sous une autre forme ci-dessus.

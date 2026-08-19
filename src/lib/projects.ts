@@ -182,11 +182,11 @@ export function shapeFromId(id: string): Shape {
 
 export const PRIORITY_VALUES: Priority[] = [1, 2, 3, 4];
 
-export const PRIORITIES: Record<Priority, { label: string; long: string; bg: string; fg: string }> = {
-  1: { label: "p1", long: "p1 · Urgent", bg: "var(--color-action-lo)", fg: "var(--color-error)" },
-  2: { label: "p2", long: "p2 · Important", bg: "var(--color-p4)", fg: "var(--color-warn)" },
-  3: { label: "p3", long: "p3 · Normal", bg: "var(--color-p2)", fg: "var(--color-p2-ink)" },
-  4: { label: "p4", long: "p4 · Par défaut", bg: "var(--color-tile)", fg: "var(--color-ink-3)" },
+export const PRIORITIES: Record<Priority, { label: string; short: string; long: string; bg: string; fg: string }> = {
+  1: { label: "p1", short: "Urgent", long: "p1 · Urgent", bg: "var(--color-action-lo)", fg: "var(--color-error)" },
+  2: { label: "p2", short: "Élevé", long: "p2 · Élevé", bg: "var(--color-p4)", fg: "var(--color-warn)" },
+  3: { label: "p3", short: "Normal", long: "p3 · Normal", bg: "var(--color-p2)", fg: "var(--color-p2-ink)" },
+  4: { label: "p4", short: "Basse", long: "p4 · Basse", bg: "var(--color-page)", fg: "var(--color-ink-3)" },
 };
 
 export function isPriority(v: unknown): v is Priority {
@@ -194,14 +194,28 @@ export function isPriority(v: unknown): v is Priority {
 }
 
 /**
- * Suggestions d'échéance de l'écran Revue.
+ * Valeur de l'option « Pas d'échéance » des sélecteurs d'échéance.
+ *
+ * ⚠️ Surtout pas la chaîne vide. Ces `<select>` sont verrouillés sur `value=""`
+ * — c'est ce qui permet de rejouer deux fois de suite le même choix, puisque
+ * React les y ramène après chaque changement. Une option portant elle aussi
+ * `""` n'aurait donc jamais déclenché `change` : c'est exactement ce qui
+ * rendait « Pas d'échéance » inopérant, dans la fiche comme à la revue. Une
+ * échéance posée par erreur était définitive. Corrigé le 2026-08-14.
+ */
+export const DUE_CLEAR = "__clear";
+
+/**
+ * Suggestions d'échéance de l'écran Revue et de la fiche.
  *
  * Ce sont des libellés d'interface : c'est `resolveDue()` qui les convertit en
  * date absolue. Brief ne stocke jamais « vendredi » — la résolution du français
  * lui incombe désormais, elle n'est plus déléguée à un service tiers.
+ *
+ * L'option « Pas d'échéance » ne figure PAS dans cette liste : elle porte
+ * `DUE_CLEAR` et se rend à part, pour la raison ci-dessus.
  */
 export const DUE_SUGGESTIONS = [
-  "",
   "aujourd'hui",
   "ce soir",
   "demain",
