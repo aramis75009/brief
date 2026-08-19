@@ -11,7 +11,7 @@
  * fragiles. Les couleurs utilisent les variables CSS du design system.
  */
 
-import { useMemo } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { EmptyState } from "./EmptyState";
 import { SkeletonList } from "./Skeleton";
@@ -41,7 +41,6 @@ interface HomeScreenProps {
   onOpenAccount: () => void;
   onCapture: () => void;
   onAskAI: () => void;
-  onScrollToTasks: () => void;
 }
 
 /* ------------------------------------------------------------------ *
@@ -316,7 +315,6 @@ export function HomeScreen({
   onOpenAccount,
   onCapture,
   onAskAI,
-  onScrollToTasks,
 }: HomeScreenProps) {
   // Date du jour formatée « mar. 19 août » dans le fuseau Europe/Paris.
   const todayLabel = useMemo(() => {
@@ -373,6 +371,13 @@ export function HomeScreen({
     for (const p of projects) m.set(p.id, p);
     return m;
   }, [projects]);
+
+  // Ref pour scroll vers la section "Aujourd'hui" (tuile Tâches)
+  const todayRef = useRef<HTMLDivElement>(null);
+
+  const scrollToTasks = useCallback(() => {
+    todayRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto" style={{ background: C.bg }}>
@@ -438,7 +443,7 @@ export function HomeScreen({
           icon={<TaskCheckIcon size={20} />}
           label="Tâches"
           subtitle={`${counts.tasks} aujourd'hui`}
-          onClick={onScrollToTasks}
+          onClick={scrollToTasks}
         />
         <DestinationTile
           bg={C.meet100}
@@ -465,7 +470,7 @@ export function HomeScreen({
       </div>
 
       {/* --- Section « Aujourd'hui » --------------------------------- */}
-      <div className="flex flex-col px-5" style={{ gap: 14, paddingBottom: 32 }}>
+      <div ref={todayRef} className="flex flex-col px-5" style={{ gap: 14, paddingBottom: 32 }}>
         {/* En-tête de section */}
         <div className="flex items-baseline justify-between">
           <span

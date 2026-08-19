@@ -353,7 +353,6 @@ export function BriefApp() {
             onOpenAccount={() => setAccountOpen(true)}
             onCapture={openCapture}
             onAskAI={openCapture}
-            onScrollToTasks={() => {/* scroll to list section */}}
           />
         )}
 
