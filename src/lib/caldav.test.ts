@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildEventIcs, calendarForProject } from "./caldav";
 import {
+  agendaWindow,
   calendarPatch,
   decideExternalSync,
   decideSync,
@@ -429,6 +430,15 @@ describe("toCalendarEvent — événements posés directement dans l'app Calendr
       "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTART:20260817T140000Z\r\n" +
       "SUMMARY:Séance pull\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,TH\r\nEND:VEVENT\r\nEND:VCALENDAR";
     expect(toCalendarEvent(remoteEvent(ics), "Sport")?.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,TH");
+  });
+});
+
+describe("agendaWindow — l'incident du 2026-08-19 (145 tâches parasites)", () => {
+  it("borne à 30 jours dans le passé et 180 jours dans le futur — jamais l'historique entier d'un calendrier", () => {
+    const now = new Date("2026-08-19T18:00:00Z");
+    const { start, end } = agendaWindow(now);
+    expect(start.toISOString()).toBe("2026-07-20T18:00:00.000Z");
+    expect(end.toISOString()).toBe("2027-02-15T18:00:00.000Z");
   });
 });
 

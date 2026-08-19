@@ -307,12 +307,25 @@ export async function discoverCalendars(homeHref: string): Promise<Map<string, s
 export type RemoteEvent = { href: string; uid: string; ics: string };
 
 /**
- * Liste TOUS les événements d'un calendrier (n'importe quel UID). Un seul
- * appel réseau, réutilisé par `listBriefEvents` (filtre `brief-*`, pour la
- * réconciliation) et par l'instantané agenda (garde tout, pour afficher les
- * événements posés directement dans l'app Calendrier — voir `agenda.ts`).
+ * Requête CalDAV brute, avec une fenêtre temporelle OPTIONNELLE.
+ *
+ * ⚠️ Sans borne, un calendrier utilisé depuis des années (« Personnel »)
+ * renvoie TOUT son historique — constaté en prod le 2026-08-19 : la première
+ * adoption externe (`listAllEvents`, voir plus bas) a créé 145 tâches Brief
+ * depuis des événements de mai-juin, restaurés depuis la sauvegarde et jamais
+ * revus depuis. `listBriefEvents`, elle, reste VOLONTAIREMENT non bornée : la
+ * réconciliation `brief-*` tourne sans borne depuis le 17/08 sans ce
+ * problème — Brief ne crée que des événements proches de leur échéance et les
+ * nettoie une fois terminés, le volume ne peut pas dériver de la même façon.
+ * Ne borner QUE ce qui lit l'historique d'Aramis, jamais ce que Brief possède.
  */
-async function queryCalendarEvents(calendarUrl: string): Promise<RemoteEvent[]> {
+async function queryCalendarEvents(
+  calendarUrl: string,
+  range?: { start: Date; end: Date },
+): Promise<RemoteEvent[]> {
+  const timeRange = range
+    ? `<c:time-range start="${icalUtc(range.start)}" end="${icalUtc(range.end)}"/>`
+    : "";
   const res = await caldavFetch(calendarUrl, {
     method: "REPORT",
     headers: { Depth: "1", "Content-Type": "application/xml" },
@@ -321,7 +334,7 @@ async function queryCalendarEvents(calendarUrl: string): Promise<RemoteEvent[]> 
       `<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">` +
       `<d:prop><d:getetag/><c:calendar-data/></d:prop>` +
       `<c:filter><c:comp-filter name="VCALENDAR">` +
-      `<c:comp-filter name="VEVENT"/></c:comp-filter></c:filter></c:calendar-query>`,
+      `<c:comp-filter name="VEVENT">${timeRange}</c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`,
   });
   if (!res.ok) throw new Error(`calendar-query HTTP ${res.status}`);
 
@@ -343,15 +356,27 @@ async function queryCalendarEvents(calendarUrl: string): Promise<RemoteEvent[]> 
   return events;
 }
 
-/** Liste les événements déjà présents dont l'UID commence par `brief-`. */
+/** Liste les événements déjà présents dont l'UID commence par `brief-`. Non borné : voir `queryCalendarEvents`. */
 export async function listBriefEvents(calendarUrl: string): Promise<RemoteEvent[]> {
   const events = await queryCalendarEvents(calendarUrl);
   return events.filter((e) => e.uid.startsWith(UID_PREFIX));
 }
 
-/** Tous les événements d'un calendrier, `brief-*` compris — pour l'instantané agenda. */
+/** 30 jours passés (rattraper un événement récent non coché) à 180 jours à venir. */
+export function agendaWindow(now: Date = new Date()): { start: Date; end: Date } {
+  return {
+    start: new Date(now.getTime() - 30 * 86400_000),
+    end: new Date(now.getTime() + 180 * 86400_000),
+  };
+}
+
+/**
+ * Tous les événements d'un calendrier, `brief-*` compris, dans `agendaWindow`
+ * — pour l'instantané agenda et l'adoption externe. JAMAIS non bornée : voir
+ * l'avertissement de `queryCalendarEvents`.
+ */
 export async function listAllEvents(calendarUrl: string): Promise<RemoteEvent[]> {
-  return queryCalendarEvents(calendarUrl);
+  return queryCalendarEvents(calendarUrl, agendaWindow());
 }
 
 /* --- « Le calendrier gagne » (décision Aramis 18/08) -------------------- */
@@ -886,14 +911,20 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // uid -> événement + calendrier d'origine, pour l'adoption externe (Phase 3) —
   // uniquement les calendriers que Brief affiche, jamais Permis/Fake/Fêtes…
   const externalByUid = new Map<string, { remote: RemoteEvent; calendarName: string; calendarUrl: string }>();
+  // Calendriers agenda dont CETTE lecture (bornée) a échoué — distinct de
+  // `readFailed` (qui ne parle que de la réconciliation `brief-*` non bornée) :
+  // sert Phase 3 à ne jamais confondre « lecture ratée » et « événement supprimé ».
+  const agendaReadFailed = new Set<string>();
   for (const calName of toSweep) {
     const calUrl = calendars.get(calName);
     if (!calUrl) continue;
     touched.push(calName);
 
-    let all: RemoteEvent[];
+    // Non bornée : la réconciliation `brief-*` doit voir même un item Brief
+    // ancien resté ouvert, jamais tronqué par une fenêtre de date.
+    let remote: RemoteEvent[];
     try {
-      all = await listAllEvents(calUrl);
+      remote = await listBriefEvents(calUrl);
     } catch (e) {
       readFailed.add(calName);
       const items = byCalendar.get(calName) ?? [];
@@ -902,7 +933,18 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       }
       continue;
     }
+    // Bornée (`agendaWindow`) : seule cette lecture voit l'historique perso
+    // d'Aramis (calendriers agenda uniquement — jamais Permis/Fake/Fêtes…),
+    // jamais la réconciliation `brief-*` ci-dessus.
     if (agendaCalendars.has(calName)) {
+      let all: RemoteEvent[];
+      try {
+        all = await listAllEvents(calUrl);
+      } catch (e) {
+        agendaReadFailed.add(calName);
+        failures.push({ uid: calName, error: e instanceof Error ? e.message : "lecture agenda échouée" });
+        all = [];
+      }
       for (const ev of all) {
         const parsed = toCalendarEvent(ev, calName);
         if (parsed) snapshotEvents.push(parsed);
@@ -911,7 +953,6 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
         }
       }
     }
-    const remote = all.filter((ev) => ev.uid.startsWith(UID_PREFIX));
     existing += remote.length;
     remoteByCal.set(calName, new Map(remote.map((ev) => [ev.uid, ev])));
 
@@ -1033,7 +1074,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   for (const it of items) {
     if (!it.externalUid || it.doneAt) continue;
     if (externalByUid.has(it.externalUid)) continue; // déjà traité ci-dessus
-    if (it.externalCalendar && readFailed.has(it.externalCalendar)) continue;
+    if (it.externalCalendar && agendaReadFailed.has(it.externalCalendar)) continue;
     try {
       await patchItem(it.id, { doneAt: new Date().toISOString() });
       externalCompleted += 1;
