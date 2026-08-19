@@ -355,9 +355,9 @@ export function HomeScreen({
   }, [projects]);
 
   return (
-    <div className="flex min-h-full flex-col" style={{ background: C.bg }}>
+    <div className="flex flex-1 min-h-0 flex-col overflow-y-auto" style={{ background: C.bg }}>
       {/* --- En-tête ------------------------------------------------- */}
-      <div className="safe-top safe-x flex items-center justify-between">
+      <div className="safe-top flex items-center justify-between px-5">
         <AccountAvatar
           initials="AM"
           size={46}
@@ -389,7 +389,7 @@ export function HomeScreen({
       </div>
 
       {/* --- Titre --------------------------------------------------- */}
-      <div className="safe-x flex flex-col" style={{ gap: 0, paddingTop: 6, paddingBottom: 20 }}>
+      <div className="flex flex-col px-5" style={{ gap: 0, paddingTop: 6, paddingBottom: 20 }}>
         <h1
           className="font-extrabold tracking-[-0.03em]"
           style={{ fontSize: 34, lineHeight: 1.1, color: C.ink }}
@@ -406,7 +406,7 @@ export function HomeScreen({
 
       {/* --- Grille de tuiles 2×2 ----------------------------------- */}
       <div
-        className="safe-x grid"
+        className="grid px-5"
         style={{
           gridTemplateColumns: "1fr 1fr",
           gap: 12,
@@ -444,7 +444,7 @@ export function HomeScreen({
       </div>
 
       {/* --- Section « Aujourd'hui » --------------------------------- */}
-      <div className="safe-x flex flex-col" style={{ gap: 14, paddingBottom: 32 }}>
+      <div className="flex flex-col px-5" style={{ gap: 14, paddingBottom: 32 }}>
         {/* En-tête de section */}
         <div className="flex items-baseline justify-between">
           <span

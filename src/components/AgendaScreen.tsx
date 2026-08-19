@@ -3,6 +3,7 @@
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from "./icons";
+import { TIMEZONE, zonedParts } from "@/lib/zoned";
 import type { Item, Project } from "@/lib/types";
 
 /**
@@ -42,17 +43,21 @@ export function AgendaScreen({
     return d >= weekStart && d < new Date(weekStart.getTime() + 7 * 86400000);
   });
 
-  // Split by morning/afternoon
+  // Split by morning/afternoon (in Europe/Paris timezone)
   const morning = weekItems.filter((item) => {
-    const d = new Date(item.due!);
-    return d.getHours() < 12;
+    const parts = zonedParts(new Date(item.due!));
+    return parts.hour < 12;
   });
   const afternoon = weekItems.filter((item) => {
-    const d = new Date(item.due!);
-    return d.getHours() >= 12;
+    const parts = zonedParts(new Date(item.due!));
+    return parts.hour >= 12;
   });
 
-  const monthLabel = weekStart.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const monthLabel = new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+    timeZone: TIMEZONE,
+  }).format(weekStart);
   const currentDay = today.getDate();
 
   return (
@@ -143,10 +148,11 @@ export function AgendaScreen({
 }
 
 function EventRow({ item }: { item: Item }) {
-  const time = new Date(item.due!).toLocaleTimeString("fr-FR", {
+  const time = new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
-  });
+    timeZone: TIMEZONE,
+  }).format(new Date(item.due!));
   const isTask = item.kind === "task";
   const borderColor = isTask ? "var(--color-task-700)" : "var(--color-meet-700)";
 

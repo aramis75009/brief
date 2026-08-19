@@ -338,85 +338,89 @@ export function BriefApp() {
     <PhoneFrame>
       <StatusBar />
 
-      {screen === "home" && (
-        <HomeScreen
-          items={activeItems}
-          projects={projects}
-          overview={overview}
-          loading={loading}
-          onToggleDone={(id) => void toggleDone(id)}
-          onOpenTask={(id) => { setSelectedTaskId(id); setScreen("task"); }}
-          onOpenAgenda={() => setScreen("agenda")}
-          onOpenIdeas={() => setScreen("ideas")}
-          onOpenAccount={() => setAccountOpen(true)}
-          onCapture={openCapture}
-          onAskAI={openCapture}
-        />
-      )}
+      <div className="relative flex flex-1 min-h-0 flex-col">
 
-      {screen === "task" && (
-        <TaskDetailScreen
-          item={selectedTask}
-          projects={projects}
-          onBack={() => { setSelectedTaskId(null); setScreen("home"); }}
-          onDone={(id) => void toggleDone(id)}
-          onPostpone={(id) => void postponeItem(id)}
-          onDelete={(id) => void removeItem(id)}
-          onOpenSibling={(id) => setSelectedTaskId(id)}
-        />
-      )}
+        {screen === "home" && (
+          <HomeScreen
+            items={activeItems}
+            projects={projects}
+            overview={overview}
+            loading={loading}
+            onToggleDone={(id) => void toggleDone(id)}
+            onOpenTask={(id) => { setSelectedTaskId(id); setScreen("task"); }}
+            onOpenAgenda={() => setScreen("agenda")}
+            onOpenIdeas={() => setScreen("ideas")}
+            onOpenAccount={() => setAccountOpen(true)}
+            onCapture={openCapture}
+            onAskAI={openCapture}
+          />
+        )}
 
-      {screen === "agenda" && (
-        <AgendaScreen
-          items={activeItems}
-          projects={projects}
-          onBack={() => setScreen("home")}
-          loading={loading}
-        />
-      )}
+        {screen === "task" && (
+          <TaskDetailScreen
+            item={selectedTask}
+            projects={projects}
+            onBack={() => { setSelectedTaskId(null); setScreen("home"); }}
+            onDone={(id) => void toggleDone(id)}
+            onPostpone={(id) => void postponeItem(id)}
+            onDelete={(id) => void removeItem(id)}
+            onOpenSibling={(id) => setSelectedTaskId(id)}
+          />
+        )}
 
-      {screen === "ideas" && (
-        <IdeasScreen
-          ideas={ideaItems}
-          projects={projects}
-          onConvert={(id) => {
-            void (async () => {
-              try {
-                const updated = await updateItem(id, { status: "active" });
-                setSent((s) => s.map((t) => (t.id === id ? updated : t)));
-                flash("Idée convertie en tâche.");
-              } catch (e) {
-                flash("Conversion impossible.", "err");
-              }
-            })();
-          }}
-          onArchive={(id) => {
-            void (async () => {
-              try {
-                const updated = await updateItem(id, { status: "archived" });
-                setSent((s) => s.map((t) => (t.id === id ? updated : t)));
-                flash("Idée archivée.");
-              } catch (e) {
-                flash("Archivage impossible.", "err");
-              }
-            })();
-          }}
-          onBack={() => setScreen("home")}
-          onCapture={openCapture}
-          loading={loading}
-        />
-      )}
+        {screen === "agenda" && (
+          <AgendaScreen
+            items={activeItems}
+            projects={projects}
+            onBack={() => setScreen("home")}
+            loading={loading}
+          />
+        )}
 
-      {screen === "search" && (
-        <SearchScreen
-          items={sent}
-          projects={projects}
-          onOpenItem={(id) => { setSelectedTaskId(id); setScreen("task"); }}
-          onVoiceSearch={() => {/* TODO: voice search */}}
-          onBack={() => setScreen("home")}
-          onOpenAccount={() => setAccountOpen(true)}
-        />
-      )}
+        {screen === "ideas" && (
+          <IdeasScreen
+            ideas={ideaItems}
+            projects={projects}
+            onConvert={(id) => {
+              void (async () => {
+                try {
+                  const updated = await updateItem(id, { status: "active" });
+                  setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+                  flash("Idée convertie en tâche.");
+                } catch (e) {
+                  flash("Conversion impossible.", "err");
+                }
+              })();
+            }}
+            onArchive={(id) => {
+              void (async () => {
+                try {
+                  const updated = await updateItem(id, { status: "archived" });
+                  setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+                  flash("Idée archivée.");
+                } catch (e) {
+                  flash("Archivage impossible.", "err");
+                }
+              })();
+            }}
+            onBack={() => setScreen("home")}
+            onCapture={openCapture}
+            loading={loading}
+          />
+        )}
+
+        {screen === "search" && (
+          <SearchScreen
+            items={sent}
+            projects={projects}
+            onOpenItem={(id) => { setSelectedTaskId(id); setScreen("task"); }}
+            onVoiceSearch={() => {/* TODO: voice search */}}
+            onBack={() => setScreen("home")}
+            onOpenAccount={() => setAccountOpen(true)}
+          />
+        )}
+
+      </div>
 
       <CaptureBar onClick={openCapture} />
       <BottomNav
