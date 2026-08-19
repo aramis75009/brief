@@ -43,11 +43,19 @@ projets.
 | Client | PWA installée sur iPhone. |
 | Stack | Next.js 16 (App Router), React 19, Tailwind v4, Vitest. |
 
-### ⚠️ La production tourne sur `feat/task-completion`, pas sur `main`
+### ⚠️ La production tourne sur `feat/ui-redesign-claude`, pas sur `main`
 
-Le VPS (`/docker/brief`) est branché sur cette branche. `main` est en retard.
-Vérifie avant de supposer. C'est ce qui a fait perdre du temps à Hermes le
-2026-08-14.
+Le VPS (`/docker/brief`) est branché sur **`feat/ui-redesign-claude`** depuis
+le 2026-08-19. `main` est en retard ; l'ancienne branche
+`feat/task-completion` est obsolète. **Ne jamais supposer la branche de prod
+d'après sa mémoire** — elle a changé deux fois en une semaine. Vérifie avec
+`bash scripts/coord/status.sh`, qui lit la branche réelle du VPS.
+
+**Multi-agents** : ce projet est travaillé par Claude Code (Mac d'Aramis) et
+Hermes Agent (VPS) en parallèle. Avant de coder, lis
+[`docs/coordination.md`](docs/coordination.md) et applique le réflexe de
+synchronisation (fetch + status.sh + HANDOFF.md). Un agent = une branche à
+la fois ; GitHub est la vérité centrale.
 
 ---
 

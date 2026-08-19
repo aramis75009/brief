@@ -52,3 +52,9 @@ Thumbs.db
 
 # Données serveur locales (abonnements push, avant Postgres)
 .data/
+
+# --- Coordination multi-agents -------------------------------------------------
+# Artéfacts locaux de preview et sauvegardes : jamais commités, jamais écrasés
+backups/
+public/preview-*/
+*.tar.gz
