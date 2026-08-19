@@ -618,6 +618,18 @@ describe("decideExternalSync — adoption des événements posés dans Calendrie
     }
   });
 
+  it("UID tombstoné (item adopté supprimé côté Brief) → supprime l'événement distant au lieu de le recréer", () => {
+    const ics =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
+      "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    const decision = decideExternalSync(undefined, remoteEvent(ics), "Personnel", "perso", true);
+    expect(decision).toEqual({ action: "delete-remote" });
+  });
+
+  it("UID tombstoné mais événement déjà absent → noop, rien à supprimer", () => {
+    expect(decideExternalSync(undefined, undefined, "Personnel", "perso", true)).toEqual({ action: "noop" });
+  });
+
   it("ne fait rien si l'événement est illisible et jamais adopté — jamais de tâche fantôme", () => {
     const noTitle = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTART:20260820T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR";
     expect(decideExternalSync(undefined, remoteEvent(noTitle), "Personnel", "perso")).toEqual({ action: "noop" });

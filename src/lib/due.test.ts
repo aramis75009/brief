@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { compareByDue, formatDue, formatRelativeDue, isDueToday, resolveDue, toIsoWithOffset } from "./due";
+import {
+  compareByDue,
+  formatDue,
+  formatRelativeDue,
+  isDueToday,
+  isoToLocalInputValue,
+  localInputToIso,
+  resolveDue,
+  toIsoWithOffset,
+} from "./due";
 
 /**
  * Ces tests couvrent le chantier que le pivot a déplacé : c'est Brief qui
@@ -208,5 +217,40 @@ describe("compareByDue", () => {
   it("une échéance illisible est traitée comme une absence d'échéance", () => {
     const items = [{ due: "n'importe quoi" }, { due: "2026-08-20T00:00:00Z" }];
     expect(items.sort(compareByDue)[0].due).toBe("2026-08-20T00:00:00Z");
+  });
+});
+
+describe("isoToLocalInputValue / localInputToIso", () => {
+  it("aller-retour stable : iso → local → iso", () => {
+    const iso = "2026-08-20T14:30:00+02:00";
+    const local = isoToLocalInputValue(iso);
+    expect(local).toBe("2026-08-20T14:30");
+    expect(localInputToIso(local)).toBe(iso);
+  });
+
+  it("isoToLocalInputValue(null) renvoie une chaîne vide", () => {
+    expect(isoToLocalInputValue(null)).toBe("");
+  });
+
+  it("isoToLocalInputValue sur une date illisible renvoie une chaîne vide", () => {
+    expect(isoToLocalInputValue("n'importe quoi")).toBe("");
+  });
+
+  it("localInputToIso sur une entrée malformée renvoie null", () => {
+    expect(localInputToIso("pas une date")).toBeNull();
+    expect(localInputToIso("2026-08-20")).toBeNull();
+    expect(localInputToIso("2026-08-20T14:30:00")).toBeNull();
+  });
+
+  it("localInputToIso sur un jour calendaire impossible renvoie null", () => {
+    expect(localInputToIso("2026-02-31T10:00")).toBeNull();
+  });
+
+  it("localInputToIso produit un décalage Europe/Paris cohérent en été (+02:00)", () => {
+    expect(localInputToIso("2026-08-20T14:30")).toBe("2026-08-20T14:30:00+02:00");
+  });
+
+  it("localInputToIso produit un décalage Europe/Paris cohérent en hiver (+01:00)", () => {
+    expect(localInputToIso("2026-01-15T09:00")).toBe("2026-01-15T09:00:00+01:00");
   });
 });

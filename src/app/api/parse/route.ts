@@ -52,12 +52,16 @@ Projets disponibles (recopie l'identifiant EXACTEMENT) :
 ${list}
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour ni bloc de code :
-{"items":[{"kind":"task","title":"...","due":"2026-08-12T14:00:00+02:00","allDay":false,"priority":3,"projectId":"...","rrule":null}]}
+{"items":[{"kind":"task","title":"...","due":"2026-08-12T14:00:00+02:00","allDay":false,"priority":3,"projectId":"...","rrule":null,"status":null}]}
 
 Règles :
 - kind : "event" si c'est un rendez-vous qui occupe un créneau (réunion, déjeuner,
   médecin, appel planifié). "task" si c'est quelque chose à faire avant une échéance.
   Dans le doute, "task".
+- status : "idea" si la note est une pensée en passant, SANS action ni échéance
+  claire (« il faudrait repenser au logo un jour », « idée : proposer un abonnement »).
+  null dans tous les autres cas — l'utilisateur peut toujours corriger le type à la
+  revue, ce champ n'est qu'une proposition, pas une décision définitive.
 - title : l'item COMPLET et actionnable — verbe à l'infinitif SUIVI de son complément.
   Jamais un verbe seul. Écris "Photographier le lot de polos", pas "photographier".
   N'y mets NI la date, NI le nom du projet, NI la priorité.
@@ -74,11 +78,12 @@ Règles :
 - Un item par intention distincte. N'invente rien qui ne soit pas dans la note.
 
 Exemple, si nous étions le lundi 10 août 2026 :
-Note : "ce soir trier les cintres, déjeuner avec Paul jeudi midi, et tous les mardis sortir les poubelles"
+Note : "ce soir trier les cintres, déjeuner avec Paul jeudi midi, tous les mardis sortir les poubelles, et il faudrait repenser le logo un jour"
 Réponse : {"items":[
-{"kind":"task","title":"Trier les cintres du dépôt-vente","due":"2026-08-10T19:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet friperie>","rrule":null},
-{"kind":"event","title":"Déjeuner avec Paul","due":"2026-08-13T12:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet le plus proche>","rrule":null},
-{"kind":"task","title":"Sortir les poubelles","due":"2026-08-11T09:00:00+02:00","allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":"FREQ=WEEKLY;BYDAY=TU"}]}`;
+{"kind":"task","title":"Trier les cintres du dépôt-vente","due":"2026-08-10T19:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet friperie>","rrule":null,"status":null},
+{"kind":"event","title":"Déjeuner avec Paul","due":"2026-08-13T12:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet le plus proche>","rrule":null,"status":null},
+{"kind":"task","title":"Sortir les poubelles","due":"2026-08-11T09:00:00+02:00","allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":"FREQ=WEEKLY;BYDAY=TU","status":null},
+{"kind":"task","title":"Repenser le logo","due":null,"allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":null,"status":"idea"}]}`;
 }
 
 /** Le modèle encadre parfois sa réponse de ```json … ``` malgré la consigne. */
@@ -99,6 +104,7 @@ type RawItem = {
   priority?: unknown;
   projectId?: unknown;
   rrule?: unknown;
+  status?: unknown;
 };
 
 let counter = 0;
@@ -189,7 +195,11 @@ function coerce(rows: RawItem[], projects: Project[], now: Date): DraftItem[] {
 
       if (rrule && due) due = alignToRrule(due, rrule);
 
-      return { id: newId(), kind, title, projectId, due, allDay, priority, rrule };
+      // Proposition du modèle, jamais définitive : l'utilisateur peut toujours
+      // changer le type à la revue (`TypeSegmented` de `CaptureSheet`).
+      const status = r.status === "idea" ? "idea" : undefined;
+
+      return { id: newId(), kind, title, projectId, due, allDay, priority, rrule, status };
     })
     .filter((i): i is DraftItem => i !== null)
     .slice(0, MAX_ITEMS);

@@ -11,117 +11,196 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-19 · DTSTART mobile des séries récurrentes corrigé
+# Passation — 2026-08-19 · Types explicites, édition complète, accueil↔Rendez-vous unifiés
 
 | | |
 |---|---|
 | **Agent** | Claude Code (Sonnet 5) |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `445e4a5` (ancre stable pour les séries récurrentes) |
-| **Prod** | https://brief.srv1899780.hstgr.cloud — déployée, `brief-app-1 Healthy`, aucune erreur en logs post-déploiement |
+| **Commits** | **aucun — rien n'est commité.** Diff local uniquement, en attente de revue avant commit/push (jamais sans demande explicite d'Aramis). |
 
 ## Goal — l'objectif
 
-Aramis a signalé deux symptômes le même soir : « Aller courir » apparaît deux
-fois aujourd'hui dans Brief, et le vrai calendrier Apple n'a plus de
-« Reposter »/« Poster » pour aujourd'hui alors que les jours suivants les ont.
-Trouver la cause racine et corriger — pas les symptômes séparément.
+Aramis a fourni un rapport de bug en 13 points (avec captures d'écran) :
+impossible de créer une idée ou de choisir explicitement Tâche/Rendez-vous/
+Idée à la capture ; aucune édition possible d'un item existant ; la tuile
+« Rendez-vous » de l'accueil affiche 0 alors qu'un rendez-vous existe ;
+suppression d'un item qui réapparaît après une autre action ; « Rouvrir » mal
+orthographié ; retour de fiche qui ramène toujours à l'accueil au lieu de
+l'écran de provenance. Consigne explicite : trouver les causes communes, pas
+corriger chaque symptôme isolément.
 
 ## Current state — ce qui a été fait
 
-**Root cause confirmée sur données prod réelles** (SSH `~/.ssh/brief_vps`,
-`items.json`, `caldav-agenda-snapshot.json`, `docker logs`, comparés à une
-capture de l'app Calendrier macOS) : `buildEventIcs` écrivait `due` comme
-DTSTART pour toute série récurrente. `due` avance à chaque rappel envoyé
-(`reminders.ts`). En RFC 5545 aucune occurrence n'existe avant DTSTART — donc
-dès qu'un rappel du jour partait, le prochain PUT effaçait l'occurrence du
-jour du vrai calendrier. Brief lui-même masquait ça en interne (`agenda.ts`
-reconstruit les occurrences passées d'une série), ce qui produisait un
-fantôme entrant en collision avec un second événement bien réel qu'Aramis
-avait ajouté à la main dans Calendrier — d'où le doublon « Aller courir ».
+**Deux bugs serveur concrets trouvés en lisant le code, avant toute UI :**
 
-**Fix (TDD — tests écrits et vus rouges avant le code)** : nouveau champ
-`Item.seriesAnchor`, un DTSTART figé une fois (premier PUT réussi, ou édition
-calendrier adoptée) et plus jamais avancé. `buildEventIcs`/`canonicalDueField`
-s'ancrent dessus pour une série, jamais sur `due`.
+1. `sanitizePatch()` dans `src/app/api/items/[id]/route.ts` ne lisait jamais
+   `v.status` — le bouton « Convertir en tâche » d'`IdeasScreen` appelait déjà
+   `updateItem(id, {status:"active"})`, mais le PATCH était silencieusement
+   vidé de ce champ côté serveur. **La conversion idée↔tâche ne persistait
+   jamais**, même si l'UI semblait confirmer l'action. Corrigé (+ `notes`, même
+   trou).
+2. Le bouton « Plus d'options » (`⋯`) de la fiche n'avait **aucun** `onClick`
+   — bouton mort. Remplacé par un bouton Modifier fonctionnel.
 
-**Déployé et migré** : commit poussé, prod sauvegardée puis redéployée et
-vérifiée saine. Migration one-shot (script Node exécuté dans le conteneur,
-non commité) sur les items récurrents déjà en prod : **7**, pas 5 comme prévu
-au départ — « Séance push » et « Séance pull » avaient le même bug, découvertes
-en filtrant les items réels plutôt qu'en supposant la liste.
+**Le modèle de données gérait déjà les trois types**, juste mal exposé : un
+type = `Item.kind` (`task`/`event`) + `Item.status` (`idea` prime sur tout).
+Nouveau `src/lib/item-type.ts` (`itemType()`, `typeLabel()`, `typeColors()`)
+centralise cette dérivation, reprise par tous les écrans qui la recalculaient
+chacun à sa façon.
 
-**Ce qui n'a PAS été fait / ne peut pas l'être** :
-- Le doublon « Aller courir » d'AUJOURD'HUI reste visible dans Brief — ce sont
-  deux entrées réellement distinctes sur le calendrier d'Aramis (le créneau
-  récurrent de 16h + celui qu'il a ajouté à la main à 17h30), rien ne permet
-  de les fusionner programmatiquement. Accepté explicitement par Aramis avant
-  le fix (voir Decisions).
-- Les occurrences déjà effacées aujourd'hui (Reposter/Poster) ne reviennent
-  pas rétroactivement — c'est de l'historique perdu, pas un état à corriger.
-  À partir de demain les 7 séries migrées se comportent normalement.
-- **Le mécanisme EXACT de la dérive initiale (Wed 19→Sam 22 en moins de 30h
-  pour « Aller courir ») reste non expliqué.** Les logs Docker ne remontent
-  qu'au dernier redéploiement (18:49 UTC aujourd'hui) — les passages
-  antérieurs sont perdus. Plus troublant : la suite de tests EXISTANTE
-  (`caldav.test.ts`, avant ce fix) affirme explicitement que ce scénario
-  précis doit produire un `skip` (aucun PUT). Le fix retire la dépendance à
-  `due` quel que soit ce mécanisme, donc n'en dépend pas — mais si un autre
-  item dérive à nouveau après ce fix, ça vaut la peine de creuser ce point
-  plutôt que de le supposer résolu par ricochet.
+**Accueil et onglet Rendez-vous lisaient deux logiques différentes.**
+`HomeScreen` filtrait `items` par `kind==="event" && due==aujourd'hui` —
+indépendant de l'onglet Rendez-vous (`GET /api/agenda` → `buildDayAgenda`,
+qui fusionne items + instantané CalDAV, seule façon de voir un événement
+calendrier pas encore réécrit dans `items.json` ou une série récurrente
+étendue). `HomeScreen` fait désormais le même appel `/api/agenda` que l'onglet
+(`BriefApp.refreshTodayAgenda`), et sépare « Aujourd'hui » en deux sections
+Tâches/Rendez-vous. **Bonus trouvé au passage : `counts.ideas` de l'accueil
+était TOUJOURS 0** — calculé sur `items` (prop `activeItems`, qui exclut déjà
+`status==="idea"` par construction). Remplacé par un `ideaCount` passé
+explicitement depuis la même liste que l'écran Idées.
+
+**Suppression d'un item adopté du calendrier Apple pouvait être recréée par
+la synchro suivante.** `DELETE /api/items/[id]` ne touchait jamais CalDAV ;
+pour un item `externalUid` (posé directement dans Calendrier), l'événement
+source restait sur iCloud, et `decideExternalSync` le recréait au passage
+suivant avec le même id déterministe (`caldav-<uid>`). Fix : tombstone
+persistant (`deletedExternalUids` dans le même fichier que le garde-fou de
+fréquence, `caldav-last-sync.json`) — `DELETE` enregistre l'UID
+synchroneusement, `decideExternalSync` force `delete-remote` au lieu de
+`create` tant que le calendrier n'a pas confirmé la disparition, purge
+automatique une fois confirmé. **Pas testable en réel en local** (pas
+d'identifiants CalDAV dans `.env.local`) — couvert par tests unitaires
+(`caldav.test.ts`) et par le raisonnement du Constat clé n°4 du plan
+(`/Users/ams/.claude/plans/fizzy-humming-ladybug.md`, conservé pour référence).
+Les items brief-owned (non adoptés) n'avaient PAS ce bug — Phase 1 du sync
+les nettoie déjà correctement au passage suivant, vérifié en lisant
+`runCalDavSync`.
+
+**Capture** (`CaptureSheet.tsx`) : chaque brouillon a maintenant un sélecteur
+Tâche/RDV/Idée explicite (`TypeSegmented`, nouveau composant partagé avec la
+fiche) + un `<input type="datetime-local">` pour Tâche/RDV. `/api/parse`
+propose désormais `status:"idea"` au modèle (note sans action ni échéance
+claire) — proposition, jamais définitive, l'utilisateur tranche à la revue.
+
+**Fiche** (`TaskDetailScreen.tsx`) : mode édition complet — type, titre,
+projet (`<select>`), date/heure (masqué pour Idée, requis pour RDV, bloque
+Enregistrer avec message inline sinon), notes (champ jamais affiché ni
+éditable avant cette session). Sauvegarde par un seul PATCH
+(`updateItem`). Erreur réseau → toast, reste en édition, ne perd pas la
+saisie.
+
+**Texte « Rouvrir » → « Réouvrir »** (`TaskDetailScreen.tsx`, seule
+occurrence trouvée par `grep -rn "Rouvrir" src/`, revérifié après coup).
+
+**Retour de fiche vers l'écran de provenance** : `BriefApp.tsx` mémorise
+l'écran courant au moment d'ouvrir une fiche (`openTask`/`returnScreen`) au
+lieu de forcer `setScreen("home")`. Recherche → Fiche → Retour → Recherche,
+vérifié en navigateur réel.
 
 ## Decisions — choix critiques ou irréversibles
 
-- **Pas de fusion du doublon « Aller courir » d'aujourd'hui.** Proposé et
-  explicitement accepté par Aramis avant de coder (question posée, réponse
-  « Fix complet » choisie en connaissance de cause) : ce sont deux événements
-  calendrier réels et distincts, aucun signal fiable ne permet de les traiter
-  comme un seul sans heuristique fragile.
-- **`postPutPatch` extrait en fonction pure exportée** (`caldav.ts`), sortie
-  de la boucle `runCalDavSync`, spécifiquement pour rendre testable sans
-  réseau le « figer l'ancre au premier PUT » — même logique que pourquoi
-  `decideSync`/`calendarPatch` sont déjà des fonctions pures séparées.
-- **Migration des items existants faite par script one-shot, pas par code
-  applicatif.** `seriesAnchor` ne se rétro-invente pas depuis `due` déjà
-  avancé sans action explicite — laisser le code applicatif le déduire tout
-  seul aurait pu figer une mauvaise valeur silencieusement.
+- **`itemType()` = dérivé de `kind`+`status`, pas un nouveau champ.** Le
+  modèle le permettait déjà (`status:"idea"` filtré partout) ; ajouter un
+  troisième enum aurait dupliqué la source de vérité et forcé une migration
+  de `items.json` en prod pour zéro bénéfice.
+- **Pas de suppression CalDAV synchrone dans `DELETE /api/items/[id]`.** Un
+  appel réseau iCloud dans le chemin de suppression ajouterait de la latence
+  et un point de panne à une action utilisateur ; le tombstone + la prochaine
+  passe cron (~15 min, latence déjà acceptée par décision Aramis du 17/08)
+  suffit à garantir qu'un item supprimé ne revient jamais, sans bloquer la
+  requête sur le réseau iCloud.
+- **RDV vide à la confirmation de capture → préremplissage automatique**
+  (prochaine heure pleine, ou 9h le lendemain après 20h) plutôt que blocage —
+  friction minimale à la capture. **En édition d'un item existant → blocage
+  avec message inline** — l'utilisateur édite un item déjà connu, l'erreur
+  explicite vaut mieux qu'une date devinée à sa place.
+- **Datetime natif (`<input type="datetime-local">`), pas de calendrier
+  custom.** Hors périmètre des 13 points demandés ; le contrôle natif donne
+  la meilleure UX mobile (roue native iOS) sans construire un composant.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/types.ts` | `Item.seriesAnchor` (nouveau champ) |
-| `src/lib/caldav.ts` | `buildEventIcs`/`canonicalDueField` ancrés sur `seriesAnchor` pour une série ; `calendarPatch` pose `seriesAnchor` sur édition adoptée ; nouveau `postPutPatch` exporté (extrait de la boucle Phase 2) |
-| `src/lib/caldav.test.ts` | 8 tests neufs (ancre stable, fallback `due`, item non récurrent, `postPutPatch`) + 1 test préexistant mis à jour (attend désormais `seriesAnchor` dans le patch adopté) |
-| `items.json` (prod, VPS, hors git) | 7 items récurrents migrés (`seriesAnchor` = `due` figé) — script non commité, exécuté puis supprimé du conteneur |
+| `src/app/api/items/[id]/route.ts` | fix `status`/`notes` dans `sanitizePatch` (exporté) ; `DELETE` enregistre le tombstone CalDAV |
+| `src/app/api/items/[id]/route.test.ts` | nouveau — 13 tests `sanitizePatch` |
+| `src/lib/item-type.ts` + `.test.ts` | nouveau — `itemType()`/`typeLabel()`/`typeColors()` |
+| `src/lib/due.ts` + `due.test.ts` | `isoToLocalInputValue`/`localInputToIso` (aller-retour `<input type="datetime-local">`, via `zoned.ts`) |
+| `src/lib/caldav.ts` + `caldav.test.ts` | `readSyncState`/`writeSyncState` (remplace `readLastSync`/`writeLastSync`) ; `recordDeletedExternalUid` ; `decideExternalSync` : 5ᵉ paramètre `isTombstoned` |
+| `src/app/api/parse/route.ts` | prompt + `coerce()` : le modèle peut proposer `status:"idea"` |
+| `src/components/TypeSegmented.tsx` | nouveau — sélecteur Tâche/RDV/Idée partagé capture + fiche |
+| `src/components/CaptureSheet.tsx` | `DoneStage` : type + date/heure éditables par brouillon, prop `onUpdateDraft` |
+| `src/components/TaskDetailScreen.tsx` | mode édition complet, notes affichées, bouton Modifier (remplace le bouton mort), « Réouvrir » |
+| `src/components/icons.tsx` | `EditIcon` (crayon) |
+| `src/components/HomeScreen.tsx` | prop `todayAgenda`/`ideaCount` remplace le calcul local ; section « Aujourd'hui » scindée Tâches/Rendez-vous ; `TodayAgendaGroup`/`TodayAgendaFallbackRow` |
+| `src/components/BriefApp.tsx` | `refreshTodayAgenda`, `updateDraft`, `saveItemEdit`, `openTask`/`returnScreen` |
 
 ## Validations — passants / échoués / non lancés
 
 | Commande | Résultat |
 |---|---|
-| `npx vitest run` | ✅ **185 passed \| 1 skipped** (186) — 8 nouveaux tests cette session |
+| `npx vitest run` | ✅ **215 passed \| 1 skipped** (216) — 31 tests nouveaux cette session (13 route + 8 item-type + 7 due + 3 caldav, net) |
 | `npx tsc --noEmit` | ✅ propre |
-| `npx eslint .` | ✅ 23 problèmes, tous préexistants (mêmes qu'avant cette session) |
-| Déploiement VPS | ✅ `git rev-parse HEAD` = `445e4a5` côté VPS, `brief-app-1 Healthy` |
-| Logs post-déploiement | ✅ aucune erreur (`docker logs --since 5m \| grep -iE "error\|exception"` → vide) |
-| Migration prod | ✅ 7/7 items migrés, vérifié par relecture d'`items.json` après écriture |
+| `npx eslint .` | ✅ 23 problèmes — **identiques à la baseline** (vérifié par `git stash` + eslint avant/après, même liste, même compte) |
+| QA navigateur (`npm run dev -p 3100`, `/browse`, PIN local) | ✅ voir détail ci-dessous |
 
-Non vérifié : le comportement du prochain passage CalDAV réel sur les 7 items
-migrés (devrait rester `put=0` pour eux, sauf vraie édition manuelle
-d'Aramis) — pas observé en direct, juste attendu par construction du fix.
+**QA navigateur, scénarios réellement exécutés (pas supposés) :**
+- Dictée « ce soir sortir les poubelles, déjeuner avec Paul demain midi, et
+  il faudrait repenser le logo un jour » → 3 brouillons, types corrects
+  (Tâche/RDV/Idée) proposés par le LLM, switch manuel testé (Tâche→RDV→Tâche
+  sur le 1er brouillon) → envoi → accueil : Tâches 1, Idées 1 (**avant le fix,
+  ce compteur aurait affiché 0 quel que soit le nombre réel d'idées**).
+- Idée « Repenser le logo » → Convertir en tâche → toast → **rechargement
+  complet de la page** → Idées repasse à 0 (persistance serveur confirmée,
+  pas seulement optimiste côté client).
+- Fiche « Déjeuner avec Paul » ouverte depuis Recherche → Modifier → type
+  Rendez-vous→Idée (champ date disparaît)→Rendez-vous (réapparaît, valeur
+  conservée) → date vidée → Enregistrer → erreur inline « Un rendez-vous a
+  besoin d'une date et d'une heure. » (formulaire conservé) → type Tâche,
+  titre modifié → Enregistrer → succès → Retour → **revient sur Recherche**,
+  pas Accueil.
+- Tâche terminée → bouton fiche affiche « Réouvrir ».
+- Suppression d'un item → **rechargement complet** → absent. Coche d'un
+  AUTRE item ensuite → **nouveau rechargement complet** → item supprimé
+  toujours absent (scénario exact du rapport d'Aramis).
+- Dictée « Appel avec le comptable ce soir à 20h » → LLM propose RDV
+  aujourd'hui 20h directement → accueil : « Rendez-vous 1 · Calendrier Apple »
+  (**avant le fix, aurait pu rester à 0 selon la source d'un événement** —
+  ici confirmé aussi correct dans le cas simple) → section « RENDEZ-VOUS »
+  visible sous Aujourd'hui → onglet Rendez-vous (même tuile cliquée) : même
+  événement listé à 20h sous APRÈS-MIDI, aujourd'hui — **confirmation directe
+  que les deux écrans lisent la même source**.
+
+**Non vérifié** : le tombstone CalDAV (tâche 4) contre un vrai compte iCloud —
+aucun identifiant `BRIEF_CALDAV_*` dans `.env.local`. Couvert par 2 tests
+unitaires nouveaux dans `caldav.test.ts` ; comportement attendu par
+construction, pas observé en conditions réelles.
+
+**Bug pré-existant reconfirmé, non corrigé (hors périmètre)** : `<button>`
+imbriqué dans `TodayRow`/`RowCheckbox` (déjà noté `TODOS.md` P2) — génère
+une erreur d'hydration React visible en console à chaque rendu d'une ligne
+« Aujourd'hui ». Réutilisé tel quel par `TodayAgendaGroup` (nouveau) sans le
+modifier — je n'ai pas élargi son usage, juste hérité du composant existant.
 
 ## Blockers — ce qui bloque
 
-Rien.
+Rien pour le code. **Pour le déploiement : rien n'est commité.** Le diff est
+volumineux (11 fichiers modifiés, 4 nouveaux, ~650 lignes) — laissé en attente
+de revue d'Aramis avant tout `git add`/commit, conformément à la règle du
+projet (jamais de commit sans demande explicite).
 
 ## Next — la prochaine action
 
-Observer un ou deux passages de sync naturels sur les items migrés :
-`docker logs brief-app-1 | grep caldav` — `put` doit rester à 0 pour ces 7
-séries sauf édition manuelle réelle d'Aramis dans Calendrier. Un `put` non nul
-sur l'un d'eux signalerait que `seriesAnchor` ne tient pas comme prévu, à
-creuser immédiatement — et ce serait aussi l'occasion de comprendre enfin le
-mécanisme de dérive initiale resté non expliqué (voir Current state).
+1. Revue du diff par Aramis (`git diff` — rien n'est encore indexé).
+2. Sur accord : commit (message `feat: explicit item types, full editing,
+   home/agenda single source of truth, caldav deletion tombstone`) puis PR
+   normale — pas de push direct.
+3. Après déploiement : observer un premier passage `runCalDavSync` réel pour
+   confirmer le tombstone en conditions réelles (supprimer un item adopté en
+   prod, vérifier qu'il ne revient pas après le prochain cron CalDAV) — seul
+   chemin non testable en local faute d'identifiants iCloud dev.
 
 ---
 
@@ -129,7 +208,8 @@ mécanisme de dérive initiale resté non expliqué (voir Current state).
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-19** | **DTSTART mobile des séries récurrentes corrigé** | **Claude Code** | *(cette passation)* |
+| **2026-08-19** | **Types explicites, édition complète, accueil↔Rendez-vous unifiés** | **Claude Code** | *(cette passation)* |
+| 2026-08-19 | DTSTART mobile des séries récurrentes corrigé | Claude Code | [fiche](docs/handoffs/2026-08-19-dtstart-mobile-series-recurrentes.md) |
 | 2026-08-19 | Rendez-vous reconstruite + adoption calendrier externe | Claude Code | [fiche](docs/handoffs/2026-08-19-rendezvous-reconstruite-adoption-calendrier.md) |
 | 2026-08-19 | Crash CalDAV corrigé + coordination mergée | Hermes Agent | [fiche](docs/handoffs/2026-08-19-crash-caldav-corrige-coordination.md) |
 | 2026-08-19 | Bug de prod : DTSTART flottant (cause, fix, leçons) | Hermes Agent | [fiche](docs/handoffs/2026-08-19-caldav-floating-dtstart.md) |

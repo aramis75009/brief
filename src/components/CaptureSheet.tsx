@@ -2,7 +2,11 @@
 
 import { WaveformActive, WaveformCollapsed } from "./Waveform";
 import { VoiceBadge } from "./VoiceBadge";
+import { TypeSegmented } from "./TypeSegmented";
 import { CloseIcon, MicIcon, ArrowRightIcon, StopIcon } from "./icons";
+import { isoToLocalInputValue, localInputToIso, toIsoWithOffset } from "@/lib/due";
+import { itemType, type ItemType } from "@/lib/item-type";
+import { shiftDays, zonedParts, zonedTime } from "@/lib/zoned";
 import type { DraftItem, Project } from "@/lib/types";
 
 /**
@@ -29,6 +33,7 @@ export function CaptureSheet({
   onStartListen,
   onStopListen,
   onSubmitText,
+  onUpdateDraft,
   onConfirm,
   onReplay,
   onClose,
@@ -43,6 +48,7 @@ export function CaptureSheet({
   onStartListen: () => void;
   onStopListen: () => void;
   onSubmitText: (text: string) => void;
+  onUpdateDraft: (id: string, patch: Partial<DraftItem>) => void;
   onConfirm: () => void;
   onReplay: () => void;
   onClose: () => void;
@@ -103,6 +109,7 @@ export function CaptureSheet({
             transcript={transcript}
             drafts={drafts}
             projects={projects}
+            onUpdateDraft={onUpdateDraft}
             onReplay={onReplay}
             onConfirm={onConfirm}
           />
@@ -250,20 +257,45 @@ function TranscribingStage() {
   );
 }
 
+/** Prochaine heure ronde raisonnable, pour préremplir une date de RDV sans bloquer. */
+function defaultEventDue(now: Date): string {
+  const p = zonedParts(now);
+  if (p.hour >= 20) {
+    const tomorrow = shiftDays(p, 1);
+    return toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
+  }
+  const nextHour = p.minute === 0 ? p.hour : p.hour + 1;
+  return toIsoWithOffset(zonedTime(p.y, p.m, p.d, Math.min(nextHour, 23), 0));
+}
+
 /* --- Stage 4: Done --- */
 function DoneStage({
   transcript,
   drafts,
   projects,
+  onUpdateDraft,
   onReplay,
   onConfirm,
 }: {
   transcript: string;
   drafts: DraftItem[];
   projects: Project[];
+  onUpdateDraft: (id: string, patch: Partial<DraftItem>) => void;
   onReplay: () => void;
   onConfirm: () => void;
 }) {
+  const handleTypeChange = (draft: DraftItem, next: ItemType) => {
+    if (next === "idea") {
+      onUpdateDraft(draft.id, { status: "idea" });
+      return;
+    }
+    const patch: Partial<DraftItem> = { kind: next, status: undefined };
+    if (next === "event" && !draft.due) {
+      patch.due = defaultEventDue(new Date());
+      patch.allDay = false;
+    }
+    onUpdateDraft(draft.id, patch);
+  };
   return (
     <div className="flex flex-col gap-3.5 pt-0.5" style={{ animation: "fade .2s both" }}>
       {/* Citation */}
@@ -291,45 +323,35 @@ function DoneStage({
         </span>
       </div>
 
-      {/* Items */}
+      {/* Items — type explicite, modifiable avant envoi (jamais deviné seul) */}
       <div className="flex flex-col gap-2">
         {drafts.map((draft, i) => {
-          const proj = projects.find((p) => p.id === draft.projectId);
-          const isTask = draft.kind === "task";
-          const isIdea = draft.status === "idea";
-          const dotColor = isTask ? "var(--color-task-700)" : isIdea ? "var(--color-idea-700)" : "var(--color-meet-700)";
-          const label = isTask
-            ? `Tâche${draft.due ? ` · ${formatDraftDate(draft.due)}` : ""}`
-            : isIdea
-            ? "Idée · à trier"
-            : `RDV${draft.due ? ` · ${formatDraftDate(draft.due)}` : ""}`;
+          const type = itemType(draft);
+          const needsDue = type !== "idea";
 
           return (
             <div
               key={draft.id}
-              className="flex items-center gap-3 rounded-18 border border-ink/[.09] bg-surface px-3.5 py-3.25"
+              className="flex flex-col gap-2.5 rounded-18 border border-ink/[.09] bg-surface px-3.5 py-3.25"
               style={{
                 animation: "pop .45s cubic-bezier(.2,.9,.3,1) both",
                 animationDelay: `${0.1 + i * 0.15}s`,
               }}
             >
-              {isIdea ? (
-                <span className="flex size-6 flex-none items-center justify-center rounded-8 bg-idea-100">
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-idea-700)" strokeWidth={2.6} strokeLinecap="round">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M12 4v2M12 18v2M4 12h2M18 12h2" />
-                  </svg>
-                </span>
-              ) : (
-                <span className="size-6 flex-none rounded-full border-2 border-ink/[.2]" />
+              <span className="text-[14.5px] font-bold tracking-[-0.01em]">{draft.title}</span>
+              <TypeSegmented value={type} onChange={(next) => handleTypeChange(draft, next)} />
+              {needsDue && (
+                <input
+                  type="datetime-local"
+                  value={isoToLocalInputValue(draft.due)}
+                  onChange={(e) => {
+                    const iso = localInputToIso(e.target.value);
+                    onUpdateDraft(draft.id, { due: iso, allDay: iso ? false : draft.allDay });
+                  }}
+                  aria-label={type === "event" ? "Date et heure du rendez-vous" : "Échéance de la tâche"}
+                  className="h-11 rounded-full bg-bg px-4 text-[13.5px] font-semibold text-ink outline-none"
+                />
               )}
-              <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                <span className="text-[14.5px] font-bold tracking-[-0.01em]">{draft.title}</span>
-                <span className="flex items-center gap-1.5 text-[11.5px] font-bold" style={{ color: dotColor }}>
-                  <span className="size-[6px] rounded-full" style={{ background: dotColor }} />
-                  {label}
-                </span>
-              </span>
             </div>
           );
         })}
@@ -352,17 +374,4 @@ function DoneStage({
       </div>
     </div>
   );
-}
-
-function formatDraftDate(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (isToday) return `aujourd'hui ${time}`;
-  if (isTomorrow) return `demain ${time}`;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + ` ${time}`;
 }

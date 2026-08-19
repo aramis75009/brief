@@ -21,6 +21,7 @@ import {
   createProject,
   deleteItem,
   deleteProject,
+  fetchAgendaDay,
   fetchProjects,
   fetchItems,
   fetchOverview,
@@ -30,6 +31,7 @@ import {
   transcribeAudio,
   updateItem,
 } from "@/lib/api";
+import type { AgendaItem } from "@/lib/agenda";
 import { formatDue, resolveDue } from "@/lib/due";
 import { uid } from "@/lib/ids";
 import {
@@ -43,7 +45,14 @@ import {
 import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
 import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
+import { zonedParts } from "@/lib/zoned";
 import type { DraftItem, Item, Overview, Phase, Project, ToastKind } from "@/lib/types";
+
+/** Date du jour, `AAAA-MM-JJ` en Europe/Paris — clé attendue par `/api/agenda`. */
+function todayDateKey(): string {
+  const p = zonedParts(new Date());
+  return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+}
 
 const TRANSCRIPT_KEY = "brief:transcript";
 
@@ -57,6 +66,10 @@ export function BriefApp() {
   // Navigation
   const [screen, setScreen] = useState<Screen>("home");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Écran vers lequel « Retour » doit revenir depuis une fiche — capturé au
+  // moment de l'ouverture, pas figé sur "home". Sans ça, Recherche → Fiche →
+  // Retour ramenait toujours à l'Accueil au lieu de Recherche.
+  const [returnScreen, setReturnScreen] = useState<Screen>("home");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [captureStage, setCaptureStage] = useState<CaptureStage>("idle");
@@ -69,6 +82,11 @@ export function BriefApp() {
   const pending = useSyncExternalStore(subscribeQueue, queueSnapshot, queueServerSnapshot);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  // Source unique pour « aujourd'hui » : le même `/api/agenda` que l'onglet
+  // Rendez-vous, pour que la tuile d'accueil et l'onglet ne puissent jamais
+  // afficher deux nombres différents pour le même jour (voir HANDOFF.md).
+  const [todayAgenda, setTodayAgenda] = useState<AgendaItem[]>([]);
+  const [todayAgendaLoaded, setTodayAgendaLoaded] = useState(false);
   const [projects, setProjects] = useState<Project[]>(SEED_PROJECTS);
   const [reloading, setReloading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
@@ -90,6 +108,13 @@ export function BriefApp() {
   }, [transcript, hydrated]);
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  /** Ouvre une fiche en mémorisant l'écran de provenance pour le Retour. */
+  const openTask = useCallback((id: string) => {
+    setReturnScreen(screen);
+    setSelectedTaskId(id);
+    setScreen("task");
+  }, [screen]);
 
   const flash = useCallback((msg: string, kind: ToastKind = "ok") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -119,6 +144,19 @@ export function BriefApp() {
     }
   }, []);
 
+  /* --- Rendez-vous du jour (source unique, partagée avec l'onglet Rendez-vous) --- */
+  const refreshTodayAgenda = useCallback(async () => {
+    try {
+      setTodayAgenda(await fetchAgendaDay(todayDateKey()));
+    } catch (e) {
+      if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+      // Réseau : non bloquant, comme refreshItems() — l'accueil garde le
+      // dernier instantané connu plutôt que de casser l'écran.
+    } finally {
+      setTodayAgendaLoaded(true);
+    }
+  }, []);
+
   /* --- Toggle done --- */
   const toggleDone = useCallback(async (id: string) => {
     const before = sent.find((t) => t.id === id);
@@ -131,6 +169,7 @@ export function BriefApp() {
       setSent((s) => s.map((t) => (t.id === id ? item : t)));
       if (outcome === "advanced") flash(`Repoussé au ${formatDue(item.due, item.allDay)}.`);
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch (e) {
       setSent((s) => s.map((t) => (t.id === id ? before : t)));
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
@@ -138,7 +177,7 @@ export function BriefApp() {
     } finally {
       setDoneBusyId(null);
     }
-  }, [sent, flash, refreshOverview, fail]);
+  }, [sent, flash, refreshOverview, refreshTodayAgenda, fail]);
 
   /* --- Remove item --- */
   const removeItem = useCallback(async (id: string) => {
@@ -149,12 +188,13 @@ export function BriefApp() {
     try {
       await deleteItem(id);
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch (e) {
       setSent(before);
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
       flash(e instanceof ApiError ? e.message : "La suppression n'a pas été enregistrée.", "err");
     }
-  }, [sent, flash, refreshOverview, fail]);
+  }, [sent, flash, refreshOverview, refreshTodayAgenda, fail]);
 
   /* --- Postpone --- */
   const postponeItem = useCallback(async (id: string) => {
@@ -165,11 +205,28 @@ export function BriefApp() {
       setSent((s) => s.map((t) => (t.id === id ? updated : t)));
       flash("Reporté à demain.");
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch (e) {
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
       flash("Impossible de reporter la tâche.", "err");
     }
-  }, [flash, refreshOverview, fail]);
+  }, [flash, refreshOverview, refreshTodayAgenda, fail]);
+
+  /* --- Édition complète d'un item (fiche) --- */
+  const saveItemEdit = useCallback(async (id: string, patch: Partial<DraftItem>): Promise<boolean> => {
+    try {
+      const updated = await updateItem(id, patch);
+      setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+      flash("Modifications enregistrées.");
+      void refreshOverview();
+      void refreshTodayAgenda();
+      return true;
+    } catch (e) {
+      if (e instanceof UnauthorizedError) { fail(e, ""); return false; }
+      flash(e instanceof ApiError ? e.message : "La modification n'a pas été enregistrée.", "err");
+      return false;
+    }
+  }, [flash, refreshOverview, refreshTodayAgenda, fail]);
 
   /* --- Refresh items --- */
   const refreshItems = useCallback(async () => {
@@ -181,8 +238,9 @@ export function BriefApp() {
       }
       setSent(await fetchItems());
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch { /* non bloquant */ }
-  }, [flash, refreshOverview]);
+  }, [flash, refreshOverview, refreshTodayAgenda]);
 
   /* --- Projects --- */
   const loadProjects = useCallback(async (opts: { silent?: boolean } = {}) => {
@@ -217,6 +275,11 @@ export function BriefApp() {
   }, [fail, loadProjects]);
 
   useEffect(() => { structureRef.current = (text: string) => void structure(text); }, [structure]);
+
+  /* --- Édition d'un brouillon avant envoi (type, date/heure) --- */
+  const updateDraft = useCallback((id: string, patch: Partial<DraftItem>) => {
+    setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  }, []);
 
   /* --- Transcription --- */
   const onRecorded = useCallback(async (rec: Recording) => {
@@ -311,7 +374,7 @@ export function BriefApp() {
   const activeItems = sent.filter((t) => t.status !== "idea" && t.status !== "archived");
   const ideaItems = sent.filter((t) => t.status === "idea");
   const selectedTask = selectedTaskId ? sent.find((t) => t.id === selectedTaskId) ?? null : null;
-  const loading = overviewLoading && sent.length === 0;
+  const loading = (overviewLoading && sent.length === 0) || !todayAgendaLoaded;
 
   /* --- Render --- */
   if (!hydrated) {
@@ -343,11 +406,13 @@ export function BriefApp() {
         {screen === "home" && (
           <HomeScreen
             items={activeItems}
+            todayAgenda={todayAgenda}
+            ideaCount={ideaItems.length}
             projects={projects}
             overview={overview}
             loading={loading}
             onToggleDone={(id) => void toggleDone(id)}
-            onOpenTask={(id) => { setSelectedTaskId(id); setScreen("task"); }}
+            onOpenTask={openTask}
             onOpenAgenda={() => setScreen("agenda")}
             onOpenIdeas={() => setScreen("ideas")}
             onOpenAccount={() => setAccountOpen(true)}
@@ -360,18 +425,19 @@ export function BriefApp() {
           <TaskDetailScreen
             item={selectedTask}
             projects={projects}
-            onBack={() => { setSelectedTaskId(null); setScreen("home"); }}
+            onBack={() => { setSelectedTaskId(null); setScreen(returnScreen); }}
             onDone={(id) => void toggleDone(id)}
             onPostpone={(id) => void postponeItem(id)}
             onDelete={(id) => void removeItem(id)}
             onOpenSibling={(id) => setSelectedTaskId(id)}
+            onSave={saveItemEdit}
           />
         )}
 
         {screen === "agenda" && (
           <AgendaScreen
             onBack={() => setScreen("home")}
-            onOpenTask={(id) => { setSelectedTaskId(id); setScreen("task"); }}
+            onOpenTask={openTask}
             onUnauthorized={() => { clearPin(); setUnlocked(false); }}
           />
         )}
@@ -412,7 +478,7 @@ export function BriefApp() {
           <SearchScreen
             items={sent}
             projects={projects}
-            onOpenItem={(id) => { setSelectedTaskId(id); setScreen("task"); }}
+            onOpenItem={openTask}
             onVoiceSearch={() => {/* TODO: voice search */}}
             onBack={() => setScreen("home")}
             onOpenAccount={() => setAccountOpen(true)}
@@ -443,6 +509,7 @@ export function BriefApp() {
           onStartListen={toggleMic}
           onStopListen={() => recorder.stop()}
           onSubmitText={handleSubmitText}
+          onUpdateDraft={updateDraft}
           onConfirm={() => void send()}
           onReplay={() => { setCaptureStage("idle"); setDrafts([]); }}
           onClose={closeCapture}

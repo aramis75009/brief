@@ -1,7 +1,8 @@
+import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
 import { requirePin } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
-import { deleteItem, patchItem, readProjects } from "@/lib/store";
+import { deleteItem, patchItem, readItems, readProjects } from "@/lib/store";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
 
 /**
@@ -21,7 +22,7 @@ import type { ItemKind, Item, Priority, Project } from "@/lib/types";
  * Une date illisible devient « pas d'échéance », une priorité inconnue devient 4,
  * un projet inconnu bascule sur le repli : jamais de données bricolées.
  */
-function sanitizePatch(
+export function sanitizePatch(
   input: unknown,
   knownProjects: Set<string>,
   fallback: string,
@@ -35,6 +36,14 @@ function sanitizePatch(
   // inatteignable et `PATCH {"title":"   "}` répondrait 200 sans rien changer.
   if (typeof v.title === "string") out.title = v.title.trim();
   if (v.kind === "event" || v.kind === "task") out.kind = v.kind as ItemKind;
+  // Le type "idée" est un statut, pas un `kind` — voir `itemType()`. Sans
+  // cette branche, `updateItem(id, { status: "idea" })` (bouton « Convertir
+  // en tâche »/« Archiver » de l'écran Idées) était silencieusement vidé par
+  // ce sanitizer : la conversion ne persistait jamais côté serveur.
+  if (v.status === "active" || v.status === "idea" || v.status === "archived") {
+    out.status = v.status;
+  }
+  if (typeof v.notes === "string") out.notes = v.notes;
   if (typeof v.projectId === "string") {
     out.projectId = knownProjects.has(v.projectId) ? v.projectId : fallback;
   }
@@ -162,6 +171,18 @@ export async function DELETE(
   }
 
   try {
+    // Un item ADOPTÉ (`externalUid` — posé directement dans l'app Calendrier,
+    // décision Aramis du 2026-08-19) garde son événement source sur iCloud
+    // même après suppression côté Brief. Sans mémoire de cette suppression,
+    // le prochain passage CalDAV ne voit qu'un événement sans item Brief —
+    // indiscernable d'un événement jamais adopté — et RECRÉE l'item avec le
+    // même id déterministe. Lu AVANT `deleteItem` : après, l'item n'existe
+    // plus nulle part pour retrouver son `externalUid`.
+    const before = (await readItems()).find((i) => i.id === id);
+    if (before?.externalUid) {
+      await recordDeletedExternalUid(before.externalUid);
+    }
+
     const deleted = await deleteItem(id);
     if (!deleted) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });

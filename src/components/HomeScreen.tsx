@@ -26,12 +26,25 @@ import {
   TaskCheckIcon,
 } from "./icons";
 import { skinFor, shapeFor } from "@/lib/projects";
-import { compareByDue, isDueToday } from "@/lib/due";
+import { compareByDue } from "@/lib/due";
 import { TIMEZONE } from "@/lib/zoned";
+import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Overview, Project } from "@/lib/types";
 
 interface HomeScreenProps {
   items: Item[];
+  /**
+   * Rendez-vous/tâches d'AUJOURD'HUI, tels que rendus par `GET /api/agenda`
+   * (`buildDayAgenda`) — la MÊME fusion items+CalDAV que l'onglet Rendez-vous.
+   * L'accueil ne recalcule plus indépendamment « ce qui est prévu aujourd'hui » :
+   * un rendez-vous récurrent étendu par le calendrier, ou un événement adopté
+   * pas encore réécrit avec un `due` d'aujourd'hui, était invisible ici alors
+   * qu'il apparaissait déjà dans l'onglet Rendez-vous — deux sources
+   * concurrentes pour le même compteur.
+   */
+  todayAgenda: AgendaItem[];
+  /** Nombre d'idées à trier — même liste que l'écran Idées, jamais recalculé ici. */
+  ideaCount: number;
   projects: Project[];
   overview: Overview | null;
   loading: boolean;
@@ -301,11 +314,107 @@ function TodayRow({
 }
 
 /* ------------------------------------------------------------------ *
+ * Ligne minimale pour une entrée d'agenda sans item Brief correspondant
+ * (événement posé dans Calendrier, pas encore adopté — fenêtre ~15 min).
+ * Même principe que `EventRow` non cliquable d'`AgendaScreen`.
+ * ------------------------------------------------------------------ */
+
+function TodayAgendaFallbackRow({ entry }: { entry: AgendaItem }) {
+  const time = useMemo(() => {
+    if (entry.allDay) return "journée";
+    const d = new Date(entry.due);
+    if (Number.isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: TIMEZONE,
+    }).format(d);
+  }, [entry.due, entry.allDay]);
+
+  return (
+    <div
+      className="flex w-full items-center gap-3"
+      style={{ padding: "12px 14px" }}
+    >
+      <span
+        style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 99, border: `2px dashed ${C.hairline18}` }}
+      />
+      <span className="min-w-0 flex-1 font-semibold tracking-[-0.01em]" style={{ fontSize: 15, lineHeight: 1.3, color: C.ink }}>
+        {entry.title}
+      </span>
+      {time && (
+        <span className="shrink-0 font-bold tnum" style={{ fontSize: 13, lineHeight: 1, color: C.ink }}>
+          {time}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Un sous-groupe de la section « Aujourd'hui » (Tâches ou Rendez-vous),
+ * résolu depuis `todayAgenda` (AgendaItem[]) — jamais un second filtre
+ * indépendant de `items`.
+ * ------------------------------------------------------------------ */
+
+function TodayAgendaGroup({
+  title,
+  entries,
+  itemById,
+  projectMap,
+  onToggle,
+  onOpen,
+}: {
+  title: string;
+  entries: AgendaItem[];
+  itemById: Map<string, Item>;
+  projectMap: Map<string, Project>;
+  onToggle: (id: string) => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col" style={{ gap: 8 }}>
+      <span
+        className="font-mono"
+        style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: C.inkMuted }}
+      >
+        {title.toUpperCase()}
+      </span>
+      <div
+        className="overflow-hidden"
+        style={{
+          background: C.surface,
+          borderRadius: 20,
+          padding: "6px 4px",
+          border: `1px solid ${C.hairline}`,
+        }}
+      >
+        {entries.map((entry, i) => {
+          const item = entry.briefItemId ? itemById.get(entry.briefItemId) : undefined;
+          return (
+            <div key={entry.id}>
+              {item ? (
+                <TodayRow item={item} project={projectMap.get(item.projectId)} onToggle={onToggle} onOpen={onOpen} />
+              ) : (
+                <TodayAgendaFallbackRow entry={entry} />
+              )}
+              {i < entries.length - 1 && <div style={{ height: 1, background: C.hairline, margin: "0 14px" }} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Composant principal.
  * ------------------------------------------------------------------ */
 
 export function HomeScreen({
   items,
+  todayAgenda,
+  ideaCount,
   projects,
   overview,
   loading,
@@ -327,21 +436,34 @@ export function HomeScreen({
     }).format(new Date());
   }, []);
 
-  // Items du jour : ce dont l'échéance tombe aujourd'hui dans le fuseau Paris,
-  // indépendamment de l'heure. Triés par heure croissante (9:00 avant 18:00).
-  const todayItems = useMemo(() => {
-    return items
-      .filter((it) => it.status !== "idea" && it.status !== "archived" && isDueToday(it.due))
-      .sort(compareByDue);
+  // Index des items Brief par id, pour résoudre chaque entrée d'agenda vers
+  // l'Item complet (coche, sous-tâches, projet) quand il en existe un.
+  const itemById = useMemo(() => {
+    const m = new Map<string, Item>();
+    for (const it of items) m.set(it.id, it);
+    return m;
   }, [items]);
 
-  // Comptages pour les tuiles : aujourd'hui pour tâches et RDV, total pour idées.
-  const counts = useMemo(() => {
-    const ideas = items.filter((it) => it.status === "idea").length;
-    const todayTasks = todayItems.filter((it) => it.kind === "task").length;
-    const todayEvents = todayItems.filter((it) => it.kind === "event").length;
-    return { tasks: todayTasks, events: todayEvents, ideas };
-  }, [items, todayItems]);
+  // Aujourd'hui, séparé en deux : Tâches et Rendez-vous — la MÊME source que
+  // l'onglet Rendez-vous (`todayAgenda`, voir la prop). "external" (événement
+  // calendrier pas encore adopté en item Brief) compte comme un rendez-vous :
+  // c'en est déjà un pour l'utilisateur, l'adoption suit dans les ~15 min.
+  const todayTaskAgenda = useMemo(
+    () => todayAgenda.filter((e) => e.kind === "task").sort(compareByDue),
+    [todayAgenda],
+  );
+  const todayEventAgenda = useMemo(
+    () => todayAgenda.filter((e) => e.kind !== "task").sort(compareByDue),
+    [todayAgenda],
+  );
+
+  // Comptages pour les tuiles : aujourd'hui pour tâches et RDV (agenda),
+  // total pour idées (`ideaCount`, calculé depuis la même liste `sent` que
+  // l'écran Idées — jamais un second calcul indépendant).
+  const counts = useMemo(
+    () => ({ tasks: todayTaskAgenda.length, events: todayEventAgenda.length, ideas: ideaCount }),
+    [todayTaskAgenda, todayEventAgenda, ideaCount],
+  );
 
   // Index des projets par id.
   const projectMap = useMemo(() => {
@@ -465,10 +587,10 @@ export function HomeScreen({
           </span>
         </div>
 
-        {/* Contenu : loading → skeleton, empty → EmptyState, sinon liste */}
+        {/* Contenu : loading → skeleton, empty → EmptyState, sinon deux groupes */}
         {loading ? (
           <SkeletonList count={3} />
-        ) : todayItems.length === 0 ? (
+        ) : todayTaskAgenda.length === 0 && todayEventAgenda.length === 0 ? (
           <EmptyState
             icon={<IdeaIcon size={22} />}
             title="Journée libre"
@@ -477,29 +599,28 @@ export function HomeScreen({
             onAction={onCapture}
           />
         ) : (
-          <div
-            className="overflow-hidden"
-            style={{
-              background: C.surface,
-              borderRadius: 20,
-              padding: "6px 4px",
-              border: `1px solid ${C.hairline}`,
-            }}
-          >
-            {todayItems.map((item, i) => (
-              <div key={item.id}>
-                <TodayRow
-                  item={item}
-                  project={projectMap.get(item.projectId)}
-                  onToggle={onToggleDone}
-                  onOpen={onOpenTask}
-                />
-                {i < todayItems.length - 1 && (
-                  <div style={{ height: 1, background: C.hairline, margin: "0 14px" }} />
-                )}
-              </div>
-            ))}
-          </div>
+          <>
+            {todayTaskAgenda.length > 0 && (
+              <TodayAgendaGroup
+                title="Tâches"
+                entries={todayTaskAgenda}
+                itemById={itemById}
+                projectMap={projectMap}
+                onToggle={onToggleDone}
+                onOpen={onOpenTask}
+              />
+            )}
+            {todayEventAgenda.length > 0 && (
+              <TodayAgendaGroup
+                title="Rendez-vous"
+                entries={todayEventAgenda}
+                itemById={itemById}
+                projectMap={projectMap}
+                onToggle={onToggleDone}
+                onOpen={onOpenTask}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

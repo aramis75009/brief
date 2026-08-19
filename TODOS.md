@@ -157,18 +157,6 @@ raison nouvelle.
 
 ## P2 — Prévu, à faire plus tard
 
-### Tuile « Rendez-vous » de l'accueil ne compte pas les événements externes/adoptés
-- **Quoi :** `HomeScreen.tsx` compte `items.filter(kind==="event")` — les
-  événements posés directement dans Calendrier (adoptés le 19/08, décision
-  DECISIONS.md) ne sont comptés que s'ils tombent dans `items` avec `due`
-  aujourd'hui, ce qui marche pour un item adopté (il vit dans `items.json`
-  comme les autres) mais pas pour un événement `brief-*` récurrent étendu
-  seulement via l'instantané agenda (`src/lib/agenda.ts`) sur un jour qui
-  n'est pas son `due` courant.
-- **Pourquoi ce n'est pas fait :** périmètre de la session du 19/08 était la
-  vue Rendez-vous elle-même, pas la tuile d'accueil.
-- **Effort :** S (CC) · **Priorité :** P2
-
 ### Comprendre le mécanisme exact de la dérive DTSTART du 2026-08-19
 - **Quoi :** l'item récurrent « Aller courir » a vu son DTSTART calendrier
   passer du mercredi 19 au samedi 22 en moins de 30h après sa création, alors

@@ -748,15 +748,21 @@ export type ExternalSyncAction =
  *     Brief doit le supprimer explicitement pour que la coche se voie dans
  *     Calendrier.
  *   - item adopté TERMINÉ, événement déjà absent → `noop` (déjà convergé).
+ *   - AUCUN item (jamais adopté OU supprimé côté Brief), événement présent,
+ *     mais son UID est tombstoné (`isTombstoned`) → `delete-remote` au lieu
+ *     de `create` : Brief vient de supprimer cet item, l'événement source
+ *     n'a pas encore été retiré du calendrier, il ne doit PAS être recréé.
  */
 export function decideExternalSync(
   existing: Item | undefined,
   remote: RemoteEvent | undefined,
   calendarName: string,
   projectId: string,
+  isTombstoned = false,
 ): ExternalSyncAction {
   if (!existing) {
     if (!remote?.ics) return { action: "noop" };
+    if (isTombstoned) return { action: "delete-remote" };
     const fields = parseRemoteEvent(remote.ics);
     if (!fields.dtstart || !fields.summary) return { action: "noop" };
     return {
@@ -801,21 +807,52 @@ export function decideExternalSync(
 
 /* --- Garde-fou ------------------------------------------------------------ */
 
-async function readLastSync(): Promise<number> {
+type SyncState = { lastSyncAt: number; deletedExternalUids: string[] };
+
+/**
+ * État persistant du sync, dans le même fichier que le garde-fou de fréquence
+ * (`caldav-last-sync.json`) — pas de fichier supplémentaire pour si peu.
+ *
+ * `deletedExternalUids` : les UID d'événements calendrier dont l'item Brief
+ * ADOPTÉ correspondant a été supprimé côté Brief (`DELETE /api/items/[id]`).
+ * Sans cette mémoire, `decideExternalSync` ne voit qu'un événement calendrier
+ * sans item Brief — indiscernable d'un événement JAMAIS adopté — et le
+ * recrée à l'identique (même `id` déterministe `caldav-<uid>`) au passage
+ * suivant. Un item supprimé dans Brief ne doit jamais revenir tout seul.
+ */
+async function readSyncState(): Promise<SyncState> {
   try {
     const raw = await readFile(join(DATA_DIR, LAST_SYNC_FILE), "utf8");
-    return Number(JSON.parse(raw).lastSyncAt ?? 0);
+    const parsed = JSON.parse(raw) as { lastSyncAt?: unknown; deletedExternalUids?: unknown };
+    return {
+      lastSyncAt: Number(parsed.lastSyncAt ?? 0),
+      deletedExternalUids: Array.isArray(parsed.deletedExternalUids)
+        ? parsed.deletedExternalUids.filter((u): u is string => typeof u === "string")
+        : [],
+    };
   } catch {
-    return 0;
+    return { lastSyncAt: 0, deletedExternalUids: [] };
   }
 }
 
-async function writeLastSync(): Promise<void> {
+async function writeSyncState(state: SyncState): Promise<void> {
   const path = join(DATA_DIR, LAST_SYNC_FILE);
   const tmp = `${path}.${process.pid}.tmp`;
   await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(tmp, JSON.stringify({ lastSyncAt: Date.now() }), "utf8");
+  await writeFile(tmp, JSON.stringify(state), "utf8");
   await rename(tmp, path);
+}
+
+/**
+ * Mémorise qu'un item ADOPTÉ vient d'être supprimé côté Brief, pour que le
+ * prochain passage supprime l'événement distant au lieu de le recréer.
+ * Appelé synchroneusement par `DELETE /api/items/[id]` — avant même le
+ * prochain passage de sync, pas seulement pendant.
+ */
+export async function recordDeletedExternalUid(uid: string): Promise<void> {
+  const state = await readSyncState();
+  if (state.deletedExternalUids.includes(uid)) return;
+  await writeSyncState({ ...state, deletedExternalUids: [...state.deletedExternalUids, uid] });
 }
 
 /**
@@ -865,7 +902,7 @@ async function deleteEvent(calendarUrl: string, href: string): Promise<void> {
  * distinguer « rien à faire » de « cassé depuis trois jours ».
  */
 export async function runCalDavSync(): Promise<CalDavSyncRun> {
-  const lastSync = await readLastSync();
+  const lastSync = (await readSyncState()).lastSyncAt;
   const elapsedMs = Date.now() - lastSync;
 
   if (lastSync > 0 && elapsedMs < SYNC_INTERVAL_MS) {
@@ -1082,10 +1119,17 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     items.filter((it): it is Item & { externalUid: string } => !!it.externalUid).map((it) => [it.externalUid, it]),
   );
 
+  // UID d'items adoptés supprimés côté Brief depuis le dernier passage (voir
+  // `recordDeletedExternalUid`, appelé par `DELETE /api/items/[id]`) : tant
+  // que le calendrier n'a pas confirmé la disparition, `decideExternalSync`
+  // doit supprimer l'événement distant plutôt que recréer l'item.
+  const syncState = await readSyncState();
+  const deletedExternalUids = new Set(syncState.deletedExternalUids);
+
   for (const [uid, { remote, calendarName, calendarUrl }] of externalByUid) {
     const existingItem = adoptedByUid.get(uid);
     const projectId = projectForCalendar(calendarName) ?? "perso";
-    const decision = decideExternalSync(existingItem, remote, calendarName, projectId);
+    const decision = decideExternalSync(existingItem, remote, calendarName, projectId, deletedExternalUids.has(uid));
 
     try {
       if (decision.action === "create") {
@@ -1103,6 +1147,11 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       failures.push({ uid, error: e instanceof Error ? e.message : "adoption externe échouée" });
     }
   }
+
+  // Purge des tombstones dont le calendrier a confirmé la disparition : un
+  // UID absent de `externalByUid` cette fois-ci n'a plus besoin d'être
+  // mémorisé — la boucle ci-dessus ne le reverra plus jamais.
+  const stillPresentDeletedUids = syncState.deletedExternalUids.filter((uid) => externalByUid.has(uid));
 
   // Items adoptés actifs dont l'événement est absent de TOUS les calendriers
   // balayés cette fois-ci (donc pas seulement d'un calendrier lu en échec) :
@@ -1126,9 +1175,10 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   await writeAgendaSnapshot(snapshotEvents);
 
   // On ne marque le passage réussi qu'une fois TOUT terminé : un échec réseau
-  // laisse le timestamp ancien et le passage suivant réessaie.
+  // laisse le timestamp ancien et le passage suivant réessaie — et laisse
+  // aussi les tombstones intacts, pour la même raison.
   if (failures.length === 0) {
-    await writeLastSync();
+    await writeSyncState({ lastSyncAt: Date.now(), deletedExternalUids: stillPresentDeletedUids });
   }
 
   return {

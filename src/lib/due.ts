@@ -185,6 +185,31 @@ export function compareByDue(a: { due: string | null }, b: { due: string | null 
   return va - vb;
 }
 
+/**
+ * Aller-retour avec un `<input type="datetime-local">`, pour les formulaires
+ * d'édition (fiche, capture). Comme partout ailleurs, tout passe par
+ * `zoned.ts` — jamais `new Date(value)` sur une chaîne sans fuseau, qui
+ * lirait celui de la machine plutôt qu'Europe/Paris.
+ */
+
+/** ISO+offset → valeur "AAAA-MM-JJTHH:mm" pour préremplir le champ. `null`/illisible → chaîne vide. */
+export function isoToLocalInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const p = zonedParts(date);
+  return `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+/** Valeur "AAAA-MM-JJTHH:mm" (fuseau Europe/Paris) → ISO+offset. `null` si illisible ou incomplète. */
+export function localInputToIso(value: string): string | null {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m.map(Number);
+  if (!isRealCalendarDate(`${y}-${pad(mo)}-${pad(d)}`)) return null;
+  return toIsoWithOffset(zonedTime(y, mo, d, h, mi));
+}
+
 /** Rend une date absolue lisible en français, pour l'affichage standard. */
 export function formatDue(due: string | null, allDay: boolean): string {
   if (!due) return "Pas d'échéance";
