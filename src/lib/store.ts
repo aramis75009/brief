@@ -82,8 +82,32 @@ export async function writeProjects(projects: Project[]): Promise<void> {
 
 /* --- Items --------------------------------------------------------------- */
 
+/**
+ * Normalise les items lus depuis le disque, en mémoire, SANS réécrire le
+ * fichier (une donnée invalide ne doit pas être perdue tant que l'origine
+ * n'est pas réparée).
+ *
+ * Garde-fou du 2026-08-19 : un `due` illisible (ex. `20260820T140000`, DTSTART
+ * CalDAV flottant écrit tel quel) fait planter le rendu React (RangeError dans
+ * `formatToParts`, via `zonedParts`). Règle du projet : une date illisible
+ * devient « pas d'échéance » — jamais une date approximative.
+ */
+function normalizeItem(it: Item): Item {
+  if (typeof it.due === "string") {
+    const t = new Date(it.due).getTime();
+    if (!Number.isFinite(t)) {
+      console.warn(
+        `[store] date invalide neutralisée (due=${JSON.stringify(it.due)}) sur l'item ${it.id} — traitée comme sans échéance`,
+      );
+      return { ...it, due: null };
+    }
+  }
+  return it;
+}
+
 export async function readItems(): Promise<Item[]> {
-  return readJson<Item[]>("items.json", []);
+  const items = await readJson<Item[]>("items.json", []);
+  return items.map(normalizeItem);
 }
 
 /**

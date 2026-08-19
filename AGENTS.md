@@ -43,11 +43,19 @@ projets.
 | Client | PWA installée sur iPhone. |
 | Stack | Next.js 16 (App Router), React 19, Tailwind v4, Vitest. |
 
-### ⚠️ La production tourne sur `feat/task-completion`, pas sur `main`
+### ⚠️ La production tourne sur `feat/ui-redesign-claude`, pas sur `main`
 
-Le VPS (`/docker/brief`) est branché sur cette branche. `main` est en retard.
-Vérifie avant de supposer. C'est ce qui a fait perdre du temps à Hermes le
-2026-08-14.
+Le VPS (`/docker/brief`) est branché sur **`feat/ui-redesign-claude`** depuis
+le 2026-08-19. `main` est en retard ; l'ancienne branche
+`feat/task-completion` est obsolète. **Ne jamais supposer la branche de prod
+d'après sa mémoire** — elle a changé deux fois en une semaine. Vérifie avec
+`bash scripts/coord/status.sh`, qui lit la branche réelle du VPS.
+
+**Multi-agents** : ce projet est travaillé par Claude Code (Mac d'Aramis) et
+Hermes Agent (VPS) en parallèle. Avant de coder, lis
+[`docs/coordination.md`](docs/coordination.md) et applique le réflexe de
+synchronisation (fetch + status.sh + HANDOFF.md). Un agent = une branche à
+la fois ; GitHub est la vérité centrale.
 
 ---
 
@@ -80,6 +88,20 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
   dans tout le code. Ne pas en réintroduire une seconde sans conversion testée.
 - **Une date illisible devient « pas d'échéance », jamais une date approchée.**
   Un rappel absent se voit ; un rappel au mauvais moment ne se voit pas.
+- **Ne jamais écrire une chaîne de date non-parseable dans `due`.** Si une
+  conversion échoue, écrire `undefined` (pas d'échéance) plutôt qu'une chaîne
+  brute. Le 2026-08-19, un `due = "20260820T140000"` (DTSTART ICS flottant,
+  sans `Z` ni tirets, renvoyé brut par `remoteDueToItem()`) a fait planter
+  **toute l'app** dans tous les navigateurs : `new Date()` ne parse pas ce
+  format → Invalid Date → `Intl.DateTimeFormat.formatToParts()` → RangeError →
+  React ne montait plus. Fix en 3 couches : `remoteDueToItem()` normalise le
+  format flottant, `zonedParts()` ne lève plus jamais, `readItems()` normalise
+  à la lecture. Voir `docs/handoffs/2026-08-19-caldav-floating-dtstart.md`.
+- **Un crash JS client est invisible pour `curl`.** « Le serveur répond 200 »
+  ne prouve pas que l'app marche — le navigateur exécute le JS, curl non.
+  Quand un utilisateur dit « l'app ne s'ouvre plus » et que tout le réseau
+  passe, chercher une erreur runtime côté client (DevTools) ou une donnée
+  invalide dans `items.json`.
 - **`new Date("2026-02-31")` ne renvoie pas une date invalide** — JavaScript
   fait déborder le mois et rend le 3 mars. D'où `isRealCalendarDate()`.
 - **Aucun calcul de date ne passe par les méthodes locales de `Date`.** Ni

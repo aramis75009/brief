@@ -288,6 +288,11 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
     expect(remoteDueToItem("20260819T140000Z")).toBe("2026-08-19T14:00:00Z");
     expect(remoteDueToItem("20260819")).toBe("2026-08-19T09:00:00+02:00");
   });
+
+  it("convertit un DTSTART flottant (sans Z) en ISO avec l'heure de Paris — ne renvoie jamais une chaîne que new Date() ne sait pas lire", () => {
+    expect(remoteDueToItem("20260820T140000")).toBe("2026-08-20T14:00:00+02:00");
+    expect(remoteDueToItem("20260901T000000")).toBe("2026-09-01T00:00:00+02:00");
+  });
 });
 
 describe("decideSync — réconciliation Apple Calendar ↔ Brief", () => {

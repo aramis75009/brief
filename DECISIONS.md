@@ -14,6 +14,66 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-19 · Coordination multi-agents — GitHub est la vérité centrale
+
+**Décision.** Brief est désormais travaillé par **plusieurs agents en
+parallèle** : Claude Code (sur le Mac d'Aramis) et Hermes Agent (sur le VPS,
+copie `/opt/data/Projets/brief`). Règles :
+
+1. **GitHub (`aramis75009/brief`) est la vérité centrale.** Les copies du dépôt
+   (Mac, VPS Hermes, VPS prod `/docker/brief`) ne s'alignent QUE par
+   fetch/pull/push. Jamais de copie de fichiers entre dossiers.
+2. **Un agent = une branche de travail à la fois.** Pousser directement sur la
+   branche de prod en parallèle est interdit sans passation explicite dans
+   `HANDOFF.md`.
+3. **Avant toute session** : `git fetch origin --prune` + lire `HANDOFF.md` +
+   lancer `bash scripts/coord/status.sh` (compare les copies). Si la prod a
+   avancé, fast-forward avant de coder.
+4. **Avant tout push** : `bash scripts/coord/pre-push.sh` (vérifie branche de
+   prod, retard sur origin, HANDOFF.md présent).
+
+**Pourquoi.** Le 2026-08-19, un bug de cache PWA iOS (« This page couldn't
+load ») a été corrigé par Claude Code (commit `c8c175c`) **une minute après**
+qu'Hermes l'ait diagnostiqué — preuve que deux agents travaillaient en
+parallèle sans coordination. Aussi : `HERMES.md` et `AGENTS.md` disaient encore
+que la prod tourne sur `feat/task-completion` alors qu'elle est sur
+`feat/ui-redesign-claude` depuis le 19/08 — des docs périmées font travailler
+les agents sur la mauvaise branche.
+
+**Comment.** Fichiers livrés sur la branche `feat/agent-multi-coordination` :
+`docs/coordination.md`, `scripts/coord/status.sh`, `scripts/coord/pre-push.sh`,
+`HANDOFF.md` restauré à la racine, `AGENTS.md` corrigé.
+
+**Statut.** ✅ Fait (PR en attente de merge).
+
+---
+
+## 2026-08-19 · Une date invalide ne doit jamais faire planter l'app — normaliser à la source
+
+**Décision.** Toute date issue d'une source externe (CalDAV, API, saisie) doit
+être **normalisée en ISO avant stockage** dans `due`. Si une conversion échoue,
+écrire `undefined` (« pas d'échéance ») — jamais une chaîne brute non-parseable.
+En plus de la cause, deux garde-fous : `zonedParts()` ne lève plus jamais de
+RangeError (date invalide → valeur sentinelle), et `readItems()` normalise à la
+lecture (répare en mémoire sans réécrire le fichier).
+
+**Pourquoi.** Le 2026-08-19, un seul item (`it_msurvw97_6`, récurrence Frip &
+Trend) avec `due = "20260820T140000"` — un DTSTART ICS flottant (sans `Z` ni
+tirets) renvoyé brut par `remoteDueToItem()` — a fait planter **toute l'app**
+dans tous les navigateurs : `new Date()` ne parse pas ce format → Invalid Date
+→ `Intl.DateTimeFormat.formatToParts()` → RangeError → React ne montait plus.
+Le serveur répondait 200 partout (curl OK) : le crash était côté client,
+invisible pour les sondes réseau. Un rappel absent se voit ; un crash ne se
+voit pas.
+
+**Comment.** Commit `aacea8e` (merge `4a1ad33` dans la prod) : `caldav.ts`
+(`remoteDueToItem()` convertit `YYYYMMDDTHHMMSS` → ISO Europe/Paris), `zoned.ts`
+(garde-fou), `store.ts` (normalisation à la lecture). Tests : 128/128.
+
+**Statut.** ✅ Implémenté, déployé, vérifié en prod (0 item `due` non-ISO).
+
+---
+
 ## 2026-08-18 · Le cookie PIN est posé par le serveur (Set-Cookie), pas par JavaScript
 
 **Décision.** Le cookie persistant `brief_pin` est posé **côté serveur** par

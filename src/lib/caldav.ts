@@ -427,6 +427,15 @@ export function remoteDueToItem(dtstart: string): string {
   if (utc) {
     return `${utc[1]}-${utc[2]}-${utc[3]}T${utc[4]}:${utc[5]}:${utc[6]}Z`;
   }
+  // DTSTART « flottant » (sans Z) : heure LOCALE du calendrier, à traiter
+  // comme une heure de Paris — sinon `new Date()` reçoit une chaîne
+  // illisible et l'item entier fait planter le rendu (RangeError
+  // formatToParts, constaté en prod le 2026-08-19).
+  const floating = dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+  if (floating) {
+    const [, y, mo, d, h, mi, s] = floating.map(Number);
+    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}:${String(s).padStart(2, "0")}+02:00`;
+  }
   const day = dtstart.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (day) {
     return `${day[1]}-${day[2]}-${day[3]}T09:00:00+02:00`;
