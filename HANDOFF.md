@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | Hermes Agent |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `c0d0c23` (fix overrides, déployé) + `…` (suppression DESIGN.md) |
+| **Commits** | `c0d0c23` (fix overrides, déployé) + `95322c1` (suppression DESIGN.md) |
 | **Prod** | https://brief.srv1899780.hstgr.cloud — `brief-app-1 Healthy`, vérifiée saine post-déploiement |
 
 ## Goal — l'objectif

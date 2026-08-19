@@ -42,7 +42,7 @@ DESIGN.md supprimé le 20/08 » ajoutée ; `CLAUDE.md` : section « Système de
 design » réécrite sur la même base. Les handoffs passés (avant le 20/08) qui
 citent DESIGN.md restent des archives — ne pas les ressusciter.
 
-**Statut.** ✅ Fait — commit `…`, poussé le 2026-08-20.
+**Statut.** ✅ Fait — commit `95322c1`, poussé le 2026-08-20.
 
 ---
 
