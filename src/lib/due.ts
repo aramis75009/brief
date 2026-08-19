@@ -157,6 +157,34 @@ function done(date: Date, hasHour: boolean): { due: string; allDay: boolean } {
   return { due: toIsoWithOffset(date), allDay: !hasHour };
 }
 
+/**
+ * Vrai si `due` tombe le même jour calendaire que `now`, DANS `TIMEZONE` —
+ * quelle que soit l'heure. C'est la seule fonction que « Tâches aujourd'hui »
+ * doit appeler : comparer des `Date` directement (`toDateString()`, etc.) lit
+ * le fuseau de la machine, pas celui d'Europe/Paris (règle `zoned.ts`).
+ */
+export function isDueToday(due: string | null, now: Date = new Date()): boolean {
+  if (!due) return false;
+  const date = new Date(due);
+  if (Number.isNaN(date.getTime())) return false;
+  const a = zonedParts(date);
+  const b = zonedParts(now);
+  return a.y === b.y && a.m === b.m && a.d === b.d;
+}
+
+/**
+ * Compare deux items par échéance croissante (prochaine d'abord). Sans
+ * échéance — ou échéance illisible — toujours en dernier, dans leur ordre
+ * d'origine (`Array.prototype.sort` est stable).
+ */
+export function compareByDue(a: { due: string | null }, b: { due: string | null }): number {
+  const ta = a.due ? new Date(a.due).getTime() : NaN;
+  const tb = b.due ? new Date(b.due).getTime() : NaN;
+  const va = Number.isNaN(ta) ? Infinity : ta;
+  const vb = Number.isNaN(tb) ? Infinity : tb;
+  return va - vb;
+}
+
 /** Rend une date absolue lisible en français, pour l'affichage standard. */
 export function formatDue(due: string | null, allDay: boolean): string {
   if (!due) return "Pas d'échéance";

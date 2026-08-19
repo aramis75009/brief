@@ -6,6 +6,7 @@ import { SkeletonCard } from "./Skeleton";
 import { VoiceBadge } from "./VoiceBadge";
 import { AccountAvatar } from "./AccountAvatar";
 import { SearchSmallIcon, MicIcon, ChevronLeftIcon } from "./icons";
+import { compareByDue } from "@/lib/due";
 import type { Item, Project } from "@/lib/types";
 
 /**
@@ -42,23 +43,28 @@ export function SearchScreen({
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter((item) => {
-      // Filter by type
-      if (filter === "task" && item.kind !== "task") return false;
-      if (filter === "event" && item.kind !== "event") return false;
-      if (filter === "idea" && item.status !== "idea") return false;
-      if (filter === "dictated" && !item.audioOrigin) return false;
+    return items
+      .filter((item) => {
+        // Filter by type
+        if (filter === "task" && item.kind !== "task") return false;
+        if (filter === "event" && item.kind !== "event") return false;
+        if (filter === "idea" && item.status !== "idea") return false;
+        if (filter === "dictated" && !item.audioOrigin) return false;
 
-      // Empty query = show all (browsing mode)
-      if (!q) return true;
+        // Navigation libre (pas de recherche tapée) : les tâches déjà
+        // terminées n'ont rien à faire dans une liste qu'on parcourt pour
+        // voir ce qui reste à faire. Elles restent trouvables par leur nom —
+        // la recherche par texte, elle, cherche aussi dans l'historique.
+        if (!q) return !item.doneAt;
 
-      // Search in title, notes, audioOrigin
-      const title = item.title.toLowerCase();
-      const notes = (item.notes || "").toLowerCase();
-      const audio = item.audioOrigin;
-      const audioText = audio ? (audio.text + " " + audio.highlight).toLowerCase() : "";
-      return title.includes(q) || notes.includes(q) || audioText.includes(q);
-    });
+        // Search in title, notes, audioOrigin
+        const title = item.title.toLowerCase();
+        const notes = (item.notes || "").toLowerCase();
+        const audio = item.audioOrigin;
+        const audioText = audio ? (audio.text + " " + audio.highlight).toLowerCase() : "";
+        return title.includes(q) || notes.includes(q) || audioText.includes(q);
+      })
+      .sort(compareByDue);
   }, [items, query, filter]);
 
   const projectMap = useMemo(() => {
@@ -172,10 +178,14 @@ export function SearchScreen({
                   )}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                  <span className="truncate text-[15px] font-bold tracking-[-0.01em]">
+                  <span
+                    className="truncate text-[15px] font-bold tracking-[-0.01em]"
+                    style={item.doneAt ? { textDecoration: "line-through", color: "var(--color-ink-faint)" } : undefined}
+                  >
                     {highlightQuery(item.title, query)}
                   </span>
                   <span className="flex items-center gap-[7px] text-[12px] font-semibold text-ink-faint">
+                    {item.doneAt && "Terminé · "}
                     {item.audioOrigin && <VoiceBadge size="small" />}
                     {item.audioOrigin ? "Dictée" : proj?.name || "Sans projet"}
                     {item.due && ` · ${formatDateShort(item.due)}`}

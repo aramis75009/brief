@@ -31,7 +31,8 @@ async function handle(req: Request): Promise<Response> {
       console.log(
         `[caldav] calendar=${run.discoveredCalendar} desired=${run.desired} ` +
           `existing=${run.existing} put=${run.put} adopted=${run.adopted} ` +
-          `deleted=${run.deleted} failures=${run.failures.length} ms=${durationMs}`,
+          `deleted=${run.deleted} completedFromCalendar=${run.completedFromCalendar} ` +
+          `failures=${run.failures.length} ms=${durationMs}`,
       );
     }
     for (const f of run.failures) console.error(`[caldav] échec ${f.uid} : ${f.error}`);

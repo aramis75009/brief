@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from "./icons";
+import { compareByDue } from "@/lib/due";
 import { TIMEZONE, zonedParts, zonedTime, shiftDays } from "@/lib/zoned";
 import type { Item, Project } from "@/lib/types";
 
@@ -64,8 +65,12 @@ export function AgendaScreen({
         const d = new Date(item.due!);
         return d >= dayStart && d < dayEnd;
       });
-      const morning = dayItems.filter((item) => zonedParts(new Date(item.due!)).hour < 12);
-      const afternoon = dayItems.filter((item) => zonedParts(new Date(item.due!)).hour >= 12);
+      const morning = dayItems
+        .filter((item) => zonedParts(new Date(item.due!)).hour < 12)
+        .sort(compareByDue);
+      const afternoon = dayItems
+        .filter((item) => zonedParts(new Date(item.due!)).hour >= 12)
+        .sort(compareByDue);
       return {
         dayStart,
         label: new Intl.DateTimeFormat("fr-FR", {

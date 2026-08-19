@@ -89,6 +89,8 @@ export type CalDavSyncRun = {
   put: number;
   adopted: number;
   deleted: number;
+  /** Items marqués `doneAt` parce que leur événement a disparu du calendrier. */
+  completedFromCalendar: number;
   failures: { uid: string; error: string }[];
 };
 
@@ -470,6 +472,72 @@ export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<It
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+/* --- Réconciliation --------------------------------------------------------
+ *
+ * Ce que fait `runCalDavSync` pour CHAQUE item désiré (daté, non terminé) face
+ * à ce qui existe réellement dans son calendrier cible — extrait en fonction
+ * pure pour être testable sans réseau, comme `remoteDiffers`/`calendarPatch`.
+ * -------------------------------------------------------------------------- */
+
+export type SyncAction =
+  | { action: "create" }
+  | { action: "adopt"; patch: Partial<Item> }
+  | { action: "skip" }
+  | { action: "complete"; patch: Partial<Item> };
+
+/**
+ * Décide quoi faire pour un item désiré face à l'événement distant (ou son
+ * absence). Trois cas :
+ *
+ *   1. AUCUN événement distant, mais `caldavSyncedDue` est posé (Brief l'a
+ *      déjà écrit avec succès à un passage précédent) → Aramis l'a supprimé
+ *      dans l'app Calendrier. On ne le RECRÉE PAS — ce serait annuler sa
+ *      suppression à chaque passage — on l'interprète comme « fait » côté
+ *      Brief. Une série récurrente supprimée entièrement perd sa récurrence
+ *      (elle ne « avance » pas, elle s'arrête), un item simple devient
+ *      simplement terminé — même sémantique que `completionPatch`.
+ *
+ *   2. AUCUN événement distant, jamais synchronisé (`caldavSyncedDue` absent)
+ *      → première écriture, `create`.
+ *
+ *   3. Événement distant présent : s'il diffère de ce que Brief écrirait,
+ *      Aramis l'a édité à la main → `adopt` (ou `create` pour RÉPARER un
+ *      distant qui diffère sans qu'aucun champ ne soit adoptable, ex. un
+ *      résumé distant vide). S'il est identique, rien à faire → `skip` — sans
+ *      ce cas, chaque passage réécrivait TOUS les événements même sans
+ *      changement (`DTSTAMP` renouvelé à chaque PUT), ce qui n'est pas
+ *      l'idempotence promise par le module.
+ */
+export function decideSync(item: Item, remote: RemoteEvent | undefined): SyncAction {
+  if (!remote) {
+    if (item.caldavSyncedDue) {
+      const now = new Date().toISOString();
+      return {
+        action: "complete",
+        patch: item.rrule ? { doneAt: now, rrule: null } : { doneAt: now },
+      };
+    }
+    return { action: "create" };
+  }
+
+  if (!remote.ics) {
+    // Trouvé par la requête mais sans `calendar-data` exploitable (réponse
+    // CalDAV partielle) : impossible de savoir si Aramis l'a édité ou si
+    // c'est un accroc de lecture. On réécrit, comme avant ce module — jamais
+    // de `doneAt` posé sur un doute.
+    return { action: "create" };
+  }
+
+  const fields = parseRemoteEvent(remote.ics);
+  if (remoteDiffers(item, fields)) {
+    const patch = calendarPatch(item, fields);
+    if (patch) return { action: "adopt", patch };
+    return { action: "create" };
+  }
+
+  return { action: "skip" };
+}
+
 /* --- Garde-fou ------------------------------------------------------------ */
 
 async function readLastSync(): Promise<number> {
@@ -527,6 +595,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       put: 0,
       adopted: 0,
       deleted: 0,
+      completedFromCalendar: 0,
       failures: [],
     };
   }
@@ -566,6 +635,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   let adopted = 0;
   let deleted = 0;
   let existing = 0;
+  let completedFromCalendar = 0;
   const touched: string[] = [];
 
   // On balaie TOUS les calendriers découverts (pas seulement ceux qui ont
@@ -633,27 +703,41 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     const remotes = remoteByCal.get(calName);
     for (const it of calItems) {
       const remote = remotes?.get(`${UID_PREFIX}${it.id}`);
-      if (remote?.ics) {
-        const fields = parseRemoteEvent(remote.ics);
-        if (remoteDiffers(it, fields)) {
-          const patch = calendarPatch(it, fields);
-          if (patch) {
-            try {
-              const updated = await patchItem(it.id, patch);
-              if (updated) {
-                adopted += 1;
-                continue; // le calendrier est déjà la vérité : rien à réécrire
-              }
-            } catch (e) {
-              failures.push({
-                uid: `${UID_PREFIX}${it.id}`,
-                error: e instanceof Error ? e.message : "adoption échouée",
-              });
-              continue;
-            }
+      const decision = decideSync(it, remote);
+
+      if (decision.action === "skip") continue;
+
+      if (decision.action === "complete") {
+        // Supprimé par Aramis dans l'app Calendrier : on l'adopte comme
+        // terminé plutôt que de le recréer au prochain passage.
+        try {
+          const updated = await patchItem(it.id, decision.patch);
+          if (updated) completedFromCalendar += 1;
+        } catch (e) {
+          failures.push({
+            uid: `${UID_PREFIX}${it.id}`,
+            error: e instanceof Error ? e.message : "complétion échouée",
+          });
+        }
+        continue;
+      }
+
+      if (decision.action === "adopt") {
+        try {
+          const updated = await patchItem(it.id, decision.patch);
+          if (updated) {
+            adopted += 1;
+            continue; // le calendrier est déjà la vérité : rien à réécrire
           }
+        } catch (e) {
+          failures.push({
+            uid: `${UID_PREFIX}${it.id}`,
+            error: e instanceof Error ? e.message : "adoption échouée",
+          });
+          continue;
         }
       }
+
       try {
         await putEvent(calUrl, it);
         put += 1;
@@ -685,6 +769,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     put,
     adopted,
     deleted,
+    completedFromCalendar,
     failures,
   };
 }

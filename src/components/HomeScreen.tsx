@@ -26,7 +26,8 @@ import {
   TaskCheckIcon,
 } from "./icons";
 import { skinFor, shapeFor } from "@/lib/projects";
-import { TIMEZONE, zonedParts } from "@/lib/zoned";
+import { compareByDue, isDueToday } from "@/lib/due";
+import { TIMEZONE } from "@/lib/zoned";
 import type { Item, Overview, Project } from "@/lib/types";
 
 interface HomeScreenProps {
@@ -326,40 +327,17 @@ export function HomeScreen({
     }).format(new Date());
   }, []);
 
-  // Items du jour : ce dont l'échéance tombe aujourd'hui dans le fuseau Paris.
-  // Triés par heure croissante (9:00 avant 14:30 avant 18:00).
+  // Items du jour : ce dont l'échéance tombe aujourd'hui dans le fuseau Paris,
+  // indépendamment de l'heure. Triés par heure croissante (9:00 avant 18:00).
   const todayItems = useMemo(() => {
-    const nowParts = zonedParts(new Date());
     return items
-      .filter((it) => {
-        if (it.status === "idea" || it.status === "archived") return false;
-        if (!it.due) return false;
-        const parts = zonedParts(new Date(it.due));
-        return parts.y === nowParts.y && parts.m === nowParts.m && parts.d === nowParts.d;
-      })
-      .sort((a, b) => {
-        const ta = a.due ? new Date(a.due).getTime() : Infinity;
-        const tb = b.due ? new Date(b.due).getTime() : Infinity;
-        return ta - tb;
-      });
+      .filter((it) => it.status !== "idea" && it.status !== "archived" && isDueToday(it.due))
+      .sort(compareByDue);
   }, [items]);
 
   // Comptages pour les tuiles : aujourd'hui pour tâches et RDV, total pour idées.
   const counts = useMemo(() => {
-    let tasks = 0;
-    let events = 0;
-    let ideas = 0;
-    const nowParts = zonedParts(new Date());
-    for (const it of items) {
-      if (it.status === "idea") {
-        ideas++;
-        continue;
-      }
-      if (it.status === "archived") continue;
-      if (it.kind === "event") events++;
-      else tasks++;
-    }
-    // Pour les tuiles, on compte "aujourd'hui"
+    const ideas = items.filter((it) => it.status === "idea").length;
     const todayTasks = todayItems.filter((it) => it.kind === "task").length;
     const todayEvents = todayItems.filter((it) => it.kind === "event").length;
     return { tasks: todayTasks, events: todayEvents, ideas };

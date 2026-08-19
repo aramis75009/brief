@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildEventIcs, calendarForProject } from "./caldav";
 import {
   calendarPatch,
+  decideSync,
   parseRemoteEvent,
   remoteDiffers,
   remoteDueToItem,
   unescapeText,
 } from "./caldav";
+import type { RemoteEvent } from "./caldav";
 import type { Item } from "./types";
 
 /**
@@ -285,5 +287,86 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
     expect(unescapeText("A\\, B \\; C \\n D")).toBe("A, B ; C \n D");
     expect(remoteDueToItem("20260819T140000Z")).toBe("2026-08-19T14:00:00Z");
     expect(remoteDueToItem("20260819")).toBe("2026-08-19T09:00:00+02:00");
+  });
+});
+
+describe("decideSync — réconciliation Apple Calendar ↔ Brief", () => {
+  function remote(overrides: Partial<RemoteEvent> = {}): RemoteEvent {
+    return { href: "/x.ics", uid: "brief-it_123", ics: "BEGIN:VEVENT\r\nEND:VEVENT", ...overrides };
+  }
+
+  it("n'écrase pas le calendrier quand rien n'a changé — sinon la synchro n'est jamais idempotente", () => {
+    // DTSTART allDay identique à ce que Brief écrirait pour ce même item.
+    const it2 = item(); // due 2026-08-18T09:00:00+02:00, allDay
+    const remoteIcs =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
+      "DTSTART;VALUE=DATE:20260818\r\nSUMMARY:Préparer la réunion\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(decideSync(it2, remote({ ics: remoteIcs }))).toEqual({ action: "skip" });
+  });
+
+  it("adopte une édition manuelle détectée dans le calendrier (horaire décalé)", () => {
+    const it2 = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
+    const remoteIcs =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
+      "DTSTART:20260818T180000Z\r\nDTEND:20260818T190000Z\r\nSUMMARY:Préparer la réunion\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    const decision = decideSync(it2, remote({ ics: remoteIcs }));
+    expect(decision.action).toBe("adopt");
+    if (decision.action === "adopt") {
+      expect(decision.patch).toEqual({
+        due: "2026-08-18T18:00:00Z",
+        allDay: false,
+        caldavSyncedDue: "20260818T180000Z",
+      });
+    }
+  });
+
+  it("le bug des tâches réapparues : un item absent du calendrier mais JAMAIS synchronisé n'est pas marqué terminé", () => {
+    // `caldavSyncedDue` absent = ce passage écrirait l'événement pour la
+    // première fois : son absence ne veut PAS dire qu'Aramis l'a supprimé.
+    const it2 = item({ caldavSyncedDue: undefined });
+    expect(decideSync(it2, undefined)).toEqual({ action: "create" });
+  });
+
+  it("un item disparu du calendrier après avoir été synchronisé est adopté comme terminé, pas recréé", () => {
+    const it2 = item({ caldavSyncedDue: "20260818" });
+    const decision = decideSync(it2, undefined);
+    expect(decision.action).toBe("complete");
+    if (decision.action === "complete") {
+      expect(decision.patch.doneAt).toBeTruthy();
+      expect(decision.patch.rrule).toBeUndefined();
+    }
+  });
+
+  it("une SÉRIE disparue entièrement du calendrier arrête la récurrence au lieu de la recréer", () => {
+    const it2 = item({
+      rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+      caldavSyncedDue: "20260819T160000Z",
+    });
+    const decision = decideSync(it2, undefined);
+    expect(decision.action).toBe("complete");
+    if (decision.action === "complete") {
+      expect(decision.patch.rrule).toBeNull();
+      expect(decision.patch.doneAt).toBeTruthy();
+    }
+  });
+
+  it("répare (recrée) un événement distant qui diffère sans rien avoir d'adoptable (résumé distant vide)", () => {
+    const it2 = item();
+    const remoteIcs =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
+      "DTSTART;VALUE=DATE:20260818\r\nEND:VEVENT\r\nEND:VCALENDAR"; // pas de SUMMARY
+    expect(decideSync(it2, remote({ ics: remoteIcs }))).toEqual({ action: "create" });
+  });
+
+  it("une deuxième synchro sans rien changer ne PUT plus rien (idempotence) : create puis skip", () => {
+    const it2 = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
+    // Passage 1 : rien côté calendrier → création.
+    expect(decideSync(it2, undefined).action).toBe("create");
+    // Passage 2 : l'événement écrit au passage 1 existe maintenant, identique.
+    const synced = { ...it2, caldavSyncedDue: "20260818T120000Z" };
+    const remoteIcs =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
+      "DTSTART:20260818T120000Z\r\nDTEND:20260818T130000Z\r\nSUMMARY:Préparer la réunion\r\nEND:VEVENT\r\nEND:VCALENDAR";
+    expect(decideSync(synced, remote({ ics: remoteIcs })).action).toBe("skip");
   });
 });
