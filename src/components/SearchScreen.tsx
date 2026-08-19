@@ -70,7 +70,7 @@ export function SearchScreen({
   return (
     <div className="flex-1 min-h-0 overflow-auto px-5 pb-2" style={{ animation: "fade .25s both" }}>
       {/* Header */}
-      <div className="mb-4.5 flex items-center justify-between">
+      <div className="safe-top flex items-center justify-between" style={{ paddingBottom: 18 }}>
         <button
           aria-label="Retour"
           onClick={onBack}
@@ -191,8 +191,10 @@ export function SearchScreen({
 }
 
 function highlightQuery(text: string, query: string): React.ReactNode {
-  const q = query.toLowerCase();
-  const parts = text.split(new RegExp(`(${escapeRegex(query)})`, "gi"));
+  const trimmed = query.trim();
+  if (!trimmed) return text;
+  const q = trimmed.toLowerCase();
+  const parts = text.split(new RegExp(`(${escapeRegex(trimmed)})`, "gi"));
   return parts.map((part, i) =>
     part.toLowerCase() === q ? (
       <span key={i} className="rounded bg-idea-100 px-[3px]">{part}</span>
