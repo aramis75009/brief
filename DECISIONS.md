@@ -46,7 +46,7 @@ Rendez-vous), `pendingReminders`/`payloadFor`/avancement des séries
 séries part désormais de `seriesAnchor` (l'ancre stable), pas de `due` qui
 peut être décalé par un override.
 
-**Statut.** ✅ Fait — commit `…`, déployé en prod le 2026-08-20.
+**Statut.** ✅ Fait — commit `c0d0c23`, déployé en prod le 2026-08-20 (vérifié : overrides adoptés dans items.json, ICS iCloud intacts).
 
 ---
 

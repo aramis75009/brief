@@ -11,94 +11,107 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-19 (fin de soirée) · Deux correctifs d'affichage + terrain préparé
+# Passation — 2026-08-20 (nuit) · Occurrences décalées adoptées (RECURRENCE-ID) + terrain préparé
 
 | | |
 |---|---|
-| **Agent** | Claude Code (Sonnet 5) |
+| **Agent** | Hermes Agent |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `63031b1`, `2787383` — tous deux déployés |
+| **Commits** | `c0d0c23` — déployé |
 | **Prod** | https://brief.srv1899780.hstgr.cloud — `brief-app-1 Healthy`, vérifiée saine post-déploiement |
 
 ## Goal — l'objectif
 
-Fin d'une longue soirée de corrections (voir `docs/handoffs/2026-08-19-calendrier-intouche-occurrences-fantomes.md`
-pour le gros du travail : types explicites, édition complète, accueil↔Rendez-vous
-unifiés, calendrier Apple intouché, fin des occurrences fantômes — tout est
-déployé et sain). Cette dernière tranche : deux petits correctifs d'affichage
-demandés dans la foulée, plus la préparation du terrain pour la prochaine
-session, quel que soit l'agent qui la mène.
-
-**Aramis, dans ses mots, en fin de session** : « on a bien avancé. Le
-calendrier maintenant, on n'est plus touché [par Brief]. Comme avant,
-l'application est viable, elle marche, etc. On a très très bien avancé. »
+Aramis a remonté un bug de synchro avec captures à l'appui (Brief vs vraie app
+Calendrier macOS, 20/08 00:29) : « quand je change quelque chose sur le
+calendrier cela se met bien à jour sur Brief, mais pour les tâches récurrentes
+comme aller à la salle de sport et la séance push ça ne marche pas sur Brief,
+pareil pour les post et repost ». Les événements ponctuels passaient, les
+séries récurrentes non. Ensuite : « prépare le terrain pour un autre agent
+comme toujours pour ne pas avoir de problème de synchro ».
 
 ## Current state — ce qui a été fait
 
-**1. Tuile « Rendez-vous » de l'accueil — texte incohérent avec « Tâches ».**
-`HomeScreen.tsx` affichait `"N · Calendrier Apple"` alors que la tuile
-Tâches affiche `"N aujourd'hui"`. Aramis : « change pour "3 aujourd'hui",
-comme pour le KPI tâche ». Fix d'une ligne, commit `63031b1`.
+**Cause racine, confirmée par lecture brute des ICS iCloud (pas supposée).**
+Quand Aramis décale UNE occurrence d'une série dans l'app Calendrier (Séance
+push jeudi 16h→17h, Poster 10 18h→19h, Reposter 10 17:30→18:30), iCloud écrit
+un **VEVENT override avec `RECURRENCE-ID`** dans le même ICS que le master.
+`parseRemoteEvent` ne lisait que le **premier VEVENT** (le master) → Brief
+voyait la série « identique » → `skip` → l'édition n'était jamais adoptée,
+l'agenda affichait l'ancienne heure, les rappels sonnaient à l'ancienne heure,
+et un PUT réécrivait l'ICS SANS les overrides (perte définitive). Preuve
+terrain : les 3 séries modifiées avaient un override dans leur ICS iCloud
+(`RECURRENCE-ID:20260820T140000Z` → DTSTART 15:00Z pour Séance push, etc.).
 
-**2. Écran Compte — âge de synchro calendrier en dur.** Le sous-titre
-« Calendrier Apple » sous le compte affichait `"Synchronisé il y a 4 min"` —
-un texte **littéralement figé dans le JSX**, jamais relié à une vraie
-donnée. Nouvelle route `GET /api/caldav-status` (PIN-gardée) qui expose
-`readSyncState().lastSyncAt` (maintenant exporté depuis `caldav.ts`) ; le
-sheet Compte le récupère à l'ouverture et calcule l'âge réel
-(`formatSyncAge`, dans `AccountSheet.tsx`). Commit `2787383`.
+**Fix complet (commit `c0d0c23`, 11 fichiers, 12 tests neufs) :**
 
-**3. Terrain préparé pour la prochaine session** (cette passation) :
-nouvelle entrée `TODOS.md`, en tête de la section P2, annoncée par Aramis
-comme le prochain chantier — **stocker les enregistrements vocaux bruts**,
-pas seulement leur transcription. Vérifié dans le code avant d'écrire
-l'entrée (pas supposé) : `src/app/api/transcribe/route.ts` reçoit l'audio
-et le transmet tel quel à Groq Whisper, **il n'est enregistré nulle part** —
-perdu dès que la réponse part. `Item.audioOrigin` ne garde que des
-métadonnées texte. Le bouton « Écouter l'extrait » existe déjà dans
-`TaskDetailScreen.tsx` (conçu pour ça) mais n'a aucun handler — rien à lire.
-**Prérequis explicite d'Aramis avant de s'y attaquer** : vérifier d'abord
-que l'enregistrement (`useRecorder.ts`) et la transcription
-(`/api/transcribe`) fonctionnent bien, avant d'ajouter le stockage
-par-dessus. Voir l'entrée complète dans `TODOS.md` pour les questions
-d'architecture à trancher (où stocker, rétention, câblage du bouton Play,
-confidentialité) — **c'est un sujet architectural, à passer par
-`superpowers:brainstorming` avant tout code**, pas un fix ponctuel.
+1. **`Item.overrides`** (`types.ts`) : `RECURRENCE-ID` → nouveau DTSTART (UTC
+   RFC 5545), adopté depuis le calendrier.
+2. **`parseRemoteEvent`** (`caldav.ts`) : découpe l'ICS en blocs VEVENT
+   (`splitVeEvents`), lit le master + tous les overrides.
+3. **Adoption** : `remoteDiffers`/`calendarPatch` comparent et adoptent les
+   overrides (sans toucher au master — pas de `due`/`seriesAnchor` dérivé) ;
+   `decideExternalSync` idem pour les événements adoptés.
+4. **Réécriture** : `buildEventIcs` réécrit un VEVENT override par occurrence
+   décalée (garde : seulement si `rrule` existe encore).
+5. **Affichage** : `buildDayAgenda` applique overrides + EXDATE par occurrence
+   (accueil ET Rendez-vous) ; `HomeScreen` affiche l'heure effective de
+   l'entrée agenda (`TodayRow` reçoit `due` de l'AgendaItem, plus `item.due`).
+6. **Rappels** : `pendingReminders`/`payloadFor` utilisent l'heure effective ;
+   l'avancement des séries part de `seriesAnchor` (l'ancre stable) au lieu de
+   `due` (qui peut être décalé par un override) et applique l'override à
+   l'occurrence suivante.
+7. **PATCH** : `sanitizePatch` accepte `overrides` (absent = ne pas toucher,
+   `null` = effacer — même règle que `exdates`).
+8. **Module partagé** `src/lib/overrides.ts` : `applyOverride`, `icalUtc`,
+   `remoteDueToItem` extraits de `caldav.ts` (server-only) pour être
+   utilisables côté client (HomeScreen). `caldav.ts` les ré-exporte.
+
+**Vérification prod (réelle, pas seulement les logs) :** après déploiement,
+passage forcé puis lecture de `items.json` : les 3 séries modifiées portent
+leur override (`Séance push` → `{"20260820T140000Z":"20260820T150000Z"}`,
+`Poster 10` → `…T160000Z→…T170000Z`, `Reposter 10` → `…T153000Z→…T163000Z`).
+Relu iCloud indépendante : les ICS contiennent toujours master + override,
+rien d'écrasé. `adopted=0` au passage forcé = latence iCloud ~15 min (le
+passage a vu l'ancienne version), mais l'adoption a bien eu lieu au passage
+cron suivant (les overrides sont dans items.json).
 
 ## Decisions — choix critiques ou irréversibles
 
-Aucune nouvelle cette tranche — les deux fixes sont des corrections de
-présentation pures, aucun comportement de données ni de synchro touché.
+Une nouvelle entrée `DECISIONS.md` (2026-08-20) : **les occurrences décalées
+d'une série dans Calendrier sont adoptées (RECURRENCE-ID)** — le calendrier
+gagne par occurrence, pas seulement pour le master. Voir le POURQUOI complet
+dans le fichier — ne pas re-débattre.
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/components/HomeScreen.tsx` | subtitle tuile Rendez-vous : `"N · Calendrier Apple"` → `"N aujourd'hui"` |
-| `src/lib/caldav.ts` | `readSyncState` exporté (était interne) |
-| `src/app/api/caldav-status/route.ts` | nouveau — expose `lastSyncAt` réel, PIN-gardé |
-| `src/lib/api.ts` | `fetchCalDavStatus()` |
-| `src/components/BriefApp.tsx` | `openAccount` (fetch + ouverture groupés), état `calendarSyncAt` |
-| `src/components/AccountSheet.tsx` | prop `calendarSyncAt`, `formatSyncAge()` remplace le texte figé |
-| `TODOS.md` | nouvelle entrée P2 : stockage des enregistrements vocaux (prochain chantier annoncé) |
+| `src/lib/types.ts` | `Item.overrides` (RECURRENCE-ID → nouveau DTSTART) |
+| `src/lib/overrides.ts` | **nouveau** — fonctions pures partagées client/serveur (`applyOverride`, `icalUtc`, `remoteDueToItem`) |
+| `src/lib/caldav.ts` | `splitVeEvents` + parse des overrides ; `remoteDiffers`/`calendarPatch`/`decideExternalSync` adoptent ; `buildEventIcs` réécrit ; `CalendarEvent` porte `overrides`+`exdates` ; ré-export depuis `overrides.ts` |
+| `src/lib/agenda.ts` | `buildDayAgenda` applique overrides/EXDATE par occurrence (items Brief ET événements calendrier) |
+| `src/lib/reminders.ts` | `pendingReminders`/`payloadFor` heure effective ; avancement depuis `seriesAnchor` + override appliqué |
+| `src/app/api/items/[id]/route.ts` | `sanitizePatch` accepte `overrides` |
+| `src/components/HomeScreen.tsx` | `TodayRow` affiche l'heure effective de l'entrée agenda |
+| `DECISIONS.md` | nouvelle entrée 2026-08-20 (voir Decisions) |
+| Tests | `caldav.test.ts` (+7), `agenda.test.ts` (+3), `route.test.ts` (+4) |
 
 ## Validations — passants / échoués / non lancés
 
 | Commande | Résultat |
 |---|---|
-| `npx vitest run` | ✅ 218 passed \| 1 skipped (219) — aucun test nouveau, aucune régression (changements UI/route non couverts par la suite existante, cohérent avec le reste du fichier `AccountSheet.tsx`/`HomeScreen.tsx`, jamais testés unitairement) |
+| `npx vitest run` | ✅ **231 passed** (12 tests neufs) |
 | `npx tsc --noEmit` | ✅ propre |
-| `npx eslint .` | ✅ 23 problèmes — identiques à la baseline |
-| Déploiement VPS (`63031b1`) | ✅ `git rev-parse HEAD` côté VPS, `brief-app-1 Healthy`, `GET /` 200 |
-| Déploiement VPS (`2787383`) | ✅ `git rev-parse HEAD` côté VPS, `brief-app-1 Healthy`, `GET /` 200, `GET /api/caldav-status` 200 (PIN) |
-| Backups avant chaque déploiement | ✅ `20260819-220933`, `20260819-222309` |
+| `npx eslint .` | ✅ 23 problèmes — identiques à la baseline (1 erreur préexistante dans `TaskDetailScreen.tsx`, non touché) |
+| Déploiement VPS (`c0d0c23`) | ✅ backup `20260819-225632`, `brief-app-1 Healthy`, `GET /` 200, `/api/agenda` 401 sans PIN |
+| Adoption en prod | ✅ overrides présents dans `items.json` (3 séries), ICS iCloud intacts (relu brute) |
 
-**Non vérifié en navigateur réel** : l'affichage de `formatSyncAge()` dans le
-sheet Compte n'a pas été confirmé visuellement (pas de session `/browse`
-cette tranche, juste le déploiement + vérification HTTP de la route). Le
-code est simple et typé correctement, mais « ça compile » n'est pas « ça
-s'affiche bien » — à vérifier à l'ouverture du sheet Compte à la prochaine
-occasion.
+**Non vérifié en navigateur réel** : l'affichage de l'heure décalée dans
+l'accueil/Rendez-vous n'a pas été confirmé visuellement (pas de session
+`/browse` cette nuit). Le code est couvert par les tests de `buildDayAgenda`,
+mais « ça compile » n'est pas « ça s'affiche bien » — à vérifier à l'ouverture
+de l'app à la prochaine occasion (Séance push jeudi doit s'afficher 17:00).
 
 ## Blockers — ce qui bloque
 
@@ -106,15 +119,15 @@ Rien. Prod saine, tout déployé.
 
 ## Next — la prochaine action
 
-1. **Le prochain chantier, tel qu'annoncé par Aramis** : stocker les
-   enregistrements vocaux. Voir l'entrée détaillée dans `TODOS.md` (section
-   P2, en tête) — commencer par vérifier la fiabilité de l'enregistrement
-   et de la transcription existants, PUIS passer par
-   `superpowers:brainstorming` pour la conception du stockage (c'est
-   architectural, pas un fix ponctuel).
-2. Vérifier en navigateur réel (`/browse` ou manuellement) que
-   `formatSyncAge()` s'affiche correctement dans le sheet Compte — jamais
-   confirmé visuellement cette tranche.
+1. **Vérifier en navigateur réel** que Séance push (jeudi) s'affiche à 17:00
+   dans l'accueil et l'onglet Rendez-vous, et que Poster/Reposter 10
+   s'affichent à 19:00/18:30 — jamais confirmé visuellement cette nuit.
+2. **Le prochain chantier annoncé par Aramis** (TODOS.md, section P2, en
+   tête) : stocker les enregistrements vocaux bruts. Commencer par vérifier la
+   fiabilité de l'enregistrement (`useRecorder.ts`) et de la transcription
+   (`/api/transcribe`) existants, PUIS passer par
+   `superpowers:brainstorming` pour la conception du stockage (architectural,
+   pas un fix ponctuel).
 3. Rien d'urgent ni de cassé par ailleurs.
 
 ---
@@ -123,7 +136,8 @@ Rien. Prod saine, tout déployé.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-19 (fin de soirée)** | **Deux correctifs d'affichage + terrain préparé** | **Claude Code** | *(cette passation)* |
+| **2026-08-20 (nuit)** | **Occurrences décalées adoptées (RECURRENCE-ID) + terrain préparé** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-19 (fin de soirée) | Deux correctifs d'affichage + terrain préparé | Claude Code | [fiche](docs/handoffs/2026-08-19-deux-correctifs-affichage-terrain-prepare.md) |
 | 2026-08-19 (soir) | Calendrier intouché + fin des occurrences fantômes | Claude Code | [fiche](docs/handoffs/2026-08-19-calendrier-intouche-occurrences-fantomes.md) |
 | 2026-08-19 | Types explicites, édition complète, accueil↔Rendez-vous unifiés | Claude Code | [fiche](docs/handoffs/2026-08-19-types-edition-agenda-unifie.md) |
 | 2026-08-19 | DTSTART mobile des séries récurrentes corrigé | Claude Code | [fiche](docs/handoffs/2026-08-19-dtstart-mobile-series-recurrentes.md) |
