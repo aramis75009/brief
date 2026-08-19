@@ -382,6 +382,25 @@ export function remoteDurationMinutes(remote: RemoteEventFields): number | null 
   return minutes > 0 ? minutes : null;
 }
 
+/**
+ * Le DTSTART à comparer au calendrier pour savoir si Aramis l'a édité à la
+ * main : `caldavSyncedDue` (ce que Brief a réellement écrit au dernier
+ * passage) s'il est connu.
+ *
+ * S'il ne l'est pas encore (item jamais passé par cette version du code) :
+ * pour une série, se rabattre sur `remote.dtstart` — on ne peut pas savoir si
+ * l'écart vient d'une édition ou de l'avancement interne, et se rabattre sur
+ * `due` reproduirait le bug du 18/08 (la série reculerait à chaque passage) ;
+ * pour un item simple, `due` ne bouge jamais tout seul, donc s'y rabattre est
+ * sûr — c'est ce qui faisait déjà fonctionner l'adoption avant ce champ.
+ */
+function dtstartBaseline(item: Item, remote: RemoteEventFields): string | null {
+  if (item.caldavSyncedDue !== undefined && item.caldavSyncedDue !== null) {
+    return item.caldavSyncedDue;
+  }
+  return item.rrule ? remote.dtstart : canonicalDueField(item);
+}
+
 /** Vrai si l'événement distant diffère de ce que Brief écrirait → Aramis l'a édité. */
 export function remoteDiffers(item: Item, remote: RemoteEventFields): boolean {
   const remoteMinutes = remoteDurationMinutes(remote);
@@ -394,9 +413,7 @@ export function remoteDiffers(item: Item, remote: RemoteEventFields): boolean {
   return (
     remote.summary !== item.title ||
     (remote.rrule ?? null) !== (item.rrule ?? null) ||
-    // Pour une série, l'ancre DTSTART ne compte pas : `due` est l'occurrence
-    // courante (avancée par le cron), DTSTART reste l'ancre d'origine.
-    ((remote.dtstart ?? null) !== canonicalDueField(item) && !item.rrule) ||
+    (remote.dtstart ?? null) !== dtstartBaseline(item, remote) ||
     (remoteMinutes !== null && remoteMinutes !== itemMinutes) ||
     exdatesDiffer
   );
@@ -418,18 +435,21 @@ export function remoteDueToItem(dtstart: string): string {
 /**
  * Patch Brief qui aligne l'item sur la version du calendrier (ou null si identique).
  *
- * ⚠️ L'ancre DTSTART n'est réadoptée que si l'item n'a PAS de récurrence :
- * pour une série, `due` est l'occurrence COURANTE (avancée par le cron des
- * rappels ou la coche), alors que DTSTART reste l'ancre d'origine. Réadopter
- * l'ancre à chaque passage ramènerait la série en arrière — c'est le bug
- * « les tâches restent bloquées sur hier » corrigé le 18/08.
+ * Le DTSTART n'est adopté que s'il diffère de `dtstartBaseline` — ce que
+ * Brief a réellement écrit au dernier passage (`caldavSyncedDue`), pas `due`
+ * lui-même. `due` avance tout seul pour une série (cron des rappels, coche) ;
+ * comparer à cette avance ferait passer un simple rattrapage interne pour une
+ * édition d'Aramis. Comparer au dernier écrit CONNU permet, à l'inverse,
+ * d'adopter une vraie édition manuelle même sur une série — le calendrier
+ * gagne (décision 18/08), y compris pour les tâches récurrentes.
  */
 export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<Item> | null {
   const patch: Partial<Item> = {};
   if (remote.summary !== "" && remote.summary !== item.title) patch.title = remote.summary;
-  if (remote.dtstart !== null && remote.dtstart !== canonicalDueField(item) && !item.rrule) {
+  if (remote.dtstart !== null && remote.dtstart !== dtstartBaseline(item, remote)) {
     patch.due = remoteDueToItem(remote.dtstart);
     patch.allDay = !remote.dtstart.includes("T");
+    patch.caldavSyncedDue = remote.dtstart;
   }
   if (remote.rrule !== null && remote.rrule !== (item.rrule ?? null)) {
     patch.rrule = remote.rrule || null;
@@ -637,6 +657,13 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       try {
         await putEvent(calUrl, it);
         put += 1;
+        // Mémorise ce que Brief vient d'écrire, pour que le prochain passage
+        // distingue un futur avancement interne (due bouge, ceci ne bouge
+        // pas) d'une vraie édition dans l'app Calendrier (voir dtstartBaseline).
+        const synced = canonicalDueField(it);
+        if (synced !== null && synced !== (it.caldavSyncedDue ?? null)) {
+          await patchItem(it.id, { caldavSyncedDue: synced });
+        }
       } catch (e) {
         failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
       }

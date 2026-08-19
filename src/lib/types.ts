@@ -125,6 +125,19 @@ export type Item = DraftItem & {
    * file se vide.
    */
   pendingAt?: string | null;
+  /**
+   * Le DTSTART (format iCal, ex. `20260819T160000Z`) que la synchro CalDAV a
+   * réellement écrit dans iCloud au dernier passage réussi. Distinct de
+   * `due` : pour une série, `due` avance tout seul (cron des rappels,
+   * complétion) sans que le calendrier ne le sache encore. Comparer le
+   * calendrier à CE champ — plutôt qu'à `due` — permet de distinguer « Brief
+   * a avancé en interne » de « Aramis a édité dans l'app Calendrier », y
+   * compris pour les séries. Sans lui, la synchro ne peut QUE deviner, et le
+   * 18/08 elle a dû choisir de ne plus jamais adopter l'horaire d'une série
+   * pour éviter de la faire reculer — ce champ lève l'ambiguïté au lieu de
+   * la contourner. Écrit uniquement par `src/lib/caldav.ts`.
+   */
+  caldavSyncedDue?: string | null;
 };
 
 /** Résultat d'enregistrement, item par item. */

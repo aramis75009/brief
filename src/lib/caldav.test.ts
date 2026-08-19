@@ -175,7 +175,60 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
   it("produit le patch qui aligne Brief sur le calendrier (horaire décalé)", () => {
     const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
     const patch = calendarPatch(it, { summary: it.title, dtstart: "20260818T180000Z", dtend: "20260818T190000Z", rrule: null, exdates: [] });
-    expect(patch).toEqual({ due: "2026-08-18T18:00:00Z", allDay: false });
+    expect(patch).toEqual({
+      due: "2026-08-18T18:00:00Z",
+      allDay: false,
+      caldavSyncedDue: "20260818T180000Z",
+    });
+  });
+
+  it("adopte un horaire édité dans le calendrier pour une SÉRIE, si ça diffère du dernier envoi connu de Brief", () => {
+    // Contrairement à l'ancien comportement (18/08), une série n'est plus
+    // exclue de l'adoption : `caldavSyncedDue` (posé au dernier PUT réussi)
+    // sert de référence à la place de `due`, qui lui avance tout seul.
+    const it = item({
+      allDay: false,
+      due: "2026-08-19T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+      durationMinutes: 60,
+      caldavSyncedDue: "20260819T160000Z",
+    });
+    const remote = {
+      summary: it.title,
+      // Aramis a décalé la séance du jour de 18h à 19h (Paris).
+      dtstart: "20260819T170000Z",
+      dtend: "20260819T180000Z",
+      rrule: it.rrule,
+      exdates: [],
+    };
+    expect(remoteDiffers(it, remote)).toBe(true);
+    expect(calendarPatch(it, remote)).toEqual({
+      due: "2026-08-19T17:00:00Z",
+      allDay: false,
+      caldavSyncedDue: "20260819T170000Z",
+    });
+  });
+
+  it("ignore l'avancement interne d'une série même avec caldavSyncedDue posé, tant que le calendrier n'a pas rattrapé", () => {
+    // `due` a avancé (cron des rappels) mais Brief n'a pas encore réécrit
+    // iCloud à ce passage-ci : le calendrier reflète encore l'ancien envoi.
+    // Ce n'est pas une édition d'Aramis — dtstartBaseline doit l'ignorer.
+    const it = item({
+      allDay: false,
+      due: "2026-08-20T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      durationMinutes: 30,
+      caldavSyncedDue: "20260819T160000Z",
+    });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260819T160000Z",
+      dtend: "20260819T163000Z",
+      rrule: it.rrule,
+      exdates: [],
+    };
+    expect(remoteDiffers(it, remote)).toBe(false);
+    expect(calendarPatch(it, remote)).toBeNull();
   });
 
   it("ajoute la récurrence posée dans le calendrier", () => {
