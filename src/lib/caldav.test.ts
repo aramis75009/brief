@@ -6,6 +6,7 @@ import {
   decideExternalSync,
   decideSync,
   parseRemoteEvent,
+  postPutPatch,
   projectForCalendar,
   remoteDiffers,
   remoteDueToItem,
@@ -102,6 +103,49 @@ describe("buildEventIcs", () => {
   it("transmet la récurrence RFC 5545 telle quelle", () => {
     const ics = buildEventIcs(item({ rrule: "FREQ=WEEKLY;BYDAY=TU" }));
     expect(ics).toContain("RRULE:FREQ=WEEKLY;BYDAY=TU");
+  });
+
+  it("une série récurrente écrit son ANCRE STABLE comme DTSTART, pas `due` — le bug du 2026-08-19", () => {
+    // `due` a déjà avancé (rappel du jour envoyé, cron des rappels) mais
+    // l'ancre, elle, reste au premier jour de la série. Réécrire le DTSTART
+    // sur `due` ferait disparaître du calendrier l'occurrence du jour dès
+    // l'envoi de son rappel (RFC 5545 : rien avant DTSTART).
+    const ics = buildEventIcs(
+      item({
+        kind: "event",
+        allDay: false,
+        rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+        due: "2026-08-22T14:00:00Z", // avancé au samedi suivant
+        seriesAnchor: "2026-08-19T14:00:00Z", // le mercredi d'origine
+      }),
+    );
+    expect(ics).toContain("DTSTART:20260819T140000Z");
+    expect(ics).not.toContain("DTSTART:20260822T140000Z");
+  });
+
+  it("une série récurrente SANS ancre encore posée se rabat sur `due` — item pas encore synchronisé", () => {
+    const ics = buildEventIcs(
+      item({
+        kind: "event",
+        allDay: false,
+        rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+        due: "2026-08-19T14:00:00Z",
+      }),
+    );
+    expect(ics).toContain("DTSTART:20260819T140000Z");
+  });
+
+  it("un item non récurrent ignore `seriesAnchor` même s'il est posé — seul `due` compte", () => {
+    const ics = buildEventIcs(
+      item({
+        kind: "event",
+        allDay: false,
+        rrule: null,
+        due: "2026-08-19T14:00:00Z",
+        seriesAnchor: "2026-08-10T09:00:00Z",
+      }),
+    );
+    expect(ics).toContain("DTSTART:20260819T140000Z");
   });
 
   it("écrit la priorité Brief (1 = la plus haute) en PRIORITY iCalendar", () => {
@@ -212,6 +256,10 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
       due: "2026-08-19T17:00:00Z",
       allDay: false,
       caldavSyncedDue: "20260819T170000Z",
+      // Le nouveau DTSTART devient aussi la nouvelle ancre stable de la
+      // série (sinon le prochain avancement interne de `due` la ferait
+      // dériver vers l'ancienne valeur qu'on vient de remplacer).
+      seriesAnchor: "2026-08-19T17:00:00Z",
     });
   });
 
@@ -235,6 +283,47 @@ describe("« le calendrier gagne » — édition faite dans l'app Calendrier (d�
     };
     expect(remoteDiffers(it, remote)).toBe(false);
     expect(calendarPatch(it, remote)).toBeNull();
+  });
+
+  it("une édition manuelle du DTSTART d'une série fige la nouvelle valeur comme ancre stable", () => {
+    // Aramis décale la séance à la main : le calendrier gagne, et le nouveau
+    // DTSTART devient la référence pour tous les PUT futurs — sinon le
+    // prochain avancement interne de `due` la ferait dériver à nouveau.
+    const it = item({
+      allDay: false,
+      due: "2026-08-19T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+      durationMinutes: 60,
+      caldavSyncedDue: "20260819T160000Z",
+      seriesAnchor: "2026-08-19T16:00:00Z",
+    });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260819T170000Z",
+      dtend: "20260819T180000Z",
+      rrule: it.rrule,
+      exdates: [],
+    };
+    expect(calendarPatch(it, remote)).toEqual({
+      due: "2026-08-19T17:00:00Z",
+      allDay: false,
+      caldavSyncedDue: "20260819T170000Z",
+      seriesAnchor: "2026-08-19T17:00:00Z",
+    });
+  });
+
+  it("l'adoption d'un item non récurrent ne pose jamais `seriesAnchor`", () => {
+    const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
+    const remote = {
+      summary: it.title,
+      dtstart: "20260818T180000Z",
+      dtend: "20260818T190000Z",
+      rrule: null,
+      exdates: [],
+    };
+    const patch = calendarPatch(it, remote);
+    expect(patch).not.toBeNull();
+    expect(patch?.seriesAnchor).toBeUndefined();
   });
 
   it("ajoute la récurrence posée dans le calendrier", () => {
@@ -377,6 +466,40 @@ describe("decideSync — réconciliation Apple Calendar ↔ Brief", () => {
       "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:brief-it_123\r\n" +
       "DTSTART:20260818T120000Z\r\nDTEND:20260818T130000Z\r\nSUMMARY:Préparer la réunion\r\nEND:VEVENT\r\nEND:VCALENDAR";
     expect(decideSync(synced, remote({ ics: remoteIcs })).action).toBe("skip");
+  });
+});
+
+describe("postPutPatch — ce que Brief mémorise juste après un PUT réussi", () => {
+  it("fige `due` comme ancre stable au tout premier PUT d'une série — plus jamais réécrite ensuite", () => {
+    const it = item({
+      allDay: false,
+      due: "2026-08-19T16:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+      durationMinutes: 60,
+    });
+    expect(postPutPatch(it)).toEqual({
+      caldavSyncedDue: "20260819T160000Z",
+      seriesAnchor: "2026-08-19T16:00:00Z",
+    });
+  });
+
+  it("ne touche plus `seriesAnchor` une fois posé, même quand `due` a avancé", () => {
+    // Le cron des rappels a avancé `due` au samedi ; l'ancre, elle, reste au
+    // mercredi d'origine — sinon le calendrier perdrait l'occurrence du jour.
+    const it = item({
+      allDay: false,
+      due: "2026-08-22T14:00:00Z",
+      rrule: "FREQ=WEEKLY;BYDAY=WE,SA",
+      durationMinutes: 60,
+      caldavSyncedDue: "20260819T140000Z",
+      seriesAnchor: "2026-08-19T14:00:00Z",
+    });
+    expect(postPutPatch(it)).toBeNull();
+  });
+
+  it("un item non récurrent ne pose jamais `seriesAnchor`", () => {
+    const it = item({ allDay: false, due: "2026-08-18T14:00:00+02:00" });
+    expect(postPutPatch(it)).toEqual({ caldavSyncedDue: "20260818T120000Z" });
   });
 });
 

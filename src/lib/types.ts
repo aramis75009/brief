@@ -139,6 +139,19 @@ export type Item = DraftItem & {
    */
   caldavSyncedDue?: string | null;
   /**
+   * DTSTART stable d'une série récurrente CRÉÉE PAR BRIEF (`rrule` posé),
+   * figé au premier PUT réussi et jamais avancé — contrairement à `due`, que
+   * le cron des rappels déplace à chaque envoi. `buildEventIcs` écrit CE
+   * champ comme DTSTART pour une série, jamais `due` : en RFC 5545 aucune
+   * occurrence n'existe avant DTSTART, donc réécrire le DTSTART à chaque
+   * avance de `due` efface du calendrier l'occurrence du jour dès l'envoi de
+   * son rappel — bug du 2026-08-19 (« Aller courir » en double, Reposter/
+   * Poster disparus du jour sur le vrai calendrier alors que Brief les
+   * montrait encore). `null`/absent pour un item non récurrent, ou une série
+   * pas encore synchronisée. Écrit uniquement par `src/lib/caldav.ts`.
+   */
+  seriesAnchor?: string | null;
+  /**
    * UID de l'événement Apple Calendar dont cet item a été ADOPTÉ — posé
    * directement dans l'app Calendrier, pas par Brief (décision Aramis du
    * 2026-08-19 : « adopte tout, on verra à l'usage » — aucun tri fiable

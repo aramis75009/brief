@@ -164,6 +164,16 @@ export function buildEventIcs(item: Item): string | null {
   const due = new Date(item.due);
   if (Number.isNaN(due.getTime())) return null;
 
+  // Série récurrente : le DTSTART écrit au calendrier est l'ANCRE STABLE
+  // (`seriesAnchor`), jamais `due` — `due` avance tout seul à chaque rappel
+  // envoyé, et en RFC 5545 aucune occurrence n'existe avant DTSTART. Écrire
+  // `due` comme DTSTART efface donc du calendrier l'occurrence du jour dès
+  // l'envoi de son rappel (bug du 2026-08-19 : « Aller courir » en double,
+  // Reposter/Poster disparus du jour). Pas encore d'ancre posée (item récent,
+  // pas encore synchronisé) : se rabattre sur `due`, comme avant ce champ.
+  const anchor = item.rrule && item.seriesAnchor ? new Date(item.seriesAnchor) : null;
+  const dtstart = anchor && !Number.isNaN(anchor.getTime()) ? anchor : due;
+
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -174,17 +184,17 @@ export function buildEventIcs(item: Item): string | null {
   ];
 
   if (item.allDay) {
-    const end = shiftDays(zonedParts(due), 1);
-    lines.push(`DTSTART;VALUE=DATE:${icalDate(due)}`);
+    const end = shiftDays(zonedParts(dtstart), 1);
+    lines.push(`DTSTART;VALUE=DATE:${icalDate(dtstart)}`);
     lines.push(
       `DTEND;VALUE=DATE:${end.y}${String(end.m).padStart(2, "0")}${String(end.d).padStart(2, "0")}`,
     );
   } else {
-    lines.push(`DTSTART:${icalUtc(due)}`);
+    lines.push(`DTSTART:${icalUtc(dtstart)}`);
     // Durée du créneau en minutes (décision 18/08 : « toutes les tâches
     // doivent avoir un temps ») ; 60 min par défaut si absente.
     const minutes = item.durationMinutes && item.durationMinutes > 0 ? item.durationMinutes : 60;
-    lines.push(`DTEND:${icalUtc(new Date(due.getTime() + minutes * 60 * 1000))}`);
+    lines.push(`DTEND:${icalUtc(new Date(dtstart.getTime() + minutes * 60 * 1000))}`);
   }
 
   lines.push(`SUMMARY:${escapeText(item.title)}`);
@@ -416,10 +426,15 @@ export function parseRemoteEvent(ics: string): RemoteEventFields {
   };
 }
 
-/** Le champ d'horodatage que Brief écrirait pour cet item (comparaison canonique). */
+/**
+ * Le champ d'horodatage que Brief écrirait pour cet item (comparaison canonique).
+ * Même ancre que `buildEventIcs` : `seriesAnchor` pour une série déjà posée,
+ * sinon `due`.
+ */
 function canonicalDueField(item: Item): string | null {
-  if (!item.due) return null;
-  const due = new Date(item.due);
+  const source = item.rrule && item.seriesAnchor ? item.seriesAnchor : item.due;
+  if (!source) return null;
+  const due = new Date(source);
   if (Number.isNaN(due.getTime())) return null;
   return item.allDay ? icalDate(due) : icalUtc(due);
 }
@@ -513,6 +528,10 @@ export function calendarPatch(item: Item, remote: RemoteEventFields): Partial<It
     patch.due = remoteDueToItem(remote.dtstart);
     patch.allDay = !remote.dtstart.includes("T");
     patch.caldavSyncedDue = remote.dtstart;
+    // Édition directe d'une série dans Calendrier : le nouveau DTSTART EST la
+    // nouvelle ancre — sinon le prochain avancement interne de `due` la
+    // ferait dériver vers la valeur qu'on vient justement de remplacer.
+    if (item.rrule) patch.seriesAnchor = patch.due;
   }
   if (remote.rrule !== null && remote.rrule !== (item.rrule ?? null)) {
     patch.rrule = remote.rrule || null;
@@ -799,6 +818,28 @@ async function writeLastSync(): Promise<void> {
   await rename(tmp, path);
 }
 
+/**
+ * Ce qu'il faut mémoriser sur l'item juste après un PUT réussi — jamais
+ * réseau, pur, testable seul :
+ *
+ *   - `caldavSyncedDue` : ce que Brief vient d'écrire, pour que le prochain
+ *     passage distingue un futur avancement interne (due bouge, ceci ne
+ *     bouge pas) d'une vraie édition dans l'app Calendrier (`dtstartBaseline`).
+ *   - `seriesAnchor` : pour une série qui n'en a pas encore, fige `due`
+ *     MAINTENANT comme ancre stable — plus jamais réécrite ensuite. Sans ça,
+ *     `buildEventIcs` recalculerait son DTSTART sur `due` à chaque PUT
+ *     suivant, qui avance tout seul (bug du 2026-08-19).
+ *
+ * `null` si rien de neuf à écrire (idempotence : pas de patch inutile).
+ */
+export function postPutPatch(item: Item): Partial<Item> | null {
+  const patch: Partial<Item> = {};
+  const synced = canonicalDueField(item);
+  if (synced !== null && synced !== (item.caldavSyncedDue ?? null)) patch.caldavSyncedDue = synced;
+  if (item.rrule && !item.seriesAnchor && item.due) patch.seriesAnchor = item.due;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
 /* --- Synchro -------------------------------------------------------------- */
 
 async function putEvent(calendarUrl: string, item: Item): Promise<void> {
@@ -1024,13 +1065,8 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       try {
         await putEvent(calUrl, it);
         put += 1;
-        // Mémorise ce que Brief vient d'écrire, pour que le prochain passage
-        // distingue un futur avancement interne (due bouge, ceci ne bouge
-        // pas) d'une vraie édition dans l'app Calendrier (voir dtstartBaseline).
-        const synced = canonicalDueField(it);
-        if (synced !== null && synced !== (it.caldavSyncedDue ?? null)) {
-          await patchItem(it.id, { caldavSyncedDue: synced });
-        }
+        const patch = postPutPatch(it);
+        if (patch) await patchItem(it.id, patch);
       } catch (e) {
         failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
       }
