@@ -10,6 +10,10 @@ Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge tout seul.
 ## Avant de coder
 
 - **`HANDOFF.md` d'abord.** Toujours.
+- **`docs/coordination.md`** — Brief est travaillé en parallèle par plusieurs
+  agents. Lance `bash scripts/coord/status.sh` pour comparer les copies
+  (GitHub / ta copie locale / prod VPS). Si la prod a avancé, fast-forward
+  avant de coder. Un agent = une branche à la fois.
 - **`superpowers:brainstorming` avant de concevoir une fonctionnalité**, pas
   après avoir commencé à coder.
 - **`superpowers:systematic-debugging` devant un bug**, plutôt que `/investigate`
