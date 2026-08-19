@@ -157,27 +157,6 @@ raison nouvelle.
 
 ## P2 — Prévu, à faire plus tard
 
-### Comprendre le mécanisme exact de la dérive DTSTART du 2026-08-19
-- **Quoi :** l'item récurrent « Aller courir » a vu son DTSTART calendrier
-  passer du mercredi 19 au samedi 22 en moins de 30h après sa création, alors
-  que la suite de tests EXISTANTE (`caldav.test.ts`, avant le fix du 19/08)
-  affirme que ce scénario précis (`due` avancé, calendrier non rattrapé) doit
-  produire un `skip` — donc aucun PUT. Non reproduit, non expliqué : les logs
-  Docker ne remontaient qu'au dernier redéploiement du jour, tout l'historique
-  antérieur est perdu.
-- **Pourquoi ce n'est pas bloquant :** le fix du 19/08 (`Item.seriesAnchor`)
-  retire la dépendance à `due` pour le DTSTART écrit, donc n'a plus besoin de
-  savoir POURQUOI la dérive a eu lieu pour cesser de se reproduire.
-- **Pourquoi le garder en tête :** si un item dérive à nouveau après ce fix
-  malgré `seriesAnchor`, ce serait le signe qu'un AUTRE chemin de code écrit
-  aussi au calendrier — voir la passation « DTSTART mobile des séries
-  récurrentes corrigé » (`HANDOFF.md`, ou son archive dans
-  `docs/handoffs/` une fois la prochaine session ouverte) pour la trace
-  complète de l'investigation.
-- **Effort :** S (CC), si ça se reproduit avec des logs disponibles cette
-  fois · **Priorité :** P2
-- **Dépend de :** une récidive observée, logs à l'appui.
-
 ### Bug préexistant : `<button>` imbriqué dans `TodayRow`/`RowCheckbox`
 - **Quoi :** `HomeScreen.tsx`, la ligne « Aujourd'hui » est un `<button>` qui
   contient `RowCheckbox`, un second `<button>` — HTML invalide, erreur
@@ -230,6 +209,41 @@ raison nouvelle.
 ---
 
 ## P3 — Différé
+
+### Comprendre le mécanisme exact de la dérive DTSTART du 2026-08-19
+- **Quoi :** l'item récurrent « Aller courir » a vu son DTSTART calendrier
+  passer du mercredi 19 au samedi 22 en moins de 30h après sa création, alors
+  que la suite de tests EXISTANTE (`caldav.test.ts`, avant le fix du 19/08)
+  affirme que ce scénario précis (`due` avancé, calendrier non rattrapé) doit
+  produire un `skip` — donc aucun PUT. Non reproduit, non expliqué : les logs
+  Docker ne remontaient qu'au dernier redéploiement du jour, tout l'historique
+  antérieur est perdu.
+- **Ce que la session du 19/08 (soir) a établi, sans répondre à cette
+  question précise :** le même soir, trois items migrés (dont « Aller
+  courir ») ont montré un symptôme DE LA MÊME FAMILLE — `due` affiché/sonné
+  pour une occurrence antérieure à `seriesAnchor`, donc impossible sur le
+  vrai calendrier. Root cause identifiée pour CE symptôme : la migration
+  avait figé `seriesAnchor` à une valeur déjà en avance sur le rattrapage
+  jour-par-jour de `due` en cours. Corrigé structurellement
+  (`pendingReminders`, compartiment `beforeAnchor`, voir `DECISIONS.md`) —
+  **toute occurrence antérieure à l'ancre est désormais rattrapée
+  silencieusement, quelle qu'en soit la cause.** Ça ferme la classe de bug,
+  pas la question d'origine : le POURQUOI du saut initial mercredi→samedi en
+  moins de 30h reste non expliqué.
+- **Pourquoi ce n'est plus bloquant du tout, même en cas de récidive :** le
+  fix `beforeAnchor` intercepte structurellement toute occurrence antérieure
+  à `seriesAnchor`, peu importe comment `due` en est venu à dériver derrière
+  l'ancre — il n'y a plus besoin de connaître la cause pour empêcher le
+  symptôme (faux rappel, mauvaise tâche affichée).
+- **Pourquoi le garder en tête quand même :** un due qui dérive DEVANT
+  l'ancre (pas derrière) ne serait pas intercepté par ce fix — signe possible
+  d'un chemin d'écriture CalDAV encore différent. Voir la passation
+  « Calendrier intouché + fin des occurrences fantômes » et « DTSTART mobile
+  des séries récurrentes corrigé » dans `docs/handoffs/` pour la trace
+  complète des deux investigations.
+- **Effort :** S (CC), si ça se reproduit avec des logs disponibles cette
+  fois · **Priorité :** P3 (déclassé — le symptôme concret est structurellement fermé)
+- **Dépend de :** une récidive DEVANT l'ancre observée, logs à l'appui.
 
 ### Sous-tâches
 - **Quoi :** permettre à une dictée de produire une tâche avec ses sous-tâches.
