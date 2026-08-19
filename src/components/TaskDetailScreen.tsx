@@ -11,6 +11,7 @@ import {
   ChevronRightIcon,
   ClockIcon,
 } from "./icons";
+import { TIMEZONE } from "@/lib/zoned";
 import type { Item, Project } from "@/lib/types";
 
 /**
@@ -56,12 +57,13 @@ export function TaskDetailScreen({
   const subPct = subs.length > 0 ? Math.round((doneSubs / subs.length) * 100) : 0;
 
   const dueLabel = item.due
-    ? new Date(item.due).toLocaleDateString("fr-FR", {
+    ? new Intl.DateTimeFormat("fr-FR", {
         weekday: "long",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-      }).replace(":", "h").replace("h00", "h00")
+        timeZone: TIMEZONE,
+      }).format(new Date(item.due)).replace(":", "h")
     : "Sans échéance";
 
   const audio = item.audioOrigin;
@@ -131,7 +133,7 @@ export function TaskDetailScreen({
             <span className="w-[33px]" />
             <span className="h-[2px] w-[37px] rounded-full bg-ink" />
             <span className="font-mono text-[10px] text-ink">
-              0:{String(audio.startSec).padStart(2, "0")} → 0:{String(audio.endSec).padStart(2, "0")}
+              0:{String(Math.floor(audio.startSec)).padStart(2, "0")} → 0:{String(Math.floor(audio.endSec)).padStart(2, "0")}
             </span>
           </div>
 

@@ -70,13 +70,14 @@ export function IdeasScreen({
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {ideas.map((idea, i) => {
-            const isOld = i >= 2;
+          {ideas.map((idea) => {
+            const age = idea.createdAt ? Date.now() - new Date(idea.createdAt).getTime() : 0;
+            const isOld = age > 48 * 3600000; // > 48h
             return (
               <div
                 key={idea.id}
                 className="rounded-20 border border-ink/[.06] bg-surface p-4"
-                style={{ opacity: isOld ? 0.55 : 1 }}
+                style={{ opacity: isOld ? 0.65 : 1 }}
               >
                 {/* Meta */}
                 <div className="mb-2.5 flex items-center gap-2">

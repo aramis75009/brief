@@ -41,6 +41,7 @@ interface HomeScreenProps {
   onOpenAccount: () => void;
   onCapture: () => void;
   onAskAI: () => void;
+  onScrollToTasks: () => void;
 }
 
 /* ------------------------------------------------------------------ *
@@ -154,13 +155,14 @@ function HeaderIconButton({
       aria-label={label}
       className="relative flex items-center justify-center"
       style={{
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
         borderRadius: 99,
-        border: "none",
-        background: "transparent",
+        border: "1px solid rgba(16,16,16,.08)",
+        background: C.surface,
         color: C.ink,
         cursor: "pointer",
+        fontFamily: "inherit",
       }}
     >
       {children}
@@ -192,8 +194,8 @@ function RowCheckbox({
         height: 26,
         borderRadius: 99,
         border: `2px solid ${C.hairline18}`,
-        background: done ? C.ink : "transparent",
-        color: "#fff",
+        background: C.surface,
+        color: C.ink,
         cursor: "pointer",
         padding: 0,
       }}
@@ -314,6 +316,7 @@ export function HomeScreen({
   onOpenAccount,
   onCapture,
   onAskAI,
+  onScrollToTasks,
 }: HomeScreenProps) {
   // Date du jour formatée « mar. 19 août » dans le fuseau Europe/Paris.
   const todayLabel = useMemo(() => {
@@ -325,27 +328,37 @@ export function HomeScreen({
     }).format(new Date());
   }, []);
 
-  // Comptages depuis le tableau d'items.
+  // Items du jour : ce dont l'échéance tombe aujourd'hui dans le fuseau Paris.
+  const todayItems = useMemo(() => {
+    const nowParts = zonedParts(new Date());
+    return items.filter((it) => {
+      if (it.status === "idea" || it.status === "archived") return false;
+      if (!it.due) return false;
+      const parts = zonedParts(new Date(it.due));
+      return parts.y === nowParts.y && parts.m === nowParts.m && parts.d === nowParts.d;
+    });
+  }, [items]);
+
+  // Comptages pour les tuiles : aujourd'hui pour tâches et RDV, total pour idées.
   const counts = useMemo(() => {
     let tasks = 0;
     let events = 0;
     let ideas = 0;
+    const nowParts = zonedParts(new Date());
     for (const it of items) {
       if (it.status === "idea") {
         ideas++;
         continue;
       }
+      if (it.status === "archived") continue;
       if (it.kind === "event") events++;
       else tasks++;
     }
-    return { tasks, events, ideas };
-  }, [items]);
-
-  // Items du jour : tout ce qui n'est pas une idée (tâches + RDV, faits ou non).
-  const todayItems = useMemo(
-    () => items.filter((it) => it.status !== "idea" && it.status !== "archived"),
-    [items],
-  );
+    // Pour les tuiles, on compte "aujourd'hui"
+    const todayTasks = todayItems.filter((it) => it.kind === "task").length;
+    const todayEvents = todayItems.filter((it) => it.kind === "event").length;
+    return { tasks: todayTasks, events: todayEvents, ideas };
+  }, [items, todayItems]);
 
   // Index des projets par id.
   const projectMap = useMemo(() => {
@@ -418,6 +431,7 @@ export function HomeScreen({
           icon={<TaskCheckIcon size={20} />}
           label="Tâches"
           subtitle={`${counts.tasks} aujourd'hui`}
+          onClick={onScrollToTasks}
         />
         <DestinationTile
           bg={C.meet100}

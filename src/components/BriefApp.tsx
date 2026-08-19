@@ -353,6 +353,7 @@ export function BriefApp() {
             onOpenAccount={() => setAccountOpen(true)}
             onCapture={openCapture}
             onAskAI={openCapture}
+            onScrollToTasks={() => {/* scroll to list section */}}
           />
         )}
 
@@ -422,7 +423,10 @@ export function BriefApp() {
 
       </div>
 
-      <CaptureBar onClick={openCapture} />
+      {/* CaptureBar uniquement sur les écrans-listes */}
+      {(screen === "home" || screen === "ideas" || screen === "search") && (
+        <CaptureBar onClick={openCapture} />
+      )}
       <BottomNav
         current={screen}
         onNavigate={(s) => setScreen(s)}

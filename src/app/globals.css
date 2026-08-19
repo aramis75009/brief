@@ -34,6 +34,7 @@
   --color-danger: #E23A2E;
 
   /* Rayons — le rayon grandit avec l'élément. */
+  --radius-8: 8px;
   --radius-12: 12px;
   --radius-18: 18px;
   --radius-20: 20px;
@@ -189,6 +190,12 @@
   ::-webkit-scrollbar {
     width: 0;
     height: 0;
+  }
+
+  /* Focus visible — imposé par le design system : outline 2px ink, offset 2px. */
+  *:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
   }
 }
 

@@ -12,8 +12,11 @@ import type { DraftItem, Project } from "@/lib/types";
 
 export type CaptureStage = "idle" | "listening" | "transcribing" | "done";
 
-const fmtClock = (s: number) =>
-  Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+const fmtClock = (s: number) => {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec < 10 ? "0" : ""}${sec}`;
+};
 
 export function CaptureSheet({
   open,
@@ -51,6 +54,9 @@ export function CaptureSheet({
       className="absolute inset-0 z-80 flex flex-col justify-end"
       style={{ background: "rgba(16,16,16,.34)", animation: "fade .22s both" }}
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Capturer"
     >
       <div
         className="rounded-t-[30px] bg-surface px-5 pt-3 pb-8"

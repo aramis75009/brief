@@ -22,6 +22,9 @@ export function AccountSheet({
       className="absolute inset-0 z-90 flex flex-col justify-end"
       style={{ background: "rgba(16,16,16,.34)", animation: "fade .22s both" }}
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Compte et réglages"
     >
       <div
         className="rounded-t-[30px] bg-surface px-5 pt-3 pb-8.5"
