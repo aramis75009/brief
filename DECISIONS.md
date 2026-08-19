@@ -14,6 +14,77 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-19 (soir) · Le calendrier Apple reste intouché — Brief n'y supprime plus jamais rien
+
+**Décision.** Brief peut AJOUTER et METTRE À JOUR des événements dans le
+calendrier Apple, **jamais en SUPPRIMER un**, quelle qu'en soit la raison.
+**Renverse la partie suppression** de l'entrée « Calendrier Apple → Brief :
+adoption totale » du 2026-08-19 (« cocher l'item dans Brief supprime
+l'événement original ») — le reste de cette entrée (adoption totale sans tri
+bruit/signal) tient toujours, seule la conséquence "coché ⇒ delete" saute.
+
+**Pourquoi.** Aramis, le soir même : « je veux toujours que le calendrier
+reste intouché » — exemple donné, terminer « Learn CSS rush demain » dans
+Brief ne doit pas supprimer l'événement correspondant dans Calendrier. Preuve
+trouvée en investiguant : l'item adopté « Aller courir » (calendrier Sport,
+`externalUid` 30DC2273…) a été coché dans Brief ce soir (`doneAt` posé) — sous
+l'ancien comportement, le prochain passage CalDAV allait supprimer
+l'événement réel qu'Aramis a lui-même posé dans son app Calendrier. C'est
+l'incident concret qui a motivé le renversement, pas une préférence abstraite.
+
+**Comment.** `src/lib/caldav.ts` : les trois chemins de suppression sont
+coupés — Phase 1 (nettoyage des `brief-*` orphelins), Phase 3 pour un item
+adopté coché (`decideExternalSync`, `existing.doneAt` → `noop` au lieu de
+`delete-remote`), Phase 3 pour un UID tombstoné (idem, `noop` au lieu de
+`delete-remote` — le tombstone empêche toujours la ré-adoption comme nouvel
+item, il n'entraîne simplement plus de suppression distante). Le type
+`"delete-remote"` et la fonction `deleteEvent` sont retirés : plus aucun
+appelant.
+
+**Compromis accepté, pas caché.** Un item dont le PROJET change échoue
+désormais son PUT vers le nouveau calendrier (iCloud renvoie 412, le même UID
+existant encore dans l'ancien) au lieu d'être proprement déplacé — visible
+sous son ancien calendrier jusqu'à résolution manuelle. Piste pour une
+session future : la méthode CalDAV `MOVE` relocalise un événement sans jamais
+le supprimer ; pas implémentée cette session, hors périmètre de l'urgence du
+soir.
+
+**Statut.** ✅ Implémenté, testé (`caldav.test.ts` — les deux tests qui
+attendaient `delete-remote` attendent désormais `noop`).
+
+---
+
+## 2026-08-19 (soir) · Une occurrence antérieure à `seriesAnchor` ne sonne jamais
+
+**Décision.** Le planificateur de rappels (`src/lib/reminders.ts`) ne notifie
+et n'affiche plus jamais une échéance `due` antérieure au `seriesAnchor` de
+son item — elle est rattrapée silencieusement à l'ancre, sans notification,
+dès le passage suivant (≤ 60 s).
+
+**Pourquoi.** Aramis, au réveil (enfin, en soirée) : « le premier truc que
+j'ouvre sur l'app, c'est des mauvaises tâches, contrairement à mon
+calendrier. » Root cause confirmée sur `items.json` de PROD : trois items
+récurrents migrés lors de la session précédente (fix DTSTART,
+`Item.seriesAnchor`) avaient un `due` qui traînait encore quelques jours en
+arrière de leur ancre fraîchement figée. Par construction RFC 5545, aucune
+occurrence n'existe avant DTSTART — ces occurrences « d'aujourd'hui »
+n'avaient donc jamais existé sur le vrai calendrier iCloud (confirmé
+visuellement : la capture macOS d'Aramis ne montre rien pour elles sous le
+jour affiché par Brief). Brief a quand même sonné et affiché pour elles,
+jusqu'à ce qu'un rattrapage jour par jour (plusieurs heures, plusieurs faux
+rappels) finisse par les recaler tout seul.
+
+**Comment.** `pendingReminders` renvoie un troisième compartiment
+`beforeAnchor` (échéance `< seriesAnchor`) : ni `ready` (pas de push), ni
+`stale` (pas juste ignorée) — `runReminders` réécrit directement `due =
+seriesAnchor` pour ces items, sans poser `remindedAt` puisque rien n'a été
+envoyé. Nouveau champ `ReminderRun.correctedToAnchor`, journalisé dans les
+logs du cron.
+
+**Statut.** ✅ Implémenté, testé (`reminders.test.ts`, 3 tests neufs).
+
+---
+
 ## 2026-08-19 · Calendrier Apple → Brief : adoption totale, sans tri bruit/signal
 
 **Décision.** Tout événement posé directement dans l'app Calendrier, dans un

@@ -28,6 +28,7 @@ async function handle(req: Request): Promise<Response> {
     console.log(
       `[cron] checked=${run.checked} due=${run.due} sent=${run.sent} ` +
         `advanced=${run.advanced} stale=${run.skippedStale} ` +
+        `correctedToAnchor=${run.correctedToAnchor} ` +
         `failures=${run.failures.length} ms=${durationMs}`,
     );
     for (const f of run.failures) console.error(`[cron] échec ${f.id} : ${f.error}`);

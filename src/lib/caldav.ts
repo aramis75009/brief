@@ -18,16 +18,27 @@ import type { Item } from "./types";
  * PROPRIÉTÉS :
  *
  *   1. IDEMPOTENT. L'UID de chaque événement est `brief-<item.id>` : un second
- *      passage écrase au lieu de dupliquer. Un item terminé ou sans date est
- *      retiré du calendrier au passage suivant. Relancer le sync est inoffensif.
+ *      passage écrase au lieu de dupliquer. Relancer le sync est inoffensif.
  *
- *   2. GARDE-FOU. Un vrai passage réseau au plus toutes les SYNC_INTERVAL_MS
+ *   2. LE CALENDRIER RESTE INTOUCHÉ. Décision Aramis du 2026-08-19 au soir
+ *      (DECISIONS.md) : Brief peut AJOUTER et METTRE À JOUR des événements,
+ *      jamais en SUPPRIMER — ni un `brief-*` devenu orphelin (item terminé,
+ *      supprimé, ou dont le projet a changé), ni un événement adopté quand
+ *      l'item Brief correspondant est coché. Ce module n'appelle plus jamais
+ *      DELETE sur iCloud. Conséquence acceptée, pas seulement cosmétique :
+ *      un item dont le PROJET change échoue désormais son PUT vers le nouveau
+ *      calendrier (iCloud renvoie 412, le même UID existant encore dans
+ *      l'ancien) — il reste visible sous son ancien calendrier jusqu'à
+ *      résolution manuelle. Piste pour plus tard : la méthode CalDAV `MOVE`
+ *      relocalise un événement sans jamais le supprimer, pas implémentée ici.
+ *
+ *   3. GARDE-FOU. Un vrai passage réseau au plus toutes les SYNC_INTERVAL_MS
  *      (timestamp persistant dans BRIEF_DATA_DIR). Le cron peut appeler la
  *      route chaque minute : en-deçà de l'intervalle, elle sort sans réseau.
  *      En cas d'échec réseau, le timestamp n'est pas écrit → le passage
  *      suivant réessaie, pas de trou silencieux.
  *
- *   3. DÉCOUVERTE. Le principal et le calendar-home-set sont découverts par
+ *   4. DÉCOUVERTE. Le principal et le calendar-home-set sont découverts par
  *      PROPFIND (iCloud peut changer de serveur : l'URL en dur se casserait).
  *      La liste des calendriers du compte est lue une fois par passage, et
  *      chaque item est routé vers le calendrier de son projet (par displayname).
@@ -728,7 +739,6 @@ export type ExternalSyncAction =
   | { action: "create"; item: Omit<Item, "id" | "createdAt" | "remindedAt" | "doneAt"> }
   | { action: "update"; patch: Partial<Item> }
   | { action: "complete" }
-  | { action: "delete-remote" }
   | { action: "noop" };
 
 /**
@@ -743,15 +753,15 @@ export type ExternalSyncAction =
  *     externe, il n'y a pas d'avancement interne à distinguer d'une édition
  *     comme pour `dtstartBaseline`.
  *   - item adopté TERMINÉ (coché dans Brief), événement encore présent →
- *     `delete-remote` — contrairement à un item `brief-*`, il n'y a pas de
- *     PUT à simplement arrêter de faire : l'événement existe indépendamment,
- *     Brief doit le supprimer explicitement pour que la coche se voie dans
- *     Calendrier.
- *   - item adopté TERMINÉ, événement déjà absent → `noop` (déjà convergé).
+ *     `noop` — **le calendrier reste intouché** (décision Aramis du 19/08
+ *     au soir, DECISIONS.md : Brief peut ajouter au calendrier, jamais en
+ *     retirer, même par complétion). L'événement source garde son état
+ *     exact ; seule la coche dans Brief change.
  *   - AUCUN item (jamais adopté OU supprimé côté Brief), événement présent,
- *     mais son UID est tombstoné (`isTombstoned`) → `delete-remote` au lieu
- *     de `create` : Brief vient de supprimer cet item, l'événement source
- *     n'a pas encore été retiré du calendrier, il ne doit PAS être recréé.
+ *     mais son UID est tombstoné (`isTombstoned`) → `noop` au lieu de
+ *     `create` : Brief vient de supprimer cet item, il ne doit pas être
+ *     ré-adopté comme un nouvel item — mais l'événement distant, lui, n'est
+ *     pas touché non plus (même règle : jamais de suppression).
  */
 export function decideExternalSync(
   existing: Item | undefined,
@@ -762,7 +772,7 @@ export function decideExternalSync(
 ): ExternalSyncAction {
   if (!existing) {
     if (!remote?.ics) return { action: "noop" };
-    if (isTombstoned) return { action: "delete-remote" };
+    if (isTombstoned) return { action: "noop" };
     const fields = parseRemoteEvent(remote.ics);
     if (!fields.dtstart || !fields.summary) return { action: "noop" };
     return {
@@ -783,7 +793,7 @@ export function decideExternalSync(
   }
 
   if (existing.doneAt) {
-    return remote ? { action: "delete-remote" } : { action: "noop" };
+    return { action: "noop" };
   }
 
   if (!remote?.ics) return { action: "complete" };
@@ -891,11 +901,6 @@ async function putEvent(calendarUrl: string, item: Item): Promise<void> {
   if (!res.ok) throw new Error(`PUT HTTP ${res.status}`);
 }
 
-async function deleteEvent(calendarUrl: string, href: string): Promise<void> {
-  const res = await caldavFetch(new URL(href, calendarUrl).toString(), { method: "DELETE" });
-  if (!res.ok && res.status !== 404) throw new Error(`DELETE HTTP ${res.status}`);
-}
-
 /**
  * Un passage complet sur TOUS les calendriers cibles. Retourne un compte-rendu
  * chiffré, comme le cron des rappels : une sortie vide ne permettrait pas de
@@ -957,27 +962,29 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   const failures: { uid: string; error: string }[] = [];
   let put = 0;
   let adopted = 0;
-  let deleted = 0;
+  // Toujours 0 : Brief n'appelle plus jamais DELETE sur iCloud (voir la
+  // note « LE CALENDRIER RESTE INTOUCHÉ » en tête de fichier). Le champ reste
+  // dans le compte-rendu pour ne pas changer la forme de `CalDavSyncRun`.
+  const deleted = 0;
   let existing = 0;
   let completedFromCalendar = 0;
   let externalAdopted = 0;
   let externalUpdated = 0;
   let externalCompleted = 0;
-  let externalDeleted = 0;
+  // Toujours 0, même raison que `deleted` ci-dessus.
+  const externalDeleted = 0;
   const touched: string[] = [];
 
   // On balaie TOUS les calendriers découverts (pas seulement ceux qui ont
-  // encore des items à écrire) : une tâche cochée qui était la dernière de son
-  // calendrier doit quand même en disparaître, et un item dont le projet a
-  // changé doit quitter l'ancien calendrier. `targetByUid` décide : un
-  // événement `brief-*` resté dans un calendrier != sa cible est supprimé.
+  // encore des items à écrire), pour que la Phase 2 sache, pour chaque item,
+  // si son événement existe déjà quelque part et sous quelle forme — jamais
+  // pour en supprimer un (voir la note « LE CALENDRIER RESTE INTOUCHÉ »
+  // en tête de fichier).
   const toSweep = new Set<string>([...byCalendar.keys(), ...calendars.keys()]);
 
-  // PHASE 1 — nettoyage. On retire d'abord de chaque calendrier tout
-  // événement qui n'y a plus sa place, AVANT d'écrire les nouveaux : iCloud
-  // renvoie 412 (conflit) si un même UID existe déjà sur le compte (ex. l'item
-  // créé à l'ancien emplacement « Personnel » puis routé vers son projet).
-  // Deux passages distincts garantissent un seul exemplaire par UID.
+  // PHASE 1 — lecture. Une passe de lecture sur chaque calendrier avant
+  // d'écrire quoi que ce soit, pour que la Phase 2 (adoption d'une édition
+  // manuelle, détection des conflits) dispose de l'état exact du compte.
   const readFailed = new Set<string>();
   // uid -> événement distant (avec son ICS) par calendrier : sert à la phase 2
   // pour détecter les éditions qu'Aramis a faites dans l'app Calendrier.
@@ -1033,16 +1040,12 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     }
     existing += remote.length;
     remoteByCal.set(calName, new Map(remote.map((ev) => [ev.uid, ev])));
-
-    for (const ev of remote) {
-      if (targetByUid.get(ev.uid) === calName) continue;
-      try {
-        await deleteEvent(calUrl, ev.href);
-        deleted += 1;
-      } catch (e) {
-        failures.push({ uid: ev.uid, error: e instanceof Error ? e.message : "DELETE échoué" });
-      }
-    }
+    // Plus de nettoyage ici (décision Aramis du 19/08 au soir, DECISIONS.md) :
+    // un `brief-*` orphelin (item terminé, supprimé, ou déplacé vers un autre
+    // projet) reste sur iCloud, intouché — `deleted` reste donc toujours à 0.
+    // Un item qui change de projet échouera avec un conflit 412 au lieu
+    // d'être proprement déplacé : iCloud refuse un second UID identique sur
+    // le compte tant que le premier existe encore. Connu, accepté.
   }
 
   // PHASE 2 — écriture, sauf quand « le calendrier gagne » : si l'événement
@@ -1112,7 +1115,8 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
 
   // PHASE 3 — adoption externe (décision Aramis 2026-08-19, DECISIONS.md) :
   // les événements posés directement dans Calendrier deviennent de vraies
-  // tâches Brief, et les cocher dans Brief supprime l'événement d'origine.
+  // tâches Brief. Les cocher dans Brief ne touche plus l'événement d'origine
+  // (décision Aramis du 19/08 au soir : le calendrier reste intouché).
   // Tourne sur `externalByUid`, déjà lu en Phase 1 — aucun appel réseau de
   // plus pour la lecture.
   const adoptedByUid = new Map(
@@ -1121,12 +1125,13 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
 
   // UID d'items adoptés supprimés côté Brief depuis le dernier passage (voir
   // `recordDeletedExternalUid`, appelé par `DELETE /api/items/[id]`) : tant
-  // que le calendrier n'a pas confirmé la disparition, `decideExternalSync`
-  // doit supprimer l'événement distant plutôt que recréer l'item.
+  // qu'il reste dans cette liste, `decideExternalSync` ne doit PAS ré-adopter
+  // l'événement comme un nouvel item — sans plus jamais le supprimer côté
+  // calendrier. Prunée naturellement si Aramis supprime lui-même l'événement.
   const syncState = await readSyncState();
   const deletedExternalUids = new Set(syncState.deletedExternalUids);
 
-  for (const [uid, { remote, calendarName, calendarUrl }] of externalByUid) {
+  for (const [uid, { remote, calendarName }] of externalByUid) {
     const existingItem = adoptedByUid.get(uid);
     const projectId = projectForCalendar(calendarName) ?? "perso";
     const decision = decideExternalSync(existingItem, remote, calendarName, projectId, deletedExternalUids.has(uid));
@@ -1139,10 +1144,9 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       } else if (decision.action === "update") {
         await patchItem(existingItem!.id, decision.patch);
         externalUpdated += 1;
-      } else if (decision.action === "delete-remote") {
-        await deleteEvent(calendarUrl, remote.href);
-        externalDeleted += 1;
       }
+      // "noop" (item terminé/supprimé, ou UID tombstoné) : le calendrier
+      // reste intouché, rien à faire — voir `decideExternalSync`.
     } catch (e) {
       failures.push({ uid, error: e instanceof Error ? e.message : "adoption externe échouée" });
     }

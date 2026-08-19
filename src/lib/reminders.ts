@@ -39,13 +39,39 @@ export type ReminderRun = {
   sent: number;
   skippedStale: number;
   advanced: number;
+  /**
+   * Occurrences rattrapées silencieusement à `seriesAnchor` sans notification
+   * — voir le commentaire de `pendingReminders` ci-dessous.
+   */
+  correctedToAnchor: number;
   failures: { id: string; error: string }[];
 };
 
-/** Les items dont l'échéance est atteinte et qui n'ont pas encore été notifiés. */
-export function pendingReminders(items: Item[], now: Date): { ready: Item[]; stale: Item[] } {
+/**
+ * Les items dont l'échéance est atteinte et qui n'ont pas encore été notifiés.
+ *
+ * `beforeAnchor` : une échéance antérieure à `seriesAnchor` (quand il est
+ * posé) est une occurrence FANTÔME — RFC 5545 interdit toute occurrence
+ * avant DTSTART, et `seriesAnchor` EST ce DTSTART réellement écrit sur
+ * iCloud (voir `src/lib/caldav.ts`). Elle n'a donc jamais existé sur le vrai
+ * calendrier. Constaté le 19/08 au soir sur trois items migrés lors de la
+ * session précédente : `due` traînait encore quelques jours en arrière de
+ * l'ancre fraîchement figée, et Brief a sonné et affiché ces occurrences
+ * comme si elles étaient réelles, jusqu'à ce que le rattrapage jour par jour
+ * de `due` (plus bas) finisse par la rejoindre — plusieurs heures, plusieurs
+ * faux rappels plus tard. `beforeAnchor` ferme ce trou : ni `ready` (aucun
+ * push envoyé pour une occurrence qui n'existe pas), ni `stale` (elle n'est
+ * pas ignorée, elle est corrigée) — `due` est réécrit sur `seriesAnchor`
+ * directement par `runReminders`, sans notification, dès le prochain passage
+ * (≤ 60 s) au lieu d'un rattrapage qui peut prendre des heures.
+ */
+export function pendingReminders(
+  items: Item[],
+  now: Date,
+): { ready: Item[]; stale: Item[]; beforeAnchor: Item[] } {
   const ready: Item[] = [];
   const stale: Item[] = [];
+  const beforeAnchor: Item[] = [];
 
   for (const item of items) {
     if (!item.due || item.doneAt) continue;
@@ -54,6 +80,14 @@ export function pendingReminders(items: Item[], now: Date): { ready: Item[]; sta
     if (Number.isNaN(due.getTime())) continue;
     if (due > now) continue;
 
+    if (item.seriesAnchor) {
+      const anchor = new Date(item.seriesAnchor);
+      if (!Number.isNaN(anchor.getTime()) && due < anchor) {
+        beforeAnchor.push(item);
+        continue;
+      }
+    }
+
     // Déjà notifié pour CETTE échéance : `remindedAt` postérieur à l'échéance.
     if (item.remindedAt && new Date(item.remindedAt) >= due) continue;
 
@@ -61,7 +95,7 @@ export function pendingReminders(items: Item[], now: Date): { ready: Item[]; sta
     else ready.push(item);
   }
 
-  return { ready, stale };
+  return { ready, stale, beforeAnchor };
 }
 
 /** Corps de la notification. Le `tag` évite l'empilement de doublons visuels. */
@@ -81,7 +115,7 @@ function payloadFor(item: Item) {
  */
 export async function runReminders(now: Date = new Date()): Promise<ReminderRun> {
   const items = await readItems();
-  const { ready, stale } = pendingReminders(items, now);
+  const { ready, stale, beforeAnchor } = pendingReminders(items, now);
 
   const run: ReminderRun = {
     checked: items.length,
@@ -89,15 +123,18 @@ export async function runReminders(now: Date = new Date()): Promise<ReminderRun>
     sent: 0,
     skippedStale: stale.length,
     advanced: 0,
+    correctedToAnchor: beforeAnchor.length,
     failures: [],
   };
 
   // Les rappels trop en retard sont marqués comme traités, sinon ils seraient
-  // réexaminés à chaque passage jusqu'à la fin des temps.
-  const patches: { id: string; patch: Partial<Item> }[] = stale.map((item) => ({
-    id: item.id,
-    patch: { remindedAt: now.toISOString() },
-  }));
+  // réexaminés à chaque passage jusqu'à la fin des temps. Les occurrences
+  // fantômes (avant `seriesAnchor`) sont rattrapées à l'ancre — pas de
+  // `remindedAt` posé, ce n'est pas un rappel envoyé.
+  const patches: { id: string; patch: Partial<Item> }[] = [
+    ...stale.map((item) => ({ id: item.id, patch: { remindedAt: now.toISOString() } })),
+    ...beforeAnchor.map((item) => ({ id: item.id, patch: { due: item.seriesAnchor! } })),
+  ];
 
   if (ready.length) {
     const subs = await readSubscriptions();

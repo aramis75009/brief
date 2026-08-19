@@ -618,12 +618,12 @@ describe("decideExternalSync — adoption des événements posés dans Calendrie
     }
   });
 
-  it("UID tombstoné (item adopté supprimé côté Brief) → supprime l'événement distant au lieu de le recréer", () => {
+  it("UID tombstoné (item adopté supprimé côté Brief) → n'est PAS ré-adopté, et le calendrier reste intouché", () => {
     const ics =
       "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
       "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
     const decision = decideExternalSync(undefined, remoteEvent(ics), "Personnel", "perso", true);
-    expect(decision).toEqual({ action: "delete-remote" });
+    expect(decision).toEqual({ action: "noop" });
   });
 
   it("UID tombstoné mais événement déjà absent → noop, rien à supprimer", () => {
@@ -655,12 +655,12 @@ describe("decideExternalSync — adoption des événements posés dans Calendrie
     expect(decideExternalSync(adopted(), undefined, "Personnel", "perso")).toEqual({ action: "complete" });
   });
 
-  it("item adopté coché dans Brief, événement encore présent → supprime l'événement d'origine", () => {
+  it("item adopté coché dans Brief, événement encore présent → le calendrier reste intouché (jamais de suppression)", () => {
     const done = adopted({ doneAt: "2026-08-19T20:00:00Z" });
     const ics =
       "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:91A2AEE9-AD19-42EB-AD7E-ABFF79178A86\r\n" +
       "DTSTART;VALUE=DATE:20260820\r\nSUMMARY:Rentre Jeanne\r\nEND:VEVENT\r\nEND:VCALENDAR";
-    expect(decideExternalSync(done, remoteEvent(ics), "Personnel", "perso")).toEqual({ action: "delete-remote" });
+    expect(decideExternalSync(done, remoteEvent(ics), "Personnel", "perso")).toEqual({ action: "noop" });
   });
 
   it("item adopté coché ET événement déjà absent → convergé, rien à faire", () => {
