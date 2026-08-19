@@ -127,3 +127,22 @@ Si 200, la manœuvre iPhone : Réglages → Safari → **Effacer l'historique et
 données de sites** (purge le service worker) → supprimer l'icône Brief de
 l'écran d'accueil → recharger l'URL dans Safari → ressaisir le PIN → ré-ajouter
 à l'écran d'accueil.
+
+### ⚠️ Le crash JS client — invisible pour curl (leçon du 2026-08-19)
+
+**Un `curl` 200 ne prouve PAS que l'app marche.** Le navigateur exécute le
+JavaScript, curl non. Le 2026-08-19, toute l'app plantait dans tous les
+navigateurs (`RangeError: date value is not finite in DateTimeFormat.formatToParts()`
+— un `due = "20260820T140000"` invalide stocké par le sync CalDAV) alors que
+le serveur, le réseau, le DNS et le HTTPS étaient parfaitement sains.
+
+**Quand le réseau passe mais que l'app ne s'ouvre pas :**
+1. Ouvrir la console du navigateur (Safari DevTools / Firefox) et chercher une
+   erreur runtime — c'est là que le crash apparaît, pas dans les logs serveur.
+2. Vérifier les données : `docker exec brief-app-1 cat /app/data/items.json` —
+   chercher des valeurs `due` non-ISO (ex. `20260820T140000` au lieu de
+   `2026-08-20T14:00:00+02:00`).
+3. Le fix (commit `aacea8e`) a rendu l'app immunisée : `zonedParts()` ne lève
+   plus jamais, `readItems()` normalise à la lecture. Mais une nouvelle source
+   de dates invalides doit être corrigée à la source — voir
+   `docs/handoffs/2026-08-19-caldav-floating-dtstart.md`.

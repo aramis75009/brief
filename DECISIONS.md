@@ -48,6 +48,32 @@ les agents sur la mauvaise branche.
 
 ---
 
+## 2026-08-19 · Une date invalide ne doit jamais faire planter l'app — normaliser à la source
+
+**Décision.** Toute date issue d'une source externe (CalDAV, API, saisie) doit
+être **normalisée en ISO avant stockage** dans `due`. Si une conversion échoue,
+écrire `undefined` (« pas d'échéance ») — jamais une chaîne brute non-parseable.
+En plus de la cause, deux garde-fous : `zonedParts()` ne lève plus jamais de
+RangeError (date invalide → valeur sentinelle), et `readItems()` normalise à la
+lecture (répare en mémoire sans réécrire le fichier).
+
+**Pourquoi.** Le 2026-08-19, un seul item (`it_msurvw97_6`, récurrence Frip &
+Trend) avec `due = "20260820T140000"` — un DTSTART ICS flottant (sans `Z` ni
+tirets) renvoyé brut par `remoteDueToItem()` — a fait planter **toute l'app**
+dans tous les navigateurs : `new Date()` ne parse pas ce format → Invalid Date
+→ `Intl.DateTimeFormat.formatToParts()` → RangeError → React ne montait plus.
+Le serveur répondait 200 partout (curl OK) : le crash était côté client,
+invisible pour les sondes réseau. Un rappel absent se voit ; un crash ne se
+voit pas.
+
+**Comment.** Commit `aacea8e` (merge `4a1ad33` dans la prod) : `caldav.ts`
+(`remoteDueToItem()` convertit `YYYYMMDDTHHMMSS` → ISO Europe/Paris), `zoned.ts`
+(garde-fou), `store.ts` (normalisation à la lecture). Tests : 128/128.
+
+**Statut.** ✅ Implémenté, déployé, vérifié en prod (0 item `due` non-ISO).
+
+---
+
 ## 2026-08-18 · Le cookie PIN est posé par le serveur (Set-Cookie), pas par JavaScript
 
 **Décision.** Le cookie persistant `brief_pin` est posé **côté serveur** par
