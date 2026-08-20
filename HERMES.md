@@ -25,6 +25,12 @@
 
 Tu as signalé trois manques le 2026-08-14. Les voici, une fois pour toutes.
 
+### Lire les tâches et rendez-vous d'Aramis
+
+`bash scripts/brief-agents.sh digest` (récap du jour) ou `agenda AAAA-MM-JJ`
+(jour précis) — JSON brut depuis l'API prod. Secrets dans `.env.local` /
+`.env.production`, jamais commités. Voir `docs/agent-calendar-access.md`.
+
 ### Tu tournes sur le VPS de production
 
 Ton conteneur et la production de Brief sont sur **la même machine**. Ce n'est

@@ -14,6 +14,9 @@ Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge tout seul.
   agents. Lance `bash scripts/coord/status.sh` pour comparer les copies
   (GitHub / ta copie locale / prod VPS). Si la prod a avancé, fast-forward
   avant de coder. Un agent = une branche à la fois.
+- **Lire les tâches et rendez-vous d'Aramis** : `bash scripts/brief-agents.sh
+  digest` (récap du jour) ou `agenda AAAA-MM-JJ` (jour précis). Secrets dans
+  `.env.local`, jamais commités — voir `docs/agent-calendar-access.md`.
 - **`superpowers:brainstorming` avant de concevoir une fonctionnalité**, pas
   après avoir commencé à coder.
 - **`superpowers:systematic-debugging` devant un bug**, plutôt que `/investigate`
