@@ -14,14 +14,17 @@ que tous chargent. Une règle qui n'est pas ici n'est appliquée par personne.
 | `AGENTS.md` | Ce fichier. Les règles qui ne changent pas. |
 | `TODOS.md` | Ce qui est différé. Rien de différé ne vit ailleurs. |
 | `README.md` | Fonctionnement, routes, déploiement, variables d'environnement. |
+| **`DESIGN.md`** | **Avant toute décision visuelle.** Décrit le système Claude Design v1 réellement en prod — tokens, composants, règles. |
 | `CLAUDE.md` / `HERMES.md` | Le spécifique à ton agent. |
 | `docs/handoffs/` | Les passations passées, à la demande. |
 
-> **Design** : la source de vérité visuelle est le **design system Claude
-> Design v1** (`/opt/data/brief-design-claude/Brief Design System.dc.html`,
-> implémenté dans `globals.css` + `src/components/`). L'ancien `DESIGN.md`
-> (système corail/General Sans) a été **supprimé le 2026-08-20** — ne plus
-> jamais s'y référer (voir `DECISIONS.md`).
+> **Design** : `DESIGN.md` est **de retour le 2026-08-20**, réécrit par Claude
+> Design pour décrire le système v1 réellement en prod (tokens de
+> `globals.css`, composants). **Ce n'est pas l'ancien `DESIGN.md`** (système
+> corail/General Sans, supprimé le 20/08 au matin — voir `DECISIONS.md`) : ne
+> jamais ressusciter celui-là. Source de vérité du rendu : le fichier de
+> design system `Brief Design System.dc.html` + `globals.css` ; `DESIGN.md`
+> en est la transcription à jour.
 
 ---
 
@@ -138,8 +141,8 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
   les utilitaires Tailwind — c'est ce qui affichait un bouton noir sur noir.
 - **iOS ne notifie que les PWA installées à l'écran d'accueil.** En onglet
   Safari, l'abonnement peut réussir sans qu'aucune notification n'arrive.
-- Le design system Claude Design v1 est la source de vérité visuelle — l'ancien
-  `DESIGN.md` est supprimé (20/08), ne plus s'y référer.
+- Lire `DESIGN.md` avant toute décision visuelle, et ne pas s'en écarter sans
+  accord explicite.
 
 ### Déploiement
 

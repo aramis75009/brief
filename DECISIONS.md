@@ -14,6 +14,37 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-20 (après-midi) · `DESIGN.md` est de retour — réécrit fidèle au code
+
+**Décision.** `DESIGN.md` existe de nouveau à la racine. Ce n'est **pas** une
+résurrection de l'ancien (système corail/General Sans, supprimé le 20/08 au
+matin, voir l'entrée ci-dessous — cette suppression-là reste valide, on ne la
+rouvre pas). C'est un **nouveau fichier**, généré par Claude Design à la
+demande d'Aramis pour décrire fidèlement le système **réellement en prod**
+(tokens de `globals.css`, composants de `src/components/`), pas une
+proposition. `AGENTS.md` et `CLAUDE.md` sont remis à jour pour le citer comme
+lecture obligatoire avant toute décision visuelle — le texte « DESIGN.md est
+supprimé, ne plus s'y référer » qu'ils portaient depuis ce matin est retiré.
+
+**Pourquoi.** Le 20/08 au matin, la suppression de l'ancien `DESIGN.md` avait
+laissé un vide : plus aucun document ne décrivait le système v1 (Plus Jakarta,
+ink, task/meet/idea) déjà en prod depuis le 18/08 — seul le code le portait.
+Aramis, en repassant sur `manifest.ts` et l'icône PWA dans cette même session,
+a constaté l'écart et fait générer un `DESIGN.md` correct par Claude Design
+plutôt que de laisser le vide.
+
+**Comment.** Fichier remplacé en entier (contenu fourni par Aramis, généré par
+Claude Design). Section « 4. Iconographie » complétée avec l'icône PWA
+(`BriefIcon.dc.html`, variante B — voir l'entrée dédiée ci-dessous) que le
+document reçu ne couvrait pas. Section « 6. Écarts connus » allégée du point
+`manifest.ts #F5F3F0` : déjà corrigé dans cette session, plus un écart. `AGENTS.md` /
+`CLAUDE.md` : les deux mentions « DESIGN.md supprimé » remplacées par un
+renvoi vers ce fichier.
+
+**Statut.** ✅ Fait.
+
+---
+
 ## 2026-08-20 · Icône PWA remplacée — variante « Trois destinations » (Claude Design v1)
 
 **Décision.** L'icône PWA change : trois barres corail sur fond encre →
