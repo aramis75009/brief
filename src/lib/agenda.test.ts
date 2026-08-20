@@ -82,37 +82,10 @@ describe("buildDayAgenda", () => {
   });
 
   it("étend une série récurrente sur TOUS ses jours de la fenêtre — pas seulement l'occurrence courante de `due`", () => {
-    // L'item Brief a son `due` ancré sur un jour PASSÉ non encore coché (le
-    // lundi précédent, jamais avancé), mais la RRULE dit lundi+jeudi : le
-    // 20 août (jeudi), qui vient APRÈS `due`, doit quand même sortir.
-    const it1 = item({
-      id: "it_push",
-      due: "2026-08-17T16:00:00+02:00", // lundi précédent, pas encore coché
-      allDay: false,
-      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
-      kind: "event",
-    });
-    const ev = calEvent({
-      uid: "brief-it_push",
-      briefItemId: "it_push",
-      title: "Séance push",
-      start: "2026-08-17T14:00:00.000Z",
-      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
-    });
-    const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
-    expect(out).toHaveLength(1);
-    expect(out[0].source).toBe("calendar");
-    expect(out[0].kind).toBe("event"); // reprend le kind du vrai item Brief lié
-    expect(out[0].due).toBe("2026-08-20T14:00:00.000Z");
-  });
-
-  it("le bug « Séance push » : une occurrence déjà AVANCÉE (antérieure au `due` courant) ne réapparaît pas", () => {
-    // Coché aujourd'hui (jeudi 20 août) : `completionPatch` avance `due` au
-    // lundi suivant (24 août) sans jamais poser `doneAt` (récurrence). Le
-    // calendrier Apple, lui, n'est JAMAIS modifié par une complétion (décision
-    // 2026-08-19 : Brief ne supprime rien côté calendrier) — sa série RRULE
-    // contient donc toujours l'occurrence du 20 août. Sans ce garde-fou,
-    // `buildDayAgenda` la ressort comme si elle restait à faire.
+    // L'item Brief a son `due` ancré sur un AUTRE jour (avancé — par une coche
+    // OU par le cron des rappels, peu importe ici), mais la RRULE dit
+    // lundi+jeudi : le 20 août (jeudi) doit quand même sortir tant qu'aucune
+    // coche n'a explicitement marqué CETTE occurrence comme faite.
     const it1 = item({
       id: "it_push",
       due: "2026-08-24T16:00:00+02:00", // avancé au lundi suivant
@@ -124,11 +97,69 @@ describe("buildDayAgenda", () => {
       uid: "brief-it_push",
       briefItemId: "it_push",
       title: "Séance push",
-      start: "2026-08-17T14:00:00.000Z",
+      start: "2026-08-24T14:00:00.000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+    });
+    const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
+    expect(out).toHaveLength(1);
+    expect(out[0].source).toBe("calendar");
+    expect(out[0].kind).toBe("event"); // reprend le kind du vrai item Brief lié
+    expect(out[0].due).toBe("2026-08-20T14:00:00.000Z");
+  });
+
+  it("le bug « Séance push » : une occurrence explicitement COCHÉE ne réapparaît pas", () => {
+    // Coché aujourd'hui (jeudi 20 août) : `completionPatch` avance `due` au
+    // lundi suivant (24 août) ET pose `lastCompletedOccurrenceAt` sur
+    // l'instant qui vient d'être coché (jeudi 20, 16:00 Paris = 14:00Z). Le
+    // calendrier Apple, lui, n'est JAMAIS modifié par une complétion (décision
+    // 2026-08-19 : Brief ne supprime rien côté calendrier) — sa série RRULE
+    // contient donc toujours l'occurrence du 20 août. Sans ce garde-fou,
+    // `buildDayAgenda` la ressort comme si elle restait à faire.
+    const it1 = item({
+      id: "it_push",
+      due: "2026-08-24T16:00:00+02:00", // avancé au lundi suivant
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      kind: "event",
+      lastCompletedOccurrenceAt: "2026-08-20T14:00:00.000Z",
+    });
+    const ev = calEvent({
+      uid: "brief-it_push",
+      briefItemId: "it_push",
+      title: "Séance push",
+      start: "2026-08-24T14:00:00.000Z",
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
     });
     const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
     expect(out).toHaveLength(0);
+  });
+
+  it("le bug « Reposter 10 articles » : `due` avancé par le CRON DES RAPPELS (pas une coche) ne cache pas l'occurrence du jour", () => {
+    // Régression constatée en prod le 2026-08-20, causée par un fix précédent
+    // de CE même bug : le cron des rappels avance `due` après CHAQUE envoi de
+    // rappel, coché ou non (`reminders.ts` — « les récurrences avancent »).
+    // Une tâche quotidienne dont le rappel a déjà sonné aujourd'hui a donc
+    // `due` = demain, SANS AVOIR ÉTÉ FAITE. Sans `lastCompletedOccurrenceAt`
+    // posé, l'occurrence du jour doit rester visible.
+    const it1 = item({
+      id: "it_repost",
+      title: "Reposter 10 articles",
+      due: "2026-08-21T18:30:00+02:00", // avancé par le cron après l'envoi du rappel
+      allDay: false,
+      rrule: "FREQ=DAILY",
+      kind: "task",
+      remindedAt: "2026-08-20T16:30:00.000Z", // le rappel de 18:30 vient de sonner
+    });
+    const ev = calEvent({
+      uid: "brief-it_repost",
+      briefItemId: "it_repost",
+      title: "Reposter 10 articles",
+      start: "2026-08-20T16:30:00.000Z",
+      rrule: "FREQ=DAILY",
+    });
+    const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
+    expect(out).toHaveLength(1);
+    expect(out[0].due).toBe("2026-08-20T16:30:00.000Z");
   });
 
   it("un item brief-* dont l'item lié est terminé n'apparaît pas non plus via le calendrier (fenêtre ~15 min)", () => {
@@ -181,11 +212,11 @@ describe("buildDayAgenda", () => {
   it("affiche une occurrence DÉCALÉE dans l'app Calendrier à sa nouvelle heure (RECURRENCE-ID)", () => {
     // Séance push : la série est à 16:00 (14:00Z) mais Aramis a décalé
     // l'occurrence du jeudi 20 à 17:00 (15:00Z) — l'agenda doit montrer 17:00.
-    // L'item Brief est ancré sur le lundi précédent, jamais coché : c'est
-    // l'événement calendrier qui porte l'occurrence du jour, avec l'override.
+    // L'item Brief est ancré sur un AUTRE jour (avancé) : c'est l'événement
+    // calendrier qui porte l'occurrence du jour, avec l'override.
     const it1 = item({
       id: "it_push",
-      due: "2026-08-17T16:00:00+02:00", // lundi précédent, pas encore coché
+      due: "2026-08-24T16:00:00+02:00", // ancré au lundi suivant
       allDay: false,
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
       kind: "event",
@@ -194,7 +225,7 @@ describe("buildDayAgenda", () => {
       uid: "brief-it_push",
       briefItemId: "it_push",
       title: "Séance push",
-      start: "2026-08-17T14:00:00.000Z",
+      start: "2026-08-24T14:00:00.000Z",
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
       overrides: { "20260820T140000Z": "20260820T150000Z" },
     });
@@ -223,7 +254,7 @@ describe("buildDayAgenda", () => {
   it("n'affiche pas une occurrence SUPPRIMÉE dans l'app Calendrier (EXDATE)", () => {
     const it1 = item({
       id: "it_push",
-      due: "2026-08-17T16:00:00+02:00", // lundi précédent, pas encore coché
+      due: "2026-08-24T16:00:00+02:00", // ancré au lundi suivant
       allDay: false,
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
       kind: "event",
@@ -232,7 +263,7 @@ describe("buildDayAgenda", () => {
       uid: "brief-it_push",
       briefItemId: "it_push",
       title: "Séance push",
-      start: "2026-08-17T14:00:00.000Z",
+      start: "2026-08-24T14:00:00.000Z",
       rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
       exdates: ["20260820T140000Z"],
     });

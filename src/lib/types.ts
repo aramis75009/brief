@@ -126,6 +126,24 @@ export type Item = DraftItem & {
   remindedAt: string | null;
   doneAt: string | null;
   /**
+   * Instant (ISO) de l'occurrence qu'une COCHE UTILISATEUR vient de terminer
+   * sur une récurrence — posé UNIQUEMENT par `completionPatch` (jamais par le
+   * cron des rappels, qui avance aussi `due` mais pour une tout autre raison :
+   * planifier le prochain envoi, pas marquer quoi que ce soit comme fait).
+   *
+   * Distinguer les deux est le seul rôle de ce champ. `due` avance dans les
+   * deux cas et ne permet donc pas de savoir si l'occurrence du jour reste à
+   * faire. Sans lui, `buildDayAgenda` a dû choisir entre deux bugs
+   * symétriques : cacher toute occurrence antérieure à `due` (coche « Séance
+   * push » enfin respectée, MAIS « Reposter 10 articles »/« Poster 10
+   * articles » — qui recouraient à `due` uniquement parce que leur rappel
+   * avait déjà sonné, jamais cochés — disparaissaient du jour sans que rien
+   * ne soit fait) ; ou tout montrer (l'inverse). Constaté en prod le
+   * 2026-08-20. `buildDayAgenda` n'exclut plus qu'une occurrence dont
+   * l'instant correspond EXACTEMENT à ce champ.
+   */
+  lastCompletedOccurrenceAt?: string | null;
+  /**
    * Horodatage de mise en file LOCALE, `null` ou absent dès que le serveur a
    * confirmé l'enregistrement.
    *

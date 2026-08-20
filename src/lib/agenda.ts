@@ -101,16 +101,23 @@ export function buildDayAgenda(
       ? occurrencesInRange(new Date(ev.start), ev.rrule, dayStart, dayEnd)
       : inWindow(new Date(ev.start), dayStart, dayEnd);
 
-    // Une occurrence antérieure au `due` courant de l'item lié a déjà été
-    // AVANCÉE (cochée) : `completionPatch` ne pose jamais `doneAt` sur une
-    // récurrence, seulement `due`, et Brief ne touche jamais au calendrier
+    // Une occurrence que l'utilisateur vient de COCHER ne doit pas
+    // réapparaître : `completionPatch` avance `due` sans jamais poser
+    // `doneAt` sur une récurrence, et Brief ne touche jamais au calendrier
     // pour une complétion (décision 2026-08-19) — la série RRULE la
-    // recontient donc pour toujours. Sans ce filtre, une séance cochée
-    // aujourd'hui (ex. « Séance push ») réapparaît comme si de rien n'était.
-    const notBefore = linkedItem?.due ? new Date(linkedItem.due).getTime() : null;
+    // recontient donc pour toujours. Comparer à `due` directement serait trop
+    // large : le cron des rappels avance AUSSI `due`, pour planifier le
+    // prochain envoi, sans que rien n'ait été fait (constaté en prod le
+    // 2026-08-20 : « Reposter 10 articles »/« Poster 10 articles »
+    // disparaissaient du jour dès que leur rappel sonnait). Seul
+    // `lastCompletedOccurrenceAt`, posé UNIQUEMENT par une coche utilisateur,
+    // identifie l'occurrence à cacher — comparaison exacte, pas un seuil.
+    const completedAt = linkedItem?.lastCompletedOccurrenceAt
+      ? new Date(linkedItem.lastCompletedOccurrenceAt).getTime()
+      : null;
 
     for (const occ of occurrences) {
-      if (notBefore !== null && occ.getTime() < notBefore) continue;
+      if (completedAt !== null && occ.getTime() === completedAt) continue;
       // Occurrence décalée dans l'app Calendrier (RECURRENCE-ID) ou supprimée
       // (EXDATE) : l'heure affichée est celle du calendrier, jamais celle de
       // la RRULE — le calendrier gagne (décision 18/08), y compris par

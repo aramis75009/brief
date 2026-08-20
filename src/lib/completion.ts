@@ -42,7 +42,15 @@ export function completionPatch(item: Item, done: boolean, now: Date): Completio
       // `remindedAt` est laissé tel quel : `pendingReminders` compare
       // `remindedAt >= due`, et la nouvelle échéance lui est postérieure. Le
       // prochain rappel sonnera donc, et on garde la trace du dernier envoi.
-      return { kind: "advanced", patch: { due: next.toISOString() } };
+      //
+      // `lastCompletedOccurrenceAt` = l'ancien `due`, l'instant que cette
+      // coche vient de terminer. C'est ce que `buildDayAgenda` compare pour
+      // savoir si l'occurrence du jour est faite — jamais `due` lui-même,
+      // que le cron des rappels avance aussi sans que rien n'ait été fait.
+      return {
+        kind: "advanced",
+        patch: { due: next.toISOString(), lastCompletedOccurrenceAt: due.toISOString() },
+      };
     }
     // Série terminée ou règle non comprise : on retire la récurrence au lieu de
     // la laisser dériver silencieusement. Même choix que `reminders.ts`.
