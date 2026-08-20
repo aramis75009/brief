@@ -75,6 +75,23 @@ describe("completionPatch — tâche récurrente", () => {
     );
   });
 
+  it("déduit l'occurrence cochée par le serveur quand le client ne transmet rien (vieux bundle PWA)", () => {
+    // Le cron a avancé `due` (rappel sonné, rien fait) et le client ne fournit
+    // pas `completedAt` : le serveur doit retrouver l'occurrence du jour.
+    const advanced = item({
+      id: "i_repost",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      due: "2026-08-24T15:30:00+02:00", // lundi, avancé par le cron
+      seriesAnchor: "2026-08-20T15:30:00+02:00",
+    });
+    // Coche un jeudi 20 à 20h Paris (le rappel de 18:30 a sonné depuis).
+    const out = completionPatch(advanced, true, new Date("2026-08-20T20:00:00+02:00"));
+    expect(out.kind).toBe("advanced");
+    expect(out.patch.lastCompletedOccurrenceAt).toBe(
+      new Date("2026-08-20T15:30:00+02:00").toISOString(),
+    );
+  });
+
   it("sans occurrence précise, retombe sur `due` (comportement historique)", () => {
     const out = completionPatch(weekly, true, NOW);
     expect(out.patch.lastCompletedOccurrenceAt).toBe(
