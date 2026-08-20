@@ -14,6 +14,35 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-20 · Accès des agents aux tâches/RDV — jeton machine en query param (claude.ai)
+
+**Décision.** Les agents (Claude Code, Hermes, Codex, **claude.ai**) peuvent
+lire les tâches et rendez-vous d'Aramis via l'API prod. `GET /api/digest`
+accepte désormais le jeton machine en **query param** (`?token=`), en plus du
+header `Authorization: Bearer`. C'est un **opt-in strict par route** :
+`allowQueryToken` dans `src/lib/cron-auth.ts`, activé **uniquement** sur
+`/api/digest` (lecture seule). Le PIN n'est **jamais** accepté en query, et
+aucune route d'écriture (capture, items) n'accepte le query token.
+
+**Pourquoi.** claude.ai (abo Pro d'Aramis) ne peut pas poser de header HTTP :
+il ne fait que des GET sur une URL nue. Sans le query token, Claude ne peut
+pas interroger le planning d'Aramis — c'est le besoin explicite d'Aramis
+(20/08) : « je veux que Claude puisse avoir lui aussi accès comme toi à mes
+tâches et rdv dans brief ». Le token est un jeton de **lecture seule**,
+révocable seul (distinct du PIN), donc acceptable en clair dans une URL.
+
+**Comment.** `cron-auth.ts` : si `allowQueryToken` et aucun header fourni,
+lire `?token=` et comparer en temps constant. `digest/route.ts` : option
+activée. Script `scripts/brief-agents.sh url` : génère l'URL avec le token
+**URL-encodé** (le token est base64, contient `+ / =` — non encodé, le serveur
+reçoit un token tronqué → 401). Doc : `docs/agent-calendar-access.md`.
+
+**Statut.** ✅ Déployé en prod le 20/08 (commit `49b50e5`, conteneur Healthy,
+URL vérifiée depuis internet : 200 avec token encodé, 401 sans / avec token
+invalide).
+
+---
+
 ## 2026-08-20 · L'ancien DESIGN.md est supprimé — le design system Claude Design v1 est LA source de vérité visuelle
 
 **Décision.** `DESIGN.md` (racine du repo) est **supprimé** et ne doit plus
