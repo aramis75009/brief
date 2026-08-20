@@ -54,8 +54,11 @@ case "$cmd" in
     # URL publique pour un appelant qui ne peut poser que des URLs nues
     # (claude.ai). Le token y figure en clair : à ne partager qu'avec des
     # canaux/appelants de confiance, et révocable seul (BRIEF_DIGEST_TOKEN).
+    # ⚠️ Le token est base64 (contient + / =) : il DOIT être URL-encodé,
+    # sinon le serveur reçoit un token tronqué → 401.
     [ -n "$DIGEST_TOKEN" ] || { echo "BRIEF_DIGEST_TOKEN introuvable (env, .env.local ou .env.production)." >&2; exit 1; }
-    echo "$BASE_URL/api/digest?token=$DIGEST_TOKEN"
+    ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$DIGEST_TOKEN")
+    echo "$BASE_URL/api/digest?token=$ENC"
     ;;
   *)
     echo "Usage: $0 {digest|agenda [AAAA-MM-JJ]|url}" >&2
