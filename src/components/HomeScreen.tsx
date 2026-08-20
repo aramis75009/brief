@@ -48,7 +48,7 @@ interface HomeScreenProps {
   projects: Project[];
   overview: Overview | null;
   loading: boolean;
-  onToggleDone: (id: string) => void;
+  onToggleDone: (id: string, completedAt?: string | null) => void;
   onOpenTask: (id: string) => void;
   onOpenAgenda: () => void;
   onOpenIdeas: () => void;
@@ -233,7 +233,7 @@ function TodayRow({
   project: Project | undefined;
   /** L'heure EFFECTIVE de l'occurrence (déjà corrigée des overrides par `buildDayAgenda`). */
   due: string;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, completedAt?: string | null) => void;
   onOpen: (id: string) => void;
 }) {
   const done = !!item.doneAt;
@@ -261,7 +261,7 @@ function TodayRow({
       className="flex w-full items-center gap-3 text-left"
       style={{ padding: "12px 14px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
     >
-      <RowCheckbox done={done} onClick={() => onToggle(item.id)} />
+      <RowCheckbox done={done} onClick={() => onToggle(item.id, due)} />
 
       {/* Titre + métadonnées */}
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
@@ -372,7 +372,7 @@ function TodayAgendaGroup({
   entries: AgendaItem[];
   itemById: Map<string, Item>;
   projectMap: Map<string, Project>;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, completedAt?: string | null) => void;
   onOpen: (id: string) => void;
 }) {
   return (

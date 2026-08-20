@@ -140,6 +140,11 @@ export async function saveItems(
 /**
  * Coche ou décoche un item.
  *
+ * `completedAt` : l'occurrence PRÉCISE cochée (heure effective affichée dans
+ * la liste du jour). Sur une récurrence dont le rappel a déjà sonné, le cron
+ * a avancé `due` au-delà de l'occurrence qu'on coche — sans cette précision,
+ * le serveur enregistrerait la mauvaise occurrence comme faite.
+ *
  * Renvoie l'item tel que le serveur l'a écrit, jamais une reconstruction
  * locale : sur une tâche récurrente c'est le serveur qui calcule la nouvelle
  * échéance, et `outcome` dit laquelle des deux choses vient de se produire.
@@ -147,10 +152,14 @@ export async function saveItems(
 export async function setItemDone(
   id: string,
   done: boolean,
+  completedAt?: string | null,
 ): Promise<{ item: Item; outcome: "advanced" | "done" | "reopened" }> {
   return jsonFetch(
     "/api/items",
-    { method: "PATCH", body: JSON.stringify({ id, done }) },
+    {
+      method: "PATCH",
+      body: JSON.stringify(completedAt ? { id, done, completedAt } : { id, done }),
+    },
     TIMEOUTS.save,
   );
 }

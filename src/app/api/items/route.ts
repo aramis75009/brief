@@ -159,9 +159,9 @@ export async function PATCH(req: Request): Promise<Response> {
   const denied = requirePin(req);
   if (denied) return denied;
 
-  let body: { id?: unknown; done?: unknown };
+  let body: { id?: unknown; done?: unknown; completedAt?: unknown };
   try {
-    body = (await req.json()) as { id?: unknown; done?: unknown };
+    body = (await req.json()) as { id?: unknown; done?: unknown; completedAt?: unknown };
   } catch {
     return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
   }
@@ -171,11 +171,16 @@ export async function PATCH(req: Request): Promise<Response> {
   if (typeof body.done !== "boolean") {
     return Response.json({ error: "`done` doit être un booléen." }, { status: 400 });
   }
+  // Occurrence PRÉCISE cochée (l'heure effective affichée dans la liste du
+  // jour). Sur une récurrence, le cron des rappels peut avoir avancé `due`
+  // au-delà de l'occurrence qu'on coche : sans elle, `completionPatch`
+  // enregistrerait la mauvaise occurrence comme faite.
+  const completedAt = typeof body.completedAt === "string" ? body.completedAt : undefined;
 
   const item = (await readItems()).find((i) => i.id === id);
   if (!item) return Response.json({ error: "Item introuvable." }, { status: 404 });
 
-  const { kind, patch } = completionPatch(item, body.done, new Date());
+  const { kind, patch } = completionPatch(item, body.done, new Date(), completedAt);
 
   try {
     const updated = await patchItem(id, patch);

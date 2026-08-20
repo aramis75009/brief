@@ -168,14 +168,14 @@ export function BriefApp() {
   }, []);
 
   /* --- Toggle done --- */
-  const toggleDone = useCallback(async (id: string) => {
+  const toggleDone = useCallback(async (id: string, completedAt?: string | null) => {
     const before = sent.find((t) => t.id === id);
     if (!before) return;
     const done = !before.doneAt;
     setDoneBusyId(id);
     setSent((s) => s.map((t) => (t.id === id ? { ...t, doneAt: done ? new Date().toISOString() : null } : t)));
     try {
-      const { item, outcome } = await setItemDone(id, done);
+      const { item, outcome } = await setItemDone(id, done, completedAt);
       setSent((s) => s.map((t) => (t.id === id ? item : t)));
       if (outcome === "advanced") flash(`Repoussé au ${formatDue(item.due, item.allDay)}.`);
       void refreshOverview();

@@ -58,6 +58,30 @@ describe("completionPatch — tâche récurrente", () => {
     expect(out.patch.due).toBe(new Date("2026-08-18T07:00:00+02:00").toISOString());
   });
 
+  it("enregistre l'occurrence PRÉCISE cochée quand `due` a déjà été avancé par le cron des rappels", () => {
+    // Le rappel de 18:30 a sonné → `due` est déjà au lendemain (ou à la
+    // prochaine occurrence), sans que rien n'ait été fait. Cocher l'occurrence
+    // du jour (que l'UI connaît et transmet) doit enregistrer CETTE
+    // occurrence comme faite, pas le `due` avancé.
+    const advanced = item({
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      due: "2026-08-24T16:00:00+02:00", // lundi, avancé par le cron
+      overrides: { "20260820T160000Z": "20260820T170000Z" },
+    });
+    const out = completionPatch(advanced, true, NOW, "2026-08-20T17:00:00+02:00");
+    expect(out.kind).toBe("advanced");
+    expect(out.patch.lastCompletedOccurrenceAt).toBe(
+      new Date("2026-08-20T17:00:00+02:00").toISOString(),
+    );
+  });
+
+  it("sans occurrence précise, retombe sur `due` (comportement historique)", () => {
+    const out = completionPatch(weekly, true, NOW);
+    expect(out.patch.lastCompletedOccurrenceAt).toBe(
+      new Date("2026-08-11T07:00:00+02:00").toISOString(),
+    );
+  });
+
   it("ne pose JAMAIS doneAt sur une récurrence encore vivante", () => {
     const out = completionPatch(weekly, true, NOW);
     // Une récurrence terminée définitivement disparaît des listes pour de bon :
