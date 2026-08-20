@@ -10,9 +10,29 @@ publiques, protégées par des secrets dédiés.
 bash scripts/brief-agents.sh digest              # récap du jour (retard + échéances)
 bash scripts/brief-agents.sh agenda 2026-08-20  # agenda fusionné d'un jour
 bash scripts/brief-agents.sh agenda              # agenda d'aujourd'hui
+bash scripts/brief-agents.sh url                 # URL publique digest avec ?token= (pour claude.ai)
 ```
 
 Sortie : JSON brut, prêt à être mis en forme par l'agent appelant.
+
+## claude.ai (abo Pro) — URL nue avec `?token=`
+
+claude.ai ne peut pas poser de header HTTP : il ne fait que des GET sur une
+URL. La route `GET /api/digest` accepte donc aussi le jeton en query param :
+
+```
+https://brief.srv1899780.hstgr.cloud/api/digest?token=<BRIEF_DIGEST_TOKEN>
+```
+
+- **Opt-in strict** : seul `/api/digest` l'active (`allowQueryToken` dans
+  `cron-auth.ts`). Le PIN n'est **jamais** accepté en query, et aucune route
+  d'écriture (capture, items) n'accepte le query token.
+- Le token figure **en clair dans l'URL** : il peut traîner dans l'historique
+  du navigateur, les logs du serveur, les journaux de claude.ai. C'est
+  acceptable pour un jeton de lecture seule, révocable seul — mais à ne
+  partager qu'avec des canaux de confiance.
+- Le header `Authorization: Bearer` reste prioritaire quand les deux sont
+  présents.
 
 ## Secrets — jamais commités
 

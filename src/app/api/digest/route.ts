@@ -29,7 +29,9 @@ export const dynamic = "force-dynamic";
  */
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = requireMachineToken(req, "BRIEF_DIGEST_TOKEN");
+  const denied = requireMachineToken(req, "BRIEF_DIGEST_TOKEN", {
+    allowQueryToken: true,
+  });
   if (denied) return denied;
 
   const [items, projects] = await Promise.all([readItems(), readProjects()]);

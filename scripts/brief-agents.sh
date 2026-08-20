@@ -6,10 +6,13 @@
 #   bash scripts/brief-agents.sh digest          # récap du jour (retard + échéances)
 #   bash scripts/brief-agents.sh agenda 2026-08-20   # agenda fusionné d'un jour
 #   bash scripts/brief-agents.sh agenda          # agenda d'aujourd'hui
+#   bash scripts/brief-agents.sh url             # URL publique digest avec ?token= (pour claude.ai)
 #
 # Auth : jeton machine BRIEF_DIGEST_TOKEN (Bearer) pour /api/digest,
 #        PIN (x-brief-pin) pour /api/agenda.
 # Le jeton est lu depuis l'environnement local, JAMAIS commité.
+# claude.ai ne peut poser que des URLs nues (pas de header) : la route digest
+# accepte aussi ?token= (opt-in lecture seule) — voir `url` ci-dessous.
 set -euo pipefail
 
 BASE_URL="${BRIEF_BASE_URL:-https://brief.srv1899780.hstgr.cloud}"
@@ -47,8 +50,15 @@ case "$cmd" in
       curl -sS -H "x-brief-pin: $PIN" "$BASE_URL/api/agenda"
     fi
     ;;
+  url)
+    # URL publique pour un appelant qui ne peut poser que des URLs nues
+    # (claude.ai). Le token y figure en clair : à ne partager qu'avec des
+    # canaux/appelants de confiance, et révocable seul (BRIEF_DIGEST_TOKEN).
+    [ -n "$DIGEST_TOKEN" ] || { echo "BRIEF_DIGEST_TOKEN introuvable (env, .env.local ou .env.production)." >&2; exit 1; }
+    echo "$BASE_URL/api/digest?token=$DIGEST_TOKEN"
+    ;;
   *)
-    echo "Usage: $0 {digest|agenda [AAAA-MM-JJ]}" >&2
+    echo "Usage: $0 {digest|agenda [AAAA-MM-JJ]|url}" >&2
     exit 2
     ;;
 esac

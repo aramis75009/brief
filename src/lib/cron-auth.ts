@@ -18,7 +18,11 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /** `null` si autorisé, une Response sinon. */
-export function requireMachineToken(req: Request, envName: string): Response | null {
+export function requireMachineToken(
+  req: Request,
+  envName: string,
+  opts?: { allowQueryToken?: boolean },
+): Response | null {
   const expected = process.env[envName];
 
   // Pas de secret configuré = porte fermée, jamais ouverte par défaut.
@@ -32,6 +36,24 @@ export function requireMachineToken(req: Request, envName: string): Response | n
   const header = req.headers.get("authorization") ?? "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
   const provided = bearer || req.headers.get("x-brief-token") || "";
+
+  // Un appelant qui ne peut pas poser de header (ex. claude.ai, qui ne fait
+  // que des GET sur une URL) passe le jeton en query param `?token=`.
+  // ⚠️ OPT-IN par route : seules les routes de LECTURE machine (digest)
+  // l'activent. Le PIN n'est JAMAIS accepté en query (clé maîtresse), et
+  // aucune route d'écriture (capture, items) n'accepte le query token.
+  // Le query token n'est consulté QUE si aucun header n'est fourni : un
+  // header valide ne doit pas être invalidé par un paramètre parasite.
+  if (opts?.allowQueryToken && !provided) {
+    const url = new URL(req.url);
+    const queryToken = url.searchParams.get("token") ?? "";
+    if (queryToken) {
+      if (!safeEqual(queryToken, expected)) {
+        return Response.json({ error: "Jeton invalide." }, { status: 401 });
+      }
+      return null;
+    }
+  }
 
   if (!provided || !safeEqual(provided, expected)) {
     return Response.json({ error: "Jeton invalide." }, { status: 401 });
