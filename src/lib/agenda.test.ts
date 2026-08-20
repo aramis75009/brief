@@ -134,6 +134,33 @@ describe("buildDayAgenda", () => {
     expect(out).toHaveLength(0);
   });
 
+  it("le même bug « Séance push », avec l'occurrence du jour DÉCALÉE par override (cas réel de prod)", () => {
+    // Cas exact constaté en prod le 2026-08-20 : la synchro CalDAV avait
+    // adopté un décalage 16:00→17:00 sur l'occurrence du jour AVANT la coche
+    // (`due` valait donc 15:00Z, pas 14:00Z, au moment où `completionPatch` a
+    // tourné). `lastCompletedOccurrenceAt` porte cette heure EFFECTIVE, pas
+    // l'heure brute de la RRULE — la comparaison doit se faire après
+    // `applyOverride`, sinon elle ne matche jamais et le bug revient.
+    const it1 = item({
+      id: "it_push",
+      due: "2026-08-24T16:00:00+02:00", // avancé au lundi suivant
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      kind: "event",
+      lastCompletedOccurrenceAt: "2026-08-20T15:00:00.000Z", // 17:00 Paris, l'heure décalée
+    });
+    const ev = calEvent({
+      uid: "brief-it_push",
+      briefItemId: "it_push",
+      title: "Séance push",
+      start: "2026-08-24T14:00:00.000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      overrides: { "20260820T140000Z": "20260820T150000Z" },
+    });
+    const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
+    expect(out).toHaveLength(0);
+  });
+
   it("le bug « Reposter 10 articles » : `due` avancé par le CRON DES RAPPELS (pas une coche) ne cache pas l'occurrence du jour", () => {
     // Régression constatée en prod le 2026-08-20, causée par un fix précédent
     // de CE même bug : le cron des rappels avance `due` après CHAQUE envoi de

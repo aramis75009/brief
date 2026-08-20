@@ -117,13 +117,18 @@ export function buildDayAgenda(
       : null;
 
     for (const occ of occurrences) {
-      if (completedAt !== null && occ.getTime() === completedAt) continue;
       // Occurrence décalée dans l'app Calendrier (RECURRENCE-ID) ou supprimée
       // (EXDATE) : l'heure affichée est celle du calendrier, jamais celle de
       // la RRULE — le calendrier gagne (décision 18/08), y compris par
       // occurrence. `null` = occurrence supprimée, on ne l'affiche pas.
       const effective = applyOverride(occ, ev.overrides, ev.exdates);
       if (!effective) continue;
+      // `lastCompletedOccurrenceAt` est posé à partir de `due`, qui reflète
+      // déjà l'heure EFFECTIVE d'une occurrence décalée (la synchro CalDAV
+      // adopte l'override dans `due` avant que la coche n'avance la série) —
+      // comparer à `effective`, pas à `occ` brut de la RRULE, sous peine de
+      // ne jamais matcher une occurrence décalée qui vient d'être cochée.
+      if (completedAt !== null && effective.getTime() === completedAt) continue;
       out.push({
         id: `cal:${ev.uid}:${effective.toISOString()}`,
         source: "calendar",
