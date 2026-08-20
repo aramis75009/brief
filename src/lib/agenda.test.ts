@@ -162,12 +162,6 @@ describe("buildDayAgenda", () => {
   });
 
   it("le bug « Reposter 10 articles » : `due` avancé par le CRON DES RAPPELS (pas une coche) ne cache pas l'occurrence du jour", () => {
-    // Régression constatée en prod le 2026-08-20, causée par un fix précédent
-    // de CE même bug : le cron des rappels avance `due` après CHAQUE envoi de
-    // rappel, coché ou non (`reminders.ts` — « les récurrences avancent »).
-    // Une tâche quotidienne dont le rappel a déjà sonné aujourd'hui a donc
-    // `due` = demain, SANS AVOIR ÉTÉ FAITE. Sans `lastCompletedOccurrenceAt`
-    // posé, l'occurrence du jour doit rester visible.
     const it1 = item({
       id: "it_repost",
       title: "Reposter 10 articles",
@@ -187,6 +181,37 @@ describe("buildDayAgenda", () => {
     const out = buildDayAgenda([it1], [ev], DAY_START, DAY_END);
     expect(out).toHaveLength(1);
     expect(out[0].due).toBe("2026-08-20T16:30:00.000Z");
+  });
+
+  it("retour Aramis 20/08 : une coche récente masque AUSSI les occurrences ANTÉRIEURES de la série (agenda d'un jour passé)", () => {
+    // Cas réel prod : Aramis coche le jeudi 20 août (Reposter/Poster 10).
+    // `lastCompletedOccurrenceAt` = 20/08. En regardant l'agenda du mercredi
+    // 19 (jour passé), l'occurrence du 19 doit être masquée elle aussi — une
+    // coche vaut « fait jusqu'à aujourd'hui ». Avant ce fix, seule l'occurrence
+    // exacte était masquée → le 19 réapparaissait et Aramis croyait que la
+    // coche ne marchait jamais (« elle ne se supprime pas de brief une fois
+    // que je l'ai marqué comme terminé »).
+    const it1 = item({
+      id: "it_repost",
+      title: "Reposter 10 articles",
+      due: "2026-08-24T16:30:00+02:00", // avancé au lundi suivant après la coche du 20
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+      kind: "task",
+      lastCompletedOccurrenceAt: "2026-08-20T16:30:00.000Z", // coché jeudi 20
+    });
+    const ev = calEvent({
+      uid: "brief-it_repost",
+      briefItemId: "it_repost",
+      title: "Reposter 10 articles",
+      start: "2026-08-24T16:30:00.000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH",
+    });
+    // Jour du 19 août 2026 (mercredi), Europe/Paris.
+    const day19Start = new Date("2026-08-18T22:00:00Z");
+    const day19End = new Date("2026-08-19T22:00:00Z");
+    const out = buildDayAgenda([it1], [ev], day19Start, day19End);
+    expect(out).toHaveLength(0);
   });
 
   it("un item brief-* dont l'item lié est terminé n'apparaît pas non plus via le calendrier (fenêtre ~15 min)", () => {

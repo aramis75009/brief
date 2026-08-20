@@ -177,7 +177,10 @@ export function BriefApp() {
     try {
       const { item, outcome } = await setItemDone(id, done, completedAt);
       setSent((s) => s.map((t) => (t.id === id ? item : t)));
-      if (outcome === "advanced") flash(`Repoussé au ${formatDue(item.due, item.allDay)}.`);
+      // « Repoussé » disait à Aramis que la coche avait raté sa cible : on
+      // termine l'occurrence du jour (masquée de l'agenda et de l'accueil),
+      // et la série continue à la prochaine occurrence — le toast le dit.
+      if (outcome === "advanced") flash(`Terminée — prochaine le ${formatDue(item.due, item.allDay)}.`);
       void refreshOverview();
       void refreshTodayAgenda();
     } catch (e) {

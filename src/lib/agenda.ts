@@ -101,7 +101,7 @@ export function buildDayAgenda(
       ? occurrencesInRange(new Date(ev.start), ev.rrule, dayStart, dayEnd)
       : inWindow(new Date(ev.start), dayStart, dayEnd);
 
-    // Une occurrence que l'utilisateur vient de COCHER ne doit pas
+    // Une occurrence qu'une coche utilisateur a terminée ne doit pas
     // réapparaître : `completionPatch` avance `due` sans jamais poser
     // `doneAt` sur une récurrence, et Brief ne touche jamais au calendrier
     // pour une complétion (décision 2026-08-19) — la série RRULE la
@@ -111,7 +111,13 @@ export function buildDayAgenda(
     // 2026-08-20 : « Reposter 10 articles »/« Poster 10 articles »
     // disparaissaient du jour dès que leur rappel sonnait). Seul
     // `lastCompletedOccurrenceAt`, posé UNIQUEMENT par une coche utilisateur,
-    // identifie l'occurrence à cacher — comparaison exacte, pas un seuil.
+    // identifie la frontière. Une coche vaut « fait jusqu'à aujourd'hui » :
+    // on masque TOUTES les occurrences de la série ≤ cette dernière occurrence
+    // comprise, pas seulement l'exact match — sans quoi les occurrences de la
+    // veille (jamais cochées individuellement) ressurgissent à la consultation
+    // d'un jour passé et font croire que « la tâche ne se marque jamais faite »
+    // (retour Aramis du 2026-08-20, agenda du 19 août affichait encore
+    // Poster/Reposter alors que le 20 était coché).
     const completedAt = linkedItem?.lastCompletedOccurrenceAt
       ? new Date(linkedItem.lastCompletedOccurrenceAt).getTime()
       : null;
@@ -128,7 +134,10 @@ export function buildDayAgenda(
       // adopte l'override dans `due` avant que la coche n'avance la série) —
       // comparer à `effective`, pas à `occ` brut de la RRULE, sous peine de
       // ne jamais matcher une occurrence décalée qui vient d'être cochée.
-      if (completedAt !== null && effective.getTime() === completedAt) continue;
+      // Seuil ≤ (pas seulement égal) : une coche vaut « fait jusqu'à
+      // aujourd'hui » — l'occurrence cochée ET toutes les précédentes de la
+      // série sont faites (retour Aramis 20/08).
+      if (completedAt !== null && effective.getTime() <= completedAt) continue;
       out.push({
         id: `cal:${ev.uid}:${effective.toISOString()}`,
         source: "calendar",
