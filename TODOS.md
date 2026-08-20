@@ -196,6 +196,26 @@ raison nouvelle.
 - **Découvert :** en testant la refonte du 19/08, pas introduit par elle.
 - **Effort :** S (CC) · **Priorité :** P2
 
+### Refonte du système de tâches + report avec choix de date — retour Aramis 2026-08-20
+- **Quoi :** Aramis : « je pense qu'il va falloir qu'on revoie complètement le
+  système de tâches dans Brief car là j'essaye de repousser une tâche, je peux
+  pas choisir la date à laquelle je vais la repousser, tout bug quasiment tout
+  bug au niveau des tâches. Il va falloir qu'on donne la main à [une IA très
+  puissante] pour qu'elle s'occupe de tout ça. »
+- **Deux problèmes concrets :**
+  1. « Reporter » ne propose aucune date : `postponeItem` (`BriefApp.tsx`)
+     fait `resolveDue("demain", …)` en dur — impossible de repousser à une
+     date choisie. Il faut un sélecteur de date/heure dans la fiche.
+  2. Le comportement des récurrentes prêtait à confusion (toast « Repoussé »,
+     occurrences passées réaffichées) — corrigé le 20/08 soir pour le
+     masquage (commit `899ade4`), mais la refonte globale du modèle de
+     tâches reste demandée par Aramis.
+- **Direction pressentie :** confier la refonte du modèle de tâches à une IA
+  puissante (Claude ?), via un vrai brainstorming architectural d'abord
+  (comme le chantier stockage vocal). PAS un fix ponctuel.
+- **Effort :** XL · **Priorité :** P2, en attente de décision Aramis sur
+  l'agent/la méthode.
+
 **Tranché par Aramis le 2026-08-15 :**
 
 ### Version Desktop & Vue Kanban (Trello-like)
