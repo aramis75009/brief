@@ -36,23 +36,33 @@ Or le cron des rappels avance AUSSI `due` après chaque envoi de rappel
 donc le **lundi 24** comme « fait » : `buildDayAgenda` ne trouvait aucune
 correspondance avec l'occurrence du jour → elle réapparaissait non cochée.
 
-**Fix (2 volets).**
-1. **Code** : l'UI transmet l'occurrence PRÉCISE cochée (l'heure effective
-   affichée, post-override) au `PATCH /api/items` via un champ optionnel
-   `completedAt`. `completionPatch(item, done, now, completedAt)` l'utilise
-   comme `lastCompletedOccurrenceAt` ; `due` reste le fallback historique.
+**Fix (2 volets, 2 passes).**
+1. **Code — passe 1** : l'UI transmet l'occurrence PRÉCISE cochée (l'heure
+   effective affichée, post-override) au `PATCH /api/items` via un champ
+   optionnel `completedAt`. `completionPatch(item, done, now, completedAt)`
+   l'utilise comme `lastCompletedOccurrenceAt` ; `due` reste le fallback
+   historique.
    - `src/components/HomeScreen.tsx` : `onToggle(item.id, due)` — la ligne du
      jour connaît l'occurrence.
    - `src/components/BriefApp.tsx` : `toggleDone(id, completedAt?)`.
    - `src/lib/api.ts` : `setItemDone(id, done, completedAt?)`.
    - `src/app/api/items/route.ts` : parse `completedAt` optionnel.
-   - `src/lib/completion.ts` : 4e paramètre optionnel.
-2. **Données prod (rattrapage, pas de code)** : `lastCompletedOccurrenceAt`
-   des 2 items corrigé à la main sur le volume (backup
-   `brief-20260820-185652.tar.gz` avant) :
+2. **Code — passe 2 (le client ne suffit pas)** : Aramis confirme que le bug
+   touche TOUTES les récurrentes, et un vieux bundle en cache PWA ne transmet
+   pas `completedAt`. Le serveur déduit donc lui-même l'occurrence cochée :
+   `inferCompletedOccurrence` (dans `completion.ts`) prend l'occurrence de la
+   série la plus récente avant la coche (fenêtre 4 jours, `occurrencesInRange`
+   + `applyOverride`), en priorité sur `due` — que le cron avance aussi.
+   Priorité dans `completionPatch` : `completedAt` (UI) → occurrence déduite
+   (serveur) → `due` (dernier recours). Déployé en `cca5e81`.
+3. **Données prod (rattrapage, pas de code)** : `lastCompletedOccurrenceAt`
+   corrigé à la main sur le volume (backup
+   `brief-20260820-192243.tar.gz`) — 3 items :
    - `it_1786829768252_592` (Poster 10) → `2026-08-20T17:00:00.000Z`
    - `it_1786970025770_451` (Reposter 10) → `2026-08-20T16:30:00.000Z`
-   (heures EFFECTIVES post-override des occurrences du jeudi 20).
+   - `it_1787063059802_29810` (Aller courir) → `2026-08-19T14:00:00.000Z`
+   (heures EFFECTIVES post-override des occurrences réellement cochées).
+   Séance push était déjà correcte (rattrapage de la passation précédente).
 
 **Vérifié** : `npx vitest run` ✅ 244 passed ; `npx tsc --noEmit` ✅ ;
 agenda prod du 20/08 → ne montre plus que « Tourner les photos » ; prod
@@ -73,19 +83,19 @@ HTTP 200, `brief-app-1 Healthy`.
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/completion.ts` | 4ᵉ paramètre `completedAt?` — occurrence précise cochée |
+| `src/lib/completion.ts` | `completedAt` optionnel + `inferCompletedOccurrence` (déduction serveur) |
 | `src/app/api/items/route.ts` | parse `completedAt` optionnel (PATCH) |
 | `src/lib/api.ts` | `setItemDone(id, done, completedAt?)` |
 | `src/components/BriefApp.tsx` | `toggleDone(id, completedAt?)` |
 | `src/components/HomeScreen.tsx` | `onToggle(item.id, due)` — ligne du jour |
-| `src/lib/completion.test.ts` | +2 tests (occurrence précise, fallback `due`) |
-| Volume `brief-data` (prod) | `lastCompletedOccurrenceAt` corrigé sur 2 items |
+| `src/lib/completion.test.ts` | +3 tests (occurrence précise, déduction serveur, fallback `due`) |
+| Volume `brief-data` (prod) | `lastCompletedOccurrenceAt` corrigé sur 3 items |
 
 ## Validations — passants / échoués / non lancés
 
 | Commande | Résultat |
 |---|---|
-| `npx vitest run` | ✅ **244 passed** |
+| `npx vitest run` | ✅ **245 passed** |
 | `npx tsc --noEmit` | ✅ propre |
 | Agenda prod 20/08 | ✅ « Tourner les photos » seul |
 | Prod HTTP | ✅ 200 |
