@@ -14,6 +14,39 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-20 · Icône PWA remplacée — variante « Trois destinations » (Claude Design v1)
+
+**Décision.** L'icône PWA change : trois barres corail sur fond encre →
+trois traits arrondis décroissants (task bleu, meet vert, idea ambre) sur
+fond `#101010`, alignés à gauche. Source : projet Claude Design « Brief PWA
+et desktop », `BriefIcon.dc.html`, variante B — choisie et documentée par
+Aramis lui-même (`GUIDE-IMPLEMENTATION.md` du projet, avec verdict et
+rationale). `public/icon-{192,512}.png`, `apple-touch-icon.png`,
+`icon-maskable-512.png` (contenu à 80 %), `favicon-32.png` et
+`src/app/favicon.ico` régénérés avec `sharp` depuis ce tracé. `manifest.ts` :
+`background_color`/`theme_color` `#F5F3F0` → `#F4F4F2` (alignés sur
+`--color-bg`, qui avait déjà migré dans `globals.css` sans que le manifest ne
+suive).
+
+**Pourquoi.** L'ancienne icône représentait l'outil (dicter — barres de
+niveau audio) plutôt que le produit (ranger). La variante B est la seule des
+cinq candidates qui tient à 20 px sans trait fin et la seule qui dit « c'est
+rangé ». Ses couleurs (`#101010`/`#CFE0FF`/`#CBE9D6`/`#FBE2AE`) correspondent
+exactement aux tokens déjà en place dans `globals.css`
+(`--color-ink`/`--color-task-100`/`--color-meet-100`/`--color-idea-100`) :
+implémenter l'icône littéralement n'introduit aucune divergence, ça comble un
+retard (le manifest et les PNG dataient du système corail du 10/08).
+
+**Comment.** Script Node ponctuel (`sharp`, non conservé dans le dépôt) qui
+rend le SVG à chaque taille, plus `translate(51.2 51.2) scale(0.8)` pour la
+version maskable. `favicon.ico` reconstruit à la main (conteneur ICO avec PNG
+embarqué 16 + 32).
+
+**Statut.** ✅ Implémenté. Non déployé au moment de l'écriture — voir
+`HANDOFF.md`.
+
+---
+
 ## 2026-08-20 · Accès des agents aux tâches/RDV — jeton machine en query param (claude.ai)
 
 **Décision.** Les agents (Claude Code, Hermes, Codex, **claude.ai**) peuvent
