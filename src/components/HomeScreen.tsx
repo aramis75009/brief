@@ -388,7 +388,7 @@ const TodayAgendaGroup = memo(function TodayAgendaGroup({
   onOpen: (id: string) => void;
 }) {
   return (
-    <div className="flex flex-col cv-auto" style={{ gap: 8 }}>
+    <div className="flex flex-col" style={{ gap: 8 }}>
       <span
         className="font-mono"
         style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: C.inkMuted }}

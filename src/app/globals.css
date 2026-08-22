@@ -220,28 +220,11 @@
 /* --------------------------------------------------------------------------- *
  * Optimisations de scroll fluide sur iPhone.
  *
- * 1. `.cv-auto` : `content-visibility: auto` permet au navigateur de skipper
- *    le rendu des éléments hors écran (above/below the fold). Sur une longue
- *    liste de tâches, le navigateur ne layout que ce qui est visible — gain
- *    direct sur le temps de paint et la mémoire.
- *    `contain-intrinsic-size` donne une taille placeholder pour éviter que la
- *    scrollbar ne saute.
- *
- * 2. `.perf-contain` : `contain: layout style paint` isole le sous-arbre du
- *    reste de la page — le navigateur sait qu'un repaint à l'intérieur d'une
- *    carte n'invalide pas ses voisines. Indispensable sur les listes où
- *    chaque carte est indépendante.
- *
- * Ces classes sont OPT-IN : on les pose sur les conteneurs de liste et les
- * cartes, pas sur tout le DOM. `content-visibility: auto` sur un élément
- * que l'utilisateur DOIT voir dès le chargement (au-dessus de la ligne de
- * flottaison) retarderait son rendu — d'où le opt-in.
+ * `.perf-contain` : `contain: layout style` isole le sous-arbre du reste de
+ * la page — le navigateur sait qu'un repaint à l'intérieur d'une carte
+ * n'invalide pas ses voisines. On retire `paint` et `content-visibility`
+ * qui causaient un flou de rendu sub-pixel sur iOS Safari.
  * ------------------------------------------------------------------------ */
-.cv-auto {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
-
 .perf-contain {
-  contain: layout style paint;
+  contain: layout style;
 }

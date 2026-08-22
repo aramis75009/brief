@@ -76,8 +76,7 @@ export function IdeasScreen({
             return (
               <div
                 key={idea.id}
-                className="rounded-20 border border-ink/[.06] bg-idea-100 p-4"
-                style={{ opacity: isOld ? 0.65 : 1 }}
+                className={`rounded-20 border border-ink/[.06] p-4 ${isOld ? "bg-idea-100/50" : "bg-idea-100"}`}
               >
                 {/* Meta */}
                 <div className="mb-2.5 flex items-center gap-2">
