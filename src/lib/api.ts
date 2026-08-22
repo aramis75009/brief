@@ -27,7 +27,10 @@ async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): 
   const pin = getPin();
   const headers = new Headers(init.headers);
   if (pin) headers.set(PIN_HEADER, pin);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // Ne PAS forcer Content-Type sur FormData : le navigateur doit set
+  // multipart/form-data avec son boundary. Forcer application/json casse l'upload.
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
 
   let res: Response;
   try {
