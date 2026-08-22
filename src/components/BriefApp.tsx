@@ -121,6 +121,8 @@ export function BriefApp() {
   const audioIdRef = useRef<string | null>(null);
   /** Durée (s) de la dernière dictée — conservée pour bâtir `audioOrigin` à l'envoi. */
   const audioSecondsRef = useRef(0);
+  /** Promise de l'upload audio en cours — résout vers l'audioId ou null. */
+  const audioUploadRef = useRef<Promise<string | null>>(Promise.resolve(null));
 
   useEffect(() => { projectsRef.current = projects; }, [projects]);
 
@@ -329,12 +331,13 @@ export function BriefApp() {
         return;
       }
       setTranscript((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
-      // Upload de l'audio en parallèle de la structuration — ne bloque pas le parsing.
-      void uploadAudio(rec.blob, rec.mimeType)
-        .then((res) => { audioIdRef.current = res.id; })
+      // Upload de l'audio — on garde la promise pour l'attendre au send().
+      audioUploadRef.current = uploadAudio(rec.blob, rec.mimeType)
+        .then((res) => { audioIdRef.current = res.id; return res.id; })
         .catch((e) => {
           if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
           console.warn("[audio] upload échoué:", e instanceof Error ? e.message : e);
+          return null;
         });
       // Auto-structure après transcription
       void structure(text);
@@ -378,7 +381,9 @@ export function BriefApp() {
       flash("Rien à enregistrer.", "err");
       return;
     }
-    const audioId = audioIdRef.current;
+    // Attendre que l'upload audio soit terminé — sans ça, audioIdRef.current
+    // est encore null si l'utilisateur envoie avant la fin de l'upload.
+    const audioId = await audioUploadRef.current;
     const durationSec = audioSecondsRef.current;
     const fullText = transcript.trim();
     const hasAudioMeta = !!audioId && durationSec > 0 && !!fullText;
