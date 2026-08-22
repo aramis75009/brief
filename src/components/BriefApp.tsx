@@ -445,6 +445,15 @@ export function BriefApp() {
     let alive = true;
     void (async () => { if (alive) await refreshItems(); })();
     void (async () => { if (alive) await loadProjects({ silent: true }); })();
+    // Vérifier l'état d'abonnement push au démarrage — sans ça, le statut
+    // repasse à "Désactivées" à chaque réouverture même si l'utilisateur
+    // a déjà activé les notifications.
+    void (async () => {
+      try {
+        const state = await readPushState();
+        if (alive && state.status === "on") setPushSubscribed(true);
+      } catch { /* silencieux — pas de réseau ou SW pas prêt */ }
+    })();
     return () => { alive = false; };
   }, [hydrated, unlocked, refreshItems, loadProjects]);
 
