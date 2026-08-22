@@ -3,6 +3,7 @@
 import { WaveformActive, WaveformCollapsed } from "./Waveform";
 import { VoiceBadge } from "./VoiceBadge";
 import { TypeSegmented } from "./TypeSegmented";
+import { skinFor, shapeFor } from "@/lib/projects";
 import { CloseIcon, MicIcon, ArrowRightIcon, StopIcon } from "./icons";
 import { isoToLocalInputValue, localInputToIso, toIsoWithOffset } from "@/lib/due";
 import { itemType, type ItemType } from "@/lib/item-type";
@@ -340,6 +341,38 @@ function DoneStage({
             >
               <span className="text-[14.5px] font-bold tracking-[-0.01em]">{draft.title}</span>
               <TypeSegmented value={type} onChange={(next) => handleTypeChange(draft, next)} />
+
+              {/* Sélecteur de projet */}
+              <div className="flex items-center gap-2">
+                {projects.map((p) => {
+                  const skin = skinFor(p);
+                  const shape = shapeFor(p);
+                  const selected = draft.projectId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onUpdateDraft(draft.id, { projectId: p.id })}
+                      className={`flex items-center gap-1.5 rounded-full px-3 h-8 text-[12px] font-bold transition-colors ${
+                        selected ? "bg-ink text-white" : "border border-ink/[.08] bg-bg text-ink-muted"
+                      }`}
+                    >
+                      <span
+                        className="flex-none"
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: shape === "square" ? 2 : shape === "diamond" ? 2 : 99,
+                          background: selected ? "#fff" : skin.bg,
+                          transform: shape === "diamond" ? "rotate(45deg)" : "none",
+                        }}
+                      />
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
+
               {needsDue && (
                 <input
                   type="datetime-local"

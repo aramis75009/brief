@@ -117,6 +117,30 @@ export async function fetchCalDavStatus(): Promise<{ lastSyncAt: number | null }
   return jsonFetch("/api/caldav-status", {}, TIMEOUTS.caldavStatus);
 }
 
+/**
+ * Envoie l'audio brut à `/api/audio` pour stockage persistant.
+ * Retourne l'id et l'URL de l'audio enregistré — à rattacher aux items.
+ */
+export async function uploadAudio(
+  blob: Blob,
+  mimeType: string,
+): Promise<{ id: string; url: string }> {
+  return jsonFetch<{ id: string; url: string }>(
+    "/api/audio",
+    {
+      method: "POST",
+      body: (() => {
+        const form = new FormData();
+        const ext = mimeType.includes("mp4") ? "m4a" : "webm";
+        form.append("file", blob, `note.${ext}`);
+        form.append("mimeType", mimeType);
+        return form;
+      })(),
+    },
+    TIMEOUTS.transcribe,
+  );
+}
+
 /** Les projets ne transitent plus par le client : le serveur les possède. */
 export async function parseNote(text: string): Promise<DraftItem[]> {
   const data = await jsonFetch<{ items: DraftItem[] }>(

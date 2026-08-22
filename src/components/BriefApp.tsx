@@ -36,6 +36,7 @@ import {
   setItemDone,
   transcribeAudio,
   updateItem,
+  uploadAudio,
 } from "@/lib/api";
 import type { AgendaItem } from "@/lib/agenda";
 import { formatDue, resolveDue } from "@/lib/due";
@@ -116,6 +117,8 @@ export function BriefApp() {
   const structureRef = useRef<(text: string) => void>(() => {});
   const sendRef = useRef<() => void>(() => {});
   const loadedRef = useRef(false);
+  /** audioId de la dernière dictée — rattaché aux items au moment de l'envoi. */
+  const audioIdRef = useRef<string | null>(null);
 
   useEffect(() => { projectsRef.current = projects; }, [projects]);
 
@@ -314,6 +317,7 @@ export function BriefApp() {
 
   /* --- Transcription --- */
   const onRecorded = useCallback(async (rec: Recording) => {
+    audioIdRef.current = null;
     try {
       const text = await transcribeAudio(rec.blob, rec.mimeType, () => setCaptureStage("transcribing"));
       if (!text) {
@@ -322,6 +326,13 @@ export function BriefApp() {
         return;
       }
       setTranscript((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+      // Upload de l'audio en parallèle de la structuration — ne bloque pas le parsing.
+      void uploadAudio(rec.blob, rec.mimeType)
+        .then((res) => { audioIdRef.current = res.id; })
+        .catch((e) => {
+          if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+          console.warn("[audio] upload échoué:", e instanceof Error ? e.message : e);
+        });
       // Auto-structure après transcription
       void structure(text);
     } catch (e) {
@@ -364,8 +375,14 @@ export function BriefApp() {
       flash("Rien à enregistrer.", "err");
       return;
     }
+    const audioId = audioIdRef.current;
+    const itemsToSend = ready.map((d) => ({
+      ...d,
+      title: d.title.trim(),
+      ...(audioId ? { audioId } : {}),
+    }));
     try {
-      const { saved, total } = await saveItems(ready.map((d) => ({ ...d, title: d.title.trim() })));
+      const { saved, total } = await saveItems(itemsToSend);
       if (saved < total) {
         flash(`${saved} enregistré(s) sur ${total}.`, "err");
         return;
@@ -373,12 +390,13 @@ export function BriefApp() {
       await refreshItems();
       setDrafts([]);
       setTranscript("");
+      audioIdRef.current = null;
       setCaptureOpen(false);
       setCaptureStage("idle");
       setScreen("home");
       flash(`${saved} item${saved > 1 ? "s" : ""} enregistré${saved > 1 ? "s" : ""}`);
     } catch (e) {
-      const queued = enqueue(ready.map((d) => ({ ...d, title: d.title.trim() })));
+      const queued = enqueue(itemsToSend);
       if (queued) {
         setDrafts([]);
         setTranscript("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Chip } from "./Chip";
 import { TypeSegmented } from "./TypeSegmented";
 import { VoiceBadge } from "./VoiceBadge";
@@ -16,6 +16,7 @@ import {
 } from "./icons";
 import { isoToLocalInputValue, localInputToIso } from "@/lib/due";
 import { itemType, type ItemType } from "@/lib/item-type";
+import { apiFetch } from "@/lib/pin";
 import { TIMEZONE } from "@/lib/zoned";
 import type { DraftItem, Item, Project } from "@/lib/types";
 
@@ -71,6 +72,35 @@ export function TaskDetailScreen({
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Élément Audio courant — pour éviter d'en créer plusieurs simultanément. */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  /**
+   * Rejoue l'enregistrement audio lié à l'item, s'il existe.
+   * Fetch avec le header PIN (comme toutes les routes /api/*), puis lecture.
+   */
+  const handlePlayAudio = useCallback(async () => {
+    if (!item?.audioId) return;
+    try {
+      const res = await apiFetch(`/api/audio/${encodeURIComponent(item.audioId)}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+      };
+      void audio.play();
+    } catch {
+      /* PIN révoqué ou réseau coupé : on ignore silencieusement */
+    }
+  }, [item?.audioId]);
 
   const beginEdit = () => {
     if (!item) return;
@@ -255,6 +285,7 @@ export function TaskDetailScreen({
             </span>
             <button
               aria-label="Écouter l'extrait"
+              onClick={handlePlayAudio}
               className="flex size-8 flex-none items-center justify-center rounded-full bg-ink"
             >
               <PlayIcon size={12} className="text-white" />

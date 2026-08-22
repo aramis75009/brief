@@ -51,6 +51,7 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     notes: typeof v.notes === "string" ? v.notes : undefined,
     subtasks: Array.isArray(v.subtasks) ? v.subtasks.filter(isSubTask) : undefined,
     audioOrigin: isAudioOrigin(v.audioOrigin) ? v.audioOrigin : undefined,
+    audioId: typeof v.audioId === "string" && v.audioId.trim() ? v.audioId.trim() : undefined,
     status: v.status === "idea" || v.status === "archived" ? v.status : undefined,
   };
 }

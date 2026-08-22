@@ -115,6 +115,8 @@ export type DraftItem = {
   subtasks?: SubTask[];
   /** Fil d'origine vocal — la dictée d'où provient cet item. */
   audioOrigin?: AudioOrigin;
+  /** Identifiant de l'audio persisté (`audio_…`) — pour rejouer l'enregistrement. */
+  audioId?: string;
   /** Statut : "active" par défaut. "idea" pour la boîte à idées. */
   status?: ItemStatus;
 };
