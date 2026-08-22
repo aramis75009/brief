@@ -275,7 +275,7 @@ export function TaskDetailScreen({
 
       {!editing && (
       <>
-      {/* Fil d'origine */}
+      {/* Fil d'origine — audio avec métadonnées (audioOrigin) */}
       {audio && (
         <div className="mb-3.5 rounded-20 border border-ink/[.06] bg-surface p-4">
           {/* Header */}
@@ -329,6 +329,28 @@ export function TaskDetailScreen({
               <ChevronRightIcon size={16} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Enregistrement vocal — audio stocké sans métadonnées (audioId seul) */}
+      {!audio && item?.audioId && (
+        <div className="mb-3.5 rounded-20 border border-ink/[.06] bg-surface p-4">
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="font-mono text-[10px] tracking-[0.09em] text-ink-faint">
+              ENREGISTREMENT VOCAL
+            </span>
+            <button
+              aria-label="Écouter l'enregistrement"
+              onClick={handlePlayAudio}
+              className="flex size-9 flex-none items-center justify-center rounded-full bg-ink"
+            >
+              <PlayIcon size={14} className="text-white" />
+            </button>
+          </div>
+          {/* Waveform statique simplifiée */}
+          <div className="mt-3">
+            <WaveformStatic totalBars={24} activeStart={0} activeEnd={24} />
+          </div>
         </div>
       )}
 

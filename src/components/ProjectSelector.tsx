@@ -70,10 +70,10 @@ export function ProjectSelector({
         <ChevronDownIcon size={14} className="text-ink-faint" />
       </button>
 
-      {/* Menu déroulant */}
+      {/* Menu déroulant — s'ouvre vers le HAUT pour ne pas être coupé */}
       {open && (
         <div
-          className="absolute top-full left-0 z-50 mt-1.5 min-w-[180px] rounded-20 border border-ink/[.08] bg-surface p-1.5 shadow-card"
+          className="absolute bottom-full left-0 z-50 mb-1.5 min-w-[180px] rounded-20 border border-ink/[.08] bg-surface p-1.5 shadow-card"
           style={{ animation: "fade .15s both" }}
         >
           {projects.map((p) => {
