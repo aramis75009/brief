@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { CloseIcon, ChevronRightIcon, CalendarIcon, MicIcon, BellIcon } from "./icons";
 import type { ReactNode } from "react";
@@ -22,12 +23,18 @@ export function AccountSheet({
   open,
   calendarSyncAt,
   onClose,
+  onToast,
 }: {
   open: boolean;
   calendarSyncAt: number | null;
   onClose: () => void;
+  onToast?: (msg: string) => void;
 }) {
   if (!open) return null;
+
+  const [caldavOn, setCaldavOn] = useState(true);
+  const [autoStructOn, setAutoStructOn] = useState(false);
+  const [remindersOn, setRemindersOn] = useState(true);
 
   return (
     <div
@@ -70,29 +77,42 @@ export function AccountSheet({
             icon={<SettingIcon bg="var(--color-meet-100)"><CalendarIcon size={15} className="text-meet-700" /></SettingIcon>}
             title="Calendrier Apple"
             subtitle={formatSyncAge(calendarSyncAt)}
-            toggleOn={true}
+            toggleOn={caldavOn}
+            onToggle={() => setCaldavOn((v) => !v)}
           />
           <div className="mx-3.5 h-px bg-ink/[.06]" />
           <SettingRow
             icon={<SettingIcon bg="var(--color-ink)"><MicIcon size={15} className="text-white" /></SettingIcon>}
             title="Structuration auto"
             subtitle="Découper la dictée sans confirmation"
-            toggleOn={false}
+            toggleOn={autoStructOn}
+            onToggle={() => setAutoStructOn((v) => !v)}
           />
           <div className="mx-3.5 h-px bg-ink/[.06]" />
           <SettingRow
             icon={<SettingIcon bg="var(--color-idea-100)"><BellIcon size={15} className="text-idea-700" /></SettingIcon>}
             title="Rappels du matin"
             subtitle="Tous les jours à 8:00"
-            toggleOn={true}
+            toggleOn={remindersOn}
+            onToggle={() => setRemindersOn((v) => !v)}
           />
         </div>
 
         {/* Navigation rows */}
         <div className="mb-4 flex flex-col gap-0.5">
-          <NavRow label="Voix, langue & transcription" />
-          <NavRow label="Confidentialité des notes vocales" />
-          <NavRow label="Abonnement" value="Plus" />
+          <NavRow
+            label="Voix, langue & transcription"
+            onClick={() => onToast?.("Langue de reconnaissance : français. Modèle : Whisper Large v3.")}
+          />
+          <NavRow
+            label="Confidentialité des notes vocales"
+            onClick={() => onToast?.("Tes enregistrements sont envoyés au serveur pour transcription, puis supprimés.")}
+          />
+          <NavRow
+            label="Abonnement"
+            value="Plus"
+            onClick={() => onToast?.("Brief est gratuit pour l'instant.")}
+          />
         </div>
 
         {/* Close */}
@@ -120,14 +140,20 @@ function SettingRow({
   title,
   subtitle,
   toggleOn,
+  onToggle,
 }: {
   icon: ReactNode;
   title: string;
   subtitle: string;
   toggleOn: boolean;
+  onToggle?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3.5 py-[13px]">
+    <div
+      className="flex items-center gap-3 px-3.5 py-[13px]"
+      onClick={onToggle}
+      style={{ cursor: onToggle ? "pointer" : "default" }}
+    >
       {icon}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[14.5px] font-bold">{title}</span>
@@ -138,9 +164,12 @@ function SettingRow({
   );
 }
 
-function NavRow({ label, value }: { label: string; value?: string }) {
+function NavRow({ label, value, onClick }: { label: string; value?: string; onClick?: () => void }) {
   return (
-    <button className="flex min-h-[44px] items-center justify-between gap-2 rounded-[14px] px-3.5 py-[13px] text-left">
+    <button
+      onClick={onClick}
+      className="flex min-h-[44px] items-center justify-between gap-2 rounded-[14px] px-3.5 py-[13px] text-left"
+    >
       <span className="text-[14.5px] font-bold">{label}</span>
       <span className="flex items-center gap-2">
         {value && <span className="text-[12.5px] font-bold text-ink-muted">{value}</span>}

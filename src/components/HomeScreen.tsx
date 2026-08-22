@@ -73,6 +73,8 @@ interface HomeScreenProps {
   onOpenAccount: () => void;
   onCapture: () => void;
   onAskAI: () => void;
+  onHelp: () => void;
+  onNotifications: () => void;
 }
 
 /* ------------------------------------------------------------------ *
@@ -440,6 +442,8 @@ export function HomeScreen({
   onOpenAccount,
   onCapture,
   onAskAI,
+  onHelp,
+  onNotifications,
 }: HomeScreenProps) {
   // Date du jour formatée « mar. 19 août » dans le fuseau Europe/Paris.
   // Formateur module-level `dayLabelFmt` — pas de `new Intl.DateTimeFormat()` à chaque rendu.
@@ -502,10 +506,10 @@ export function HomeScreen({
           onClick={onOpenAccount}
         />
         <div className="flex items-center gap-1">
-          <HeaderIconButton label="Aide" onClick={undefined}>
+          <HeaderIconButton label="Aide" onClick={onHelp}>
             <HelpIcon size={17} />
           </HeaderIconButton>
-          <HeaderIconButton label="Notifications" onClick={undefined}>
+          <HeaderIconButton label="Notifications" onClick={onNotifications}>
             <BellIcon size={19} />
             {/* Point rouge de notification */}
             <span

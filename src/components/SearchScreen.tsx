@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { VoiceBadge } from "./VoiceBadge";
 import { AccountAvatar } from "./AccountAvatar";
 import { SearchSmallIcon, MicIcon, ChevronLeftIcon } from "./icons";
 import { compareByDue } from "@/lib/due";
+import { useRecorder, type Recording } from "@/lib/useRecorder";
+import { transcribeAudio } from "@/lib/api";
 import type { Item, Project } from "@/lib/types";
 
 /**
@@ -27,19 +29,39 @@ export function SearchScreen({
   items,
   projects,
   onOpenItem,
-  onVoiceSearch,
   onBack,
   onOpenAccount,
 }: {
   items: Item[];
   projects: Project[];
   onOpenItem: (id: string) => void;
-  onVoiceSearch: () => void;
   onBack: () => void;
   onOpenAccount: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [voiceActive, setVoiceActive] = useState(false);
+
+  const onRecorded = useCallback(async (rec: Recording) => {
+    setVoiceActive(false);
+    try {
+      const text = await transcribeAudio(rec.blob, rec.mimeType, () => {});
+      if (text.trim()) setQuery(text.trim());
+    } catch {
+      /* non bloquant */
+    }
+  }, []);
+
+  const recorder = useRecorder(onRecorded);
+
+  const toggleVoiceSearch = useCallback(() => {
+    if (recorder.recording) {
+      recorder.stop();
+    } else {
+      setVoiceActive(true);
+      void recorder.start();
+    }
+  }, [recorder]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -99,7 +121,7 @@ export function SearchScreen({
         />
         <button
           aria-label="Dicter la recherche"
-          onClick={onVoiceSearch}
+          onClick={toggleVoiceSearch}
           className="flex size-10 flex-none items-center justify-center rounded-full bg-ink"
         >
           <MicIcon size={15} className="text-white" />

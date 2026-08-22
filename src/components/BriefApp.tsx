@@ -43,7 +43,7 @@ import {
   queueSnapshot,
   subscribeQueue,
 } from "@/lib/queue";
-import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
+import { UnauthorizedError, clearPin, getPin, PIN_HEADER, readStoredTranscript } from "@/lib/pin";
 import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
 import { zonedParts } from "@/lib/zoned";
@@ -447,6 +447,22 @@ export function BriefApp() {
             onOpenAccount={openAccount}
             onCapture={openCapture}
             onAskAI={openCapture}
+            onHelp={() => flash("Dicte ta note, Brief la range. Touche le micro ou écris, il découpe en tâches et rendez-vous.")}
+            onNotifications={() => {
+              void (async () => {
+                try {
+                  const pin = getPin();
+                  const headers: HeadersInit = {};
+                  if (pin) headers[PIN_HEADER] = pin;
+                  const res = await fetch("/api/push/test", { method: "POST", headers });
+                  if (res.ok) flash("Notification de test envoyée.");
+                  else if (res.status === 409) flash("Active les notifications dans Réglages iOS pour les recevoir.", "err");
+                  else flash("Notifications non configurées.", "err");
+                } catch {
+                  flash("Impossible d'envoyer la notification.", "err");
+                }
+              })();
+            }}
           />
         )}
 
@@ -508,7 +524,6 @@ export function BriefApp() {
             items={sent}
             projects={projects}
             onOpenItem={openTask}
-            onVoiceSearch={() => {/* TODO: voice search */}}
             onBack={() => setScreen("home")}
             onOpenAccount={openAccount}
           />
@@ -550,6 +565,7 @@ export function BriefApp() {
           open={accountOpen}
           calendarSyncAt={calendarSyncAt}
           onClose={() => setAccountOpen(false)}
+          onToast={(msg) => flash(msg)}
         />
       )}
 
