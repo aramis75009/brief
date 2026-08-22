@@ -13,6 +13,7 @@ import { NotificationsSheet } from "./NotificationsSheet";
 import { VoiceSettingsSheet } from "./VoiceSettingsSheet";
 import { PrivacySheet } from "./PrivacySheet";
 import { SubscriptionSheet } from "./SubscriptionSheet";
+import { ChatSheet } from "./ChatSheet";
 import { BottomNav, type Screen } from "./BottomNav";
 import { CaptureBar } from "./CaptureBar";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
@@ -23,6 +24,7 @@ import { SkeletonList } from "./Skeleton";
 import { CheckIcon } from "./icons";
 import {
   ApiError,
+  chatWithAssistant,
   createProject,
   deleteItem,
   deleteProject,
@@ -91,6 +93,7 @@ export function BriefApp() {
   const [voiceSettingsOpen, setVoiceSettingsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [calendarSyncAt, setCalendarSyncAt] = useState<number | null>(null);
   const [captureStage, setCaptureStage] = useState<CaptureStage>("idle");
@@ -462,6 +465,24 @@ export function BriefApp() {
 
   const onOpenAgenda = useCallback(() => setScreen("agenda"), []);
   const onOpenIdeas = useCallback(() => setScreen("ideas"), []);
+  const openChat = useCallback(() => setChatOpen(true), []);
+
+  /** Envoie l'historique à l'assistant Brief et renvoie la réponse du modèle. */
+  const handleChatSend = useCallback(
+    async (messages: { role: string; content: string }[]): Promise<string> => {
+      try {
+        return await chatWithAssistant(messages);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          clearPin();
+          setUnlocked(false);
+          throw e;
+        }
+        throw e;
+      }
+    },
+    [],
+  );
   const goBackFromTask = useCallback(() => {
     setSelectedTaskId(null);
     setScreen(returnScreen);
@@ -508,7 +529,7 @@ export function BriefApp() {
             onOpenIdeas={onOpenIdeas}
             onOpenAccount={openAccount}
             onCapture={openCapture}
-            onAskAI={openCapture}
+            onAskAI={openChat}
             onHelp={() => setHelpOpen(true)}
             onNotifications={() => setNotificationsOpen(true)}
           />
@@ -668,6 +689,8 @@ export function BriefApp() {
       {subscriptionOpen && (
         <SubscriptionSheet open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
       )}
+
+      <ChatSheet open={chatOpen} onClose={() => setChatOpen(false)} onSend={handleChatSend} />
 
       {toast && <Toast message={toast.msg} kind={toast.kind} />}
     </PhoneFrame>

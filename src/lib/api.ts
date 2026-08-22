@@ -201,6 +201,20 @@ export async function deleteItem(id: string): Promise<{ ok: boolean; id: string 
 }
 
 /**
+ * Envoie l'historique de conversation à l'assistant Brief et renvoie la
+ * réponse textuelle du modèle. Le contexte (tâches, projets) est construit
+ * côté serveur — le client ne fournit que les messages user/assistant.
+ */
+export async function chatWithAssistant(messages: { role: string; content: string }[]): Promise<string> {
+  const data = await jsonFetch<{ reply: string }>(
+    "/api/chat",
+    { method: "POST", body: JSON.stringify({ messages }) },
+    30_000,
+  );
+  return data.reply;
+}
+
+/**
  * Modifie un item déjà enregistré. Renvoie l'item mis à jour tel que le serveur
  * l'a persisté. Une échéance/titre vide côté client aboutit ici soit à un
  * 400 (titre), soit à « pas d'échéance » (résolu par le serveur).

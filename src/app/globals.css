@@ -140,6 +140,10 @@
   from { transform: translateY(30px); opacity: .6; }
   to { transform: none; opacity: 1; }
 }
+@keyframes chatdot {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
 
 /* ---------------------------------------------------------------------------
  * Safe areas — classes écrites à la main VOLONTAIREMENT.
