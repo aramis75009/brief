@@ -712,13 +712,13 @@ export async function readAgendaSnapshot(): Promise<AgendaSnapshot | null> {
 
 /**
  * Calendriers dont l'agenda doit tenir compte : ceux que Brief mappe à un
- * projet, plus le repli « Personnel ». Le compte iCloud d'Aramis contient
- * d'autres calendriers (Permis, Fake, Anniversaires, Fêtes de France,
- * Suggestions de Siri…) qui n'ont rien à faire dans un organiseur de tâches —
- * on les balaie déjà pour le nettoyage `brief-*`, mais on ne les affiche pas.
+ * projet, plus le repli « Personnel », plus les calendriers additionnels
+ * qu'Aramis utilise pour poser des tâches (ex. « Fake »).
  */
+const EXTRA_AGENDA_CALENDARS = ["Fake"];
+
 function agendaCalendarNames(): Set<string> {
-  return new Set([...Object.values(loadCalendarMapping()), FALLBACK_CALENDAR]);
+  return new Set([...Object.values(loadCalendarMapping()), FALLBACK_CALENDAR, ...EXTRA_AGENDA_CALENDARS]);
 }
 
 /* --- Réconciliation --------------------------------------------------------

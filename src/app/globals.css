@@ -33,20 +33,21 @@
   /* Sémantique */
   --color-danger: #E23A2E;
 
-  /* Couleurs de projet — une teinte désigne un projet, elle ne décore jamais.
-   * Alignées sur les couleurs des calendriers Apple d'Aramis (DECISIONS.md 18/08). */
-  --color-p1: #FF9F0A;        /* Frip & Trend — orange (calendrier Vinted) */
-  --color-p1-ink: #7A4D00;
-  --color-p2: #FF453A;        /* My Flip — rouge-orange (calendrier My Flip) */
-  --color-p2-ink: #7A1A14;
-  --color-p3: #BF5AF2;        /* Web@cadémie — violet (calendrier Web@académie) */
-  --color-p3-ink: #4A1A6B;
-  --color-p4: #30D158;        /* Perso — vert (calendrier Personnel) */
-  --color-p4-ink: #0A6B2E;
-  --color-p5: #64D2FF;        /* Sport — bleu clair (calendrier Sport) */
-  --color-p5-ink: #004A6B;
-  --color-p6: #FFD60A;        /* IA — jaune (calendrier IA) */
-  --color-p6-ink: #6B5A00;
+  /* Couleurs de projet — alignées sur les couleurs des calendriers Apple
+   * d'Aramis (vérifiées le 22/08/2026 dans l'app Calendrier iPhone).
+   * Ordre = tint 1-6, correspond à l'ordre des projets dans projects.ts. */
+  --color-p1: #007AFF;        /* Frip & Trend — bleu (calendrier Vinted Frip&Trend) */
+  --color-p1-ink: #003E80;
+  --color-p2: #FF9500;        /* My Flip — orange (calendrier My Flip) */
+  --color-p2-ink: #7A4400;
+  --color-p3: #FF3B30;        /* Web@cadémie — rouge (calendrier Web@académie) */
+  --color-p3-ink: #7A1A14;
+  --color-p4: #AF52DE;        /* Perso — violet (calendrier Personnel) */
+  --color-p4-ink: #4A1A6B;
+  --color-p5: #FFCC00;        /* Sport — jaune (calendrier Sport) */
+  --color-p5-ink: #6B5A00;
+  --color-p6: #34C759;        /* IA — vert (calendrier IA) */
+  --color-p6-ink: #0A6B2E;
   --color-p7: #FF9F0A;        /* réserve — orange */
   --color-p7-ink: #7A4D00;
   --color-p8: #5AC8FA;        /* réserve — bleu */
