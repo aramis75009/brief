@@ -42,10 +42,7 @@ export function IdeasScreen({
           <ChevronLeftIcon size={18} />
         </button>
         {ideaCount > 0 && (
-          <span
-            className="rounded-full px-3.5 py-2 text-[12px] font-bold"
-            style={{ background: "var(--color-idea-700)", color: "var(--color-idea-100)" }}
-          >
+          <span className="rounded-full bg-idea-100 px-3.5 py-2 text-[12px] font-bold text-idea-700">
             {ideaCount} à trier
           </span>
         )}
@@ -79,15 +76,12 @@ export function IdeasScreen({
             return (
               <div
                 key={idea.id}
-                className="rounded-20 border border-ink/[.06] bg-surface p-4"
+                className="rounded-20 border border-ink/[.06] bg-idea-100 p-4"
                 style={{ opacity: isOld ? 0.65 : 1 }}
               >
                 {/* Meta */}
                 <div className="mb-2.5 flex items-center gap-2">
-                  <span
-                    className="size-[8px] rounded-full"
-                    style={{ background: "var(--color-idea-700)" }}
-                  />
+                  <span className="size-[7px] rounded-full bg-idea-700" />
                   <span className="text-[11.5px] font-bold text-ink-faint">
                     {idea.audioOrigin ? `Vocal ${idea.audioOrigin.durationSec} s` : "Texte"}
                     {" · "}
