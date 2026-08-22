@@ -52,7 +52,7 @@ Projets disponibles (recopie l'identifiant EXACTEMENT) :
 ${list}
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour ni bloc de code :
-{"items":[{"kind":"task","title":"...","due":"2026-08-12T14:00:00+02:00","allDay":false,"priority":3,"projectId":"...","rrule":null,"status":null}]}
+{"items":[{"kind":"task","title":"...","due":"2026-08-12T14:00:00+02:00","allDay":false,"priority":3,"projectId":"...","rrule":null,"status":null,"subtasks":[]}]}
 
 Règles :
 - kind : "event" si c'est un rendez-vous qui occupe un créneau (réunion, déjeuner,
@@ -75,15 +75,20 @@ Règles :
   l'utilisateur corrigera à la revue, alors qu'un identifiant inconnu se perdrait.
 - rrule : règle de récurrence RFC 5545 si la note en décrit une ("tous les mardis"
   donne "FREQ=WEEKLY;BYDAY=TU"), sinon null.
+- subtasks : un tableau d'étapes SI la note décrit plusieurs étapes pour une même
+  tâche (ex: "préparer le devis : vérifier le stock, calculer le prix, envoyer le mail"
+  → 3 sous-tâches). Chaque sous-tâche est {"title":"..."} avec un verbe à l'infinitif.
+  Tableau vide si la note décrit une seule action. Ne crée JAMAIS de sous-tâches pour
+  un rendez-vous (kind=event).
 - Un item par intention distincte. N'invente rien qui ne soit pas dans la note.
 
 Exemple, si nous étions le lundi 10 août 2026 :
 Note : "ce soir trier les cintres, déjeuner avec Paul jeudi midi, tous les mardis sortir les poubelles, et il faudrait repenser le logo un jour"
 Réponse : {"items":[
-{"kind":"task","title":"Trier les cintres du dépôt-vente","due":"2026-08-10T19:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet friperie>","rrule":null,"status":null},
-{"kind":"event","title":"Déjeuner avec Paul","due":"2026-08-13T12:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet le plus proche>","rrule":null,"status":null},
-{"kind":"task","title":"Sortir les poubelles","due":"2026-08-11T09:00:00+02:00","allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":"FREQ=WEEKLY;BYDAY=TU","status":null},
-{"kind":"task","title":"Repenser le logo","due":null,"allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":null,"status":"idea"}]}`;
+{"kind":"task","title":"Trier les cintres du dépôt-vente","due":"2026-08-10T19:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet friperie>","rrule":null,"status":null,"subtasks":[]},
+{"kind":"event","title":"Déjeuner avec Paul","due":"2026-08-13T12:00:00+02:00","allDay":false,"priority":3,"projectId":"<projet le plus proche>","rrule":null,"status":null,"subtasks":[]},
+{"kind":"task","title":"Sortir les poubelles","due":"2026-08-11T09:00:00+02:00","allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":"FREQ=WEEKLY;BYDAY=TU","status":null,"subtasks":[]},
+{"kind":"task","title":"Repenser le logo","due":null,"allDay":true,"priority":4,"projectId":"<projet le plus proche>","rrule":null,"status":"idea","subtasks":[]}]}`;
 }
 
 /** Le modèle encadre parfois sa réponse de ```json … ``` malgré la consigne. */
@@ -96,6 +101,10 @@ function stripFences(raw: string): string {
   return start !== -1 && end > start ? t.slice(start, end + 1) : t;
 }
 
+type RawSubTask = {
+  title?: unknown;
+};
+
 type RawItem = {
   kind?: unknown;
   title?: unknown;
@@ -105,6 +114,7 @@ type RawItem = {
   projectId?: unknown;
   rrule?: unknown;
   status?: unknown;
+  subtasks?: unknown;
 };
 
 let counter = 0;
@@ -199,7 +209,21 @@ function coerce(rows: RawItem[], projects: Project[], now: Date): DraftItem[] {
       // changer le type à la revue (`TypeSegmented` de `CaptureSheet`).
       const status = r.status === "idea" ? "idea" : undefined;
 
-      return { id: newId(), kind, title, projectId, due, allDay, priority, rrule, status };
+      // Sous-tâches : seulement pour les tâches, pas pour les rendez-vous ni les idées.
+      let subtasks: DraftItem["subtasks"];
+      if (kind === "task" && status !== "idea" && Array.isArray(r.subtasks)) {
+        const rawSubs = r.subtasks as RawSubTask[];
+        subtasks = rawSubs
+          .map((s) => {
+            const t = String(s.title ?? "").trim();
+            return t ? { id: `sub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, title: t, done: false } : null;
+          })
+          .filter((s): s is NonNullable<typeof s> => s !== null)
+          .slice(0, 10);
+        if (subtasks.length === 0) subtasks = undefined;
+      }
+
+      return { id: newId(), kind, title, projectId, due, allDay, priority, rrule, status, subtasks };
     })
     .filter((i): i is DraftItem => i !== null)
     .slice(0, MAX_ITEMS);

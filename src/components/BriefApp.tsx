@@ -119,6 +119,8 @@ export function BriefApp() {
   const loadedRef = useRef(false);
   /** audioId de la dernière dictée — rattaché aux items au moment de l'envoi. */
   const audioIdRef = useRef<string | null>(null);
+  /** Durée (s) de la dernière dictée — conservée pour bâtir `audioOrigin` à l'envoi. */
+  const audioSecondsRef = useRef(0);
 
   useEffect(() => { projectsRef.current = projects; }, [projects]);
 
@@ -318,6 +320,7 @@ export function BriefApp() {
   /* --- Transcription --- */
   const onRecorded = useCallback(async (rec: Recording) => {
     audioIdRef.current = null;
+    audioSecondsRef.current = rec.seconds;
     try {
       const text = await transcribeAudio(rec.blob, rec.mimeType, () => setCaptureStage("transcribing"));
       if (!text) {
@@ -376,10 +379,28 @@ export function BriefApp() {
       return;
     }
     const audioId = audioIdRef.current;
+    const durationSec = audioSecondsRef.current;
+    const fullText = transcript.trim();
+    const hasAudioMeta = !!audioId && durationSec > 0 && !!fullText;
+    const dateIso = new Date().toISOString();
+    const allIds = ready.map((d) => d.id);
     const itemsToSend = ready.map((d) => ({
       ...d,
       title: d.title.trim(),
       ...(audioId ? { audioId } : {}),
+      ...(hasAudioMeta
+        ? {
+            audioOrigin: {
+              text: fullText,
+              highlight: d.title.trim(),
+              startSec: 0,
+              endSec: durationSec,
+              durationSec,
+              date: dateIso,
+              siblingIds: allIds.filter((sid) => sid !== d.id),
+            },
+          }
+        : {}),
     }));
     try {
       const { saved, total } = await saveItems(itemsToSend);
@@ -406,7 +427,7 @@ export function BriefApp() {
         fail(e, "L'enregistrement a échoué.", () => sendRef.current());
       }
     }
-  }, [drafts, flash, fail, refreshItems]);
+  }, [drafts, transcript, flash, fail, refreshItems]);
 
   useEffect(() => { sendRef.current = () => void send(); }, [send]);
 
