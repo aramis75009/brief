@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useMemo } from "react";
 import { HomeScreen } from "./HomeScreen";
 import { TaskDetailScreen } from "./TaskDetailScreen";
 import { AgendaScreen } from "./AgendaScreen";
@@ -383,11 +383,27 @@ export function BriefApp() {
     return () => { alive = false; };
   }, [hydrated, unlocked, refreshItems, loadProjects]);
 
-  /* --- Derived data --- */
-  const activeItems = sent.filter((t) => t.status !== "idea" && t.status !== "archived");
-  const ideaItems = sent.filter((t) => t.status === "idea");
-  const selectedTask = selectedTaskId ? sent.find((t) => t.id === selectedTaskId) ?? null : null;
+  /* --- Derived data (mémoïsés — pas de .filter() à chaque rendu) --- */
+  const activeItems = useMemo(
+    () => sent.filter((t) => t.status !== "idea" && t.status !== "archived"),
+    [sent],
+  );
+  const ideaItems = useMemo(() => sent.filter((t) => t.status === "idea"), [sent]);
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? sent.find((t) => t.id === selectedTaskId) ?? null : null),
+    [selectedTaskId, sent],
+  );
   const loading = (overviewLoading && sent.length === 0) || !todayAgendaLoaded;
+
+  /* --- Callbacks stables pour éviter les re-rendus des composants memo --- */
+  const toggleDoneSimple = useCallback((id: string) => void toggleDone(id), [toggleDone]);
+
+  const onOpenAgenda = useCallback(() => setScreen("agenda"), []);
+  const onOpenIdeas = useCallback(() => setScreen("ideas"), []);
+  const goBackFromTask = useCallback(() => {
+    setSelectedTaskId(null);
+    setScreen(returnScreen);
+  }, [returnScreen]);
 
   /* --- Render --- */
   if (!hydrated) {
@@ -424,10 +440,10 @@ export function BriefApp() {
             projects={projects}
             overview={overview}
             loading={loading}
-            onToggleDone={(id) => void toggleDone(id)}
+            onToggleDone={toggleDoneSimple}
             onOpenTask={openTask}
-            onOpenAgenda={() => setScreen("agenda")}
-            onOpenIdeas={() => setScreen("ideas")}
+            onOpenAgenda={onOpenAgenda}
+            onOpenIdeas={onOpenIdeas}
             onOpenAccount={openAccount}
             onCapture={openCapture}
             onAskAI={openCapture}
@@ -438,8 +454,8 @@ export function BriefApp() {
           <TaskDetailScreen
             item={selectedTask}
             projects={projects}
-            onBack={() => { setSelectedTaskId(null); setScreen(returnScreen); }}
-            onDone={(id) => void toggleDone(id)}
+            onBack={goBackFromTask}
+            onDone={toggleDoneSimple}
             onPostpone={(id) => void postponeItem(id)}
             onDelete={(id) => void removeItem(id)}
             onOpenSibling={(id) => setSelectedTaskId(id)}

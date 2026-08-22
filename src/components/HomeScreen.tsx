@@ -11,7 +11,7 @@
  * fragiles. Les couleurs utilisent les variables CSS du design system.
  */
 
-import { useMemo, useRef, useCallback } from "react";
+import { memo, useMemo, useRef, useCallback } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { EmptyState } from "./EmptyState";
 import { SkeletonList } from "./Skeleton";
@@ -30,6 +30,24 @@ import { compareByDue } from "@/lib/due";
 import { TIMEZONE } from "@/lib/zoned";
 import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Overview, Project } from "@/lib/types";
+
+/* ------------------------------------------------------------------ *
+ * Formateurs Intl — créés UNE FOIS au niveau du module, pas par ligne.
+ * `new Intl.DateTimeFormat()` est coûteux sur iOS Safari (parse ICU à
+ * chaque instanciation). Sur une liste de 20 items, on évite 20 allocs
+ * par rendu.
+ * ------------------------------------------------------------------ */
+const timeFmt = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: TIMEZONE,
+});
+const dayLabelFmt = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "long",
+  timeZone: TIMEZONE,
+});
 
 interface HomeScreenProps {
   items: Item[];
@@ -80,7 +98,7 @@ const C = {
  * en bas, le tout en flex-col justify-between.
  * ------------------------------------------------------------------ */
 
-function DestinationTile({
+const DestinationTile = memo(function DestinationTile({
   bg,
   icon,
   label,
@@ -147,7 +165,7 @@ function DestinationTile({
       </span>
     </Tag>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Bouton d'action de l'en-tête (aide, notifications) — 40px, icône centrée.
@@ -187,7 +205,7 @@ function HeaderIconButton({
  * Case à cocher ronde — 26px, bordure 2px ink/18%. Affiche la coche si fait.
  * ------------------------------------------------------------------ */
 
-function RowCheckbox({
+const RowCheckbox = memo(function RowCheckbox({
   done,
   onClick,
 }: {
@@ -216,13 +234,13 @@ function RowCheckbox({
       {done && <CheckIcon size={13} />}
     </button>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Une ligne de la liste « Aujourd'hui ».
  * ------------------------------------------------------------------ */
 
-function TodayRow({
+const TodayRow = memo(function TodayRow({
   item,
   project,
   due,
@@ -241,16 +259,14 @@ function TodayRow({
   const shape = project ? shapeFor(project) : "disc";
 
   // Heure formatée depuis l'échéance (fuseau Europe/Paris).
+  // Utilise le formateur module-level `timeFmt` — pas de `new Intl.DateTimeFormat()`
+  // par ligne à chaque rendu.
   const time = useMemo(() => {
     if (!due) return "";
     const d = new Date(due);
     if (Number.isNaN(d.getTime())) return "";
     if (item.allDay) return "journée";
-    return new Intl.DateTimeFormat("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: TIMEZONE,
-    }).format(d);
+    return timeFmt.format(d);
   }, [due, item.allDay]);
 
   const isVocal = !!item.audioOrigin;
@@ -314,7 +330,7 @@ function TodayRow({
       )}
     </button>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Ligne minimale pour une entrée d'agenda sans item Brief correspondant
@@ -322,16 +338,12 @@ function TodayRow({
  * Même principe que `EventRow` non cliquable d'`AgendaScreen`.
  * ------------------------------------------------------------------ */
 
-function TodayAgendaFallbackRow({ entry }: { entry: AgendaItem }) {
+const TodayAgendaFallbackRow = memo(function TodayAgendaFallbackRow({ entry }: { entry: AgendaItem }) {
   const time = useMemo(() => {
     if (entry.allDay) return "journée";
     const d = new Date(entry.due);
     if (Number.isNaN(d.getTime())) return "";
-    return new Intl.DateTimeFormat("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: TIMEZONE,
-    }).format(d);
+    return timeFmt.format(d);
   }, [entry.due, entry.allDay]);
 
   return (
@@ -352,7 +364,7 @@ function TodayAgendaFallbackRow({ entry }: { entry: AgendaItem }) {
       )}
     </div>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Un sous-groupe de la section « Aujourd'hui » (Tâches ou Rendez-vous),
@@ -360,7 +372,7 @@ function TodayAgendaFallbackRow({ entry }: { entry: AgendaItem }) {
  * indépendant de `items`.
  * ------------------------------------------------------------------ */
 
-function TodayAgendaGroup({
+const TodayAgendaGroup = memo(function TodayAgendaGroup({
   title,
   entries,
   itemById,
@@ -376,7 +388,7 @@ function TodayAgendaGroup({
   onOpen: (id: string) => void;
 }) {
   return (
-    <div className="flex flex-col" style={{ gap: 8 }}>
+    <div className="flex flex-col cv-auto" style={{ gap: 8 }}>
       <span
         className="font-mono"
         style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: C.inkMuted }}
@@ -384,7 +396,7 @@ function TodayAgendaGroup({
         {title.toUpperCase()}
       </span>
       <div
-        className="overflow-hidden"
+        className="overflow-hidden perf-contain"
         style={{
           background: C.surface,
           borderRadius: 20,
@@ -408,7 +420,7 @@ function TodayAgendaGroup({
       </div>
     </div>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Composant principal.
@@ -430,13 +442,9 @@ export function HomeScreen({
   onAskAI,
 }: HomeScreenProps) {
   // Date du jour formatée « mar. 19 août » dans le fuseau Europe/Paris.
+  // Formateur module-level `dayLabelFmt` — pas de `new Intl.DateTimeFormat()` à chaque rendu.
   const todayLabel = useMemo(() => {
-    return new Intl.DateTimeFormat("fr-FR", {
-      weekday: "short",
-      day: "numeric",
-      month: "long",
-      timeZone: TIMEZONE,
-    }).format(new Date());
+    return dayLabelFmt.format(new Date());
   }, []);
 
   // Index des items Brief par id, pour résoudre chaque entrée d'agenda vers

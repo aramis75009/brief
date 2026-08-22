@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from "./icons";
@@ -26,6 +26,24 @@ import type { AgendaItem } from "@/lib/agenda";
  */
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
+
+/* Formateurs Intl — créés UNE FOIS au niveau du module, pas par ligne. */
+const agendaTimeFmt = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: TIMEZONE,
+});
+const agendaDayFmt = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: TIMEZONE,
+});
+const agendaMonthFmt = new Intl.DateTimeFormat("fr-FR", {
+  month: "long",
+  year: "numeric",
+  timeZone: TIMEZONE,
+});
 
 function dateKey(d: CalendarDate): string {
   return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
@@ -96,18 +114,9 @@ export function AgendaScreen({
   const morning = timedEvents.filter((e) => zonedParts(new Date(e.due)).hour < 12);
   const afternoon = timedEvents.filter((e) => zonedParts(new Date(e.due)).hour >= 12);
 
-  const dayLabel = new Intl.DateTimeFormat("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: TIMEZONE,
-  }).format(new Date(Date.UTC(selectedDate.y, selectedDate.m - 1, selectedDate.d, 12)));
+  const dayLabel = agendaDayFmt.format(new Date(Date.UTC(selectedDate.y, selectedDate.m - 1, selectedDate.d, 12)));
 
-  const monthLabel = new Intl.DateTimeFormat("fr-FR", {
-    month: "long",
-    year: "numeric",
-    timeZone: TIMEZONE,
-  }).format(new Date(Date.UTC(selectedDate.y, selectedDate.m - 1, selectedDate.d, 12)));
+  const monthLabel = agendaMonthFmt.format(new Date(Date.UTC(selectedDate.y, selectedDate.m - 1, selectedDate.d, 12)));
 
   const isToday = sameDay(selectedDate, todayParts);
   const empty = !loading && !failed && events.length === 0;
@@ -249,12 +258,10 @@ export function AgendaScreen({
   );
 }
 
-function EventRow({ item, onOpen }: { item: AgendaItem; onOpen: (id: string) => void }) {
+const EventRow = memo(function EventRow({ item, onOpen }: { item: AgendaItem; onOpen: (id: string) => void }) {
   const time = item.allDay
     ? "Toute la journée"
-    : new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: TIMEZONE }).format(
-        new Date(item.due),
-      );
+    : agendaTimeFmt.format(new Date(item.due));
   const borderColor = item.kind === "task" ? "var(--color-task-700)" : "var(--color-meet-700)";
   const subtitle =
     item.kind === "task"
@@ -283,4 +290,4 @@ function EventRow({ item, onOpen }: { item: AgendaItem; onOpen: (id: string) => 
       </Tag>
     </div>
   );
-}
+});

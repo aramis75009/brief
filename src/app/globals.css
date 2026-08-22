@@ -166,6 +166,13 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
+    /* Élimine le délai de 300ms sur les éléments tactiles anciens et
+     * permet au navigateur de commencer le scroll immédiatement. */
+    touch-action: manipulation;
+    /* Optimisation GPU : indique au navigateur que les transformations et
+     * opacités seront animées, pour qu'il promeut les couches sans
+     * repaint du contenu sous-jacent. */
+    text-rendering: optimizeLegibility;
   }
 
   input,
@@ -208,4 +215,33 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* --------------------------------------------------------------------------- *
+ * Optimisations de scroll fluide sur iPhone.
+ *
+ * 1. `.cv-auto` : `content-visibility: auto` permet au navigateur de skipper
+ *    le rendu des éléments hors écran (above/below the fold). Sur une longue
+ *    liste de tâches, le navigateur ne layout que ce qui est visible — gain
+ *    direct sur le temps de paint et la mémoire.
+ *    `contain-intrinsic-size` donne une taille placeholder pour éviter que la
+ *    scrollbar ne saute.
+ *
+ * 2. `.perf-contain` : `contain: layout style paint` isole le sous-arbre du
+ *    reste de la page — le navigateur sait qu'un repaint à l'intérieur d'une
+ *    carte n'invalide pas ses voisines. Indispensable sur les listes où
+ *    chaque carte est indépendante.
+ *
+ * Ces classes sont OPT-IN : on les pose sur les conteneurs de liste et les
+ * cartes, pas sur tout le DOM. `content-visibility: auto` sur un élément
+ * que l'utilisateur DOIT voir dès le chargement (au-dessus de la ligne de
+ * flottaison) retarderait son rendu — d'où le opt-in.
+ * ------------------------------------------------------------------------ */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+
+.perf-contain {
+  contain: layout style paint;
 }
