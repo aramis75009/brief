@@ -14,6 +14,93 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-22 (soir) · Stockage audio, assistant IA, couleurs projets, calendrier Fake
+
+### Stockage des audios vocaux
+
+**Décision.** Les enregistrements vocaux sont persistés sur le volume
+`brief-data` (`$BRIEF_DATA_DIR/audio/`) — plus de perte. L'`audioId` est
+attaché à l'item, l'`audioOrigin` contient les métadonnées (texte complet,
+extrait surligné, durée, date, siblings).
+
+**Pourquoi.** Aramis dictait des notes, la transcription devenait une tâche,
+mais l'audio original était perdu. Ne pas pouvoir réécouter la dictée
+originale enlève beaucoup de valeur à un organiseur vocal.
+
+**Bug critique.** `jsonFetch()` forçait `Content-Type: application/json` sur
+les FormData, écrasant le `multipart/form-data` + boundary. L'upload
+audio échouait silencieusement à chaque fois (400). Fix : ne pas forcer
+Content-Type sur FormData — règle absolue.
+
+**Race condition.** L'upload était fire-and-forget. Si l'utilisateur
+envoyait avant la fin de l'upload, `audioIdRef.current` était null.
+Fix : `send()` fait `await audioUploadRef.current` avant de lire l'audioId.
+
+### Assistant IA (tuile "Demander à l'IA")
+
+**Décision.** La tuile "Demander à l'IA" ouvre un vrai chat (ChatSheet),
+pas la capture vocale. Route `/api/chat` qui appelle Ollama Cloud
+(`deepseek-v4-flash:0731`) avec le contexte des tâches/RDV du jour +
+projets.
+
+**Pourquoi.** La tuile était un bouton mort qui ouvrait le même tunnel que
+la dictée. Un assistant IA qui connaît le contexte de l'utilisateur
+(tâches, RDV, projets) apporte une vraie valeur — poser des questions,
+demander de l'aide pour organiser, suggérer des priorités.
+
+### Couleurs de projet = couleurs Apple Calendar
+
+**Décision.** Les tokens `--color-p1` à `--color-p6` sont alignés sur les
+**vraies couleurs** des calendriers Apple d'Aramis, vérifiées le 22/08/2026
+dans l'app Calendrier iPhone :
+
+| Projet | Calendrier | Couleur | Hex |
+|---|---|---|---|
+| Frip & Trend | Vinted Frip&Trend | bleu | #007AFF |
+| My Flip | My Flip | orange | #FF9500 |
+| Web@cadémie | Web@académie | rouge | #FF3B30 |
+| Perso | Personnel | violet | #AF52DE |
+| Sport | Sport | jaune | #FFCC00 |
+| IA | IA | vert | #34C759 |
+
+**Pourquoi.** Avant, les couleurs étaient inventées (Frip orange au lieu
+de bleu, Perso vert au lieu de violet…). Aramis veut que les pastilles dans
+Brief matchent visuellement ses calendriers Apple pour une reconnaissance
+instantanée.
+
+### Calendrier "Fake" inclus dans l'agenda
+
+**Décision.** Le calendrier iCloud "Fake" est ajouté à
+`EXTRA_AGENDA_CALENDARS` dans `caldav.ts` — ses événements apparaissent
+dans l'agenda Brief.
+
+**Pourquoi.** Aramis pose des tâches sur ce calendrier (ex: "Commander les
+sacs Nike sur HippoBuy"). Sans l'inclure, ces tâches n'apparaissent pas
+dans Brief.
+
+### Sous-tâches générées par le parseur
+
+**Décision.** Le prompt de `/api/parse` demande au LLM de générer des
+`subtasks` quand la note décrit plusieurs étapes pour une même tâche.
+
+**Pourquoi.** Une note comme "préparer le devis : vérifier le stock,
+calculer le prix, envoyer le mail" contient 3 étapes distinctes. Les
+sous-tâches avec checkboxes et barre de progression donnent une vision
+précise de l'avancement sur la fiche.
+
+### Notifications push — vérification au démarrage
+
+**Décision.** `readPushState()` est appelé au démarrage (useEffect dans
+BriefApp) pour restaurer le statut d'abonnement push.
+
+**Pourquoi.** Sans ça, `pushSubscribed` démarrait toujours à `false` →
+le statut repassait à "Désactivées" à chaque réouverture, même si
+l'utilisateur avait déjà activé les notifications.
+
+**Statut.** ✅ Fait.
+
+---
+
 ## 2026-08-20 (après-midi) · `DESIGN.md` est de retour — réécrit fidèle au code
 
 **Décision.** `DESIGN.md` existe de nouveau à la racine. Ce n'est **pas** une
