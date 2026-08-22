@@ -23,12 +23,16 @@ export function AccountSheet({
   open,
   calendarSyncAt,
   onClose,
-  onToast,
+  onOpenVoice,
+  onOpenPrivacy,
+  onOpenSubscription,
 }: {
   open: boolean;
   calendarSyncAt: number | null;
   onClose: () => void;
-  onToast?: (msg: string) => void;
+  onOpenVoice?: () => void;
+  onOpenPrivacy?: () => void;
+  onOpenSubscription?: () => void;
 }) {
   if (!open) return null;
 
@@ -102,16 +106,16 @@ export function AccountSheet({
         <div className="mb-4 flex flex-col gap-0.5">
           <NavRow
             label="Voix, langue & transcription"
-            onClick={() => onToast?.("Langue de reconnaissance : français. Modèle : Whisper Large v3.")}
+            onClick={onOpenVoice}
           />
           <NavRow
             label="Confidentialité des notes vocales"
-            onClick={() => onToast?.("Tes enregistrements sont envoyés au serveur pour transcription, puis supprimés.")}
+            onClick={onOpenPrivacy}
           />
           <NavRow
             label="Abonnement"
             value="Plus"
-            onClick={() => onToast?.("Brief est gratuit pour l'instant.")}
+            onClick={onOpenSubscription}
           />
         </div>
 

@@ -8,6 +8,11 @@ import { IdeasScreen } from "./IdeasScreen";
 import { SearchScreen } from "./SearchScreen";
 import { CaptureSheet, type CaptureStage } from "./CaptureSheet";
 import { AccountSheet } from "./AccountSheet";
+import { HelpSheet } from "./HelpSheet";
+import { NotificationsSheet } from "./NotificationsSheet";
+import { VoiceSettingsSheet } from "./VoiceSettingsSheet";
+import { PrivacySheet } from "./PrivacySheet";
+import { SubscriptionSheet } from "./SubscriptionSheet";
 import { BottomNav, type Screen } from "./BottomNav";
 import { CaptureBar } from "./CaptureBar";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
@@ -60,6 +65,12 @@ const TRANSCRIPT_KEY = "brief:transcript";
 const subscribeNoop = () => () => {};
 const useHydrated = () => useSyncExternalStore(subscribeNoop, () => true, () => false);
 
+/** Retourne les headers avec le PIN si disponible, pour les fetch directs. */
+function pinHeader(): Record<string, string> {
+  const pin = getPin();
+  return pin ? { [PIN_HEADER]: pin } : {};
+}
+
 export function BriefApp() {
   const hydrated = useHydrated();
   const [unlocked, setUnlocked] = useState(() => !!getPin());
@@ -73,6 +84,12 @@ export function BriefApp() {
   const [returnScreen, setReturnScreen] = useState<Screen>("home");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [voiceSettingsOpen, setVoiceSettingsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
   const [calendarSyncAt, setCalendarSyncAt] = useState<number | null>(null);
   const [captureStage, setCaptureStage] = useState<CaptureStage>("idle");
 
@@ -447,22 +464,8 @@ export function BriefApp() {
             onOpenAccount={openAccount}
             onCapture={openCapture}
             onAskAI={openCapture}
-            onHelp={() => flash("Dicte ta note, Brief la range. Touche le micro ou écris, il découpe en tâches et rendez-vous.")}
-            onNotifications={() => {
-              void (async () => {
-                try {
-                  const pin = getPin();
-                  const headers: HeadersInit = {};
-                  if (pin) headers[PIN_HEADER] = pin;
-                  const res = await fetch("/api/push/test", { method: "POST", headers });
-                  if (res.ok) flash("Notification de test envoyée.");
-                  else if (res.status === 409) flash("Active les notifications dans Réglages iOS pour les recevoir.", "err");
-                  else flash("Notifications non configurées.", "err");
-                } catch {
-                  flash("Impossible d'envoyer la notification.", "err");
-                }
-              })();
-            }}
+            onHelp={() => setHelpOpen(true)}
+            onNotifications={() => setNotificationsOpen(true)}
           />
         )}
 
@@ -565,8 +568,67 @@ export function BriefApp() {
           open={accountOpen}
           calendarSyncAt={calendarSyncAt}
           onClose={() => setAccountOpen(false)}
-          onToast={(msg) => flash(msg)}
+          onOpenVoice={() => { setAccountOpen(false); setVoiceSettingsOpen(true); }}
+          onOpenPrivacy={() => { setAccountOpen(false); setPrivacyOpen(true); }}
+          onOpenSubscription={() => { setAccountOpen(false); setSubscriptionOpen(true); }}
         />
+      )}
+
+      {helpOpen && (
+        <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
+      )}
+
+      {notificationsOpen && (
+        <NotificationsSheet
+          open={notificationsOpen}
+          subscribed={pushSubscribed}
+          onTestPush={() => {
+            void (async () => {
+              try {
+                const res = await fetch("/api/push/test", { method: "POST", headers: pinHeader() });
+                if (res.ok) flash("Notification de test envoyée.");
+                else if (res.status === 409) flash("Active les notifications dans Réglages iOS.", "err");
+                else flash("Notifications non configurées.", "err");
+              } catch {
+                flash("Impossible d'envoyer la notification.", "err");
+              }
+            })();
+          }}
+          onEnablePush={() => {
+            void (async () => {
+              try {
+                const reg = await navigator.serviceWorker?.getRegistration();
+                if (!reg) { flash("Installe Brief sur ton écran d'accueil d'abord.", "err"); return; }
+                const sub = await reg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+                });
+                await fetch("/api/push/subscribe", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", ...pinHeader() },
+                  body: JSON.stringify(sub.toJSON()),
+                });
+                setPushSubscribed(true);
+                flash("Notifications activées.");
+              } catch {
+                flash("Activation impossible. Vérifie les autorisations iOS.", "err");
+              }
+            })();
+          }}
+          onClose={() => setNotificationsOpen(false)}
+        />
+      )}
+
+      {voiceSettingsOpen && (
+        <VoiceSettingsSheet open={voiceSettingsOpen} onClose={() => setVoiceSettingsOpen(false)} />
+      )}
+
+      {privacyOpen && (
+        <PrivacySheet open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+      )}
+
+      {subscriptionOpen && (
+        <SubscriptionSheet open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
       )}
 
       {toast && <Toast message={toast.msg} kind={toast.kind} />}
