@@ -33,6 +33,25 @@
   /* Sémantique */
   --color-danger: #E23A2E;
 
+  /* Couleurs de projet — une teinte désigne un projet, elle ne décore jamais.
+   * Alignées sur les couleurs des calendriers Apple d'Aramis (DECISIONS.md 18/08). */
+  --color-p1: #FF9F0A;        /* Frip & Trend — orange (calendrier Vinted) */
+  --color-p1-ink: #7A4D00;
+  --color-p2: #FF453A;        /* My Flip — rouge-orange (calendrier My Flip) */
+  --color-p2-ink: #7A1A14;
+  --color-p3: #BF5AF2;        /* Web@cadémie — violet (calendrier Web@académie) */
+  --color-p3-ink: #4A1A6B;
+  --color-p4: #30D158;        /* Perso — vert (calendrier Personnel) */
+  --color-p4-ink: #0A6B2E;
+  --color-p5: #64D2FF;        /* Sport — bleu clair (calendrier Sport) */
+  --color-p5-ink: #004A6B;
+  --color-p6: #FFD60A;        /* IA — jaune (calendrier IA) */
+  --color-p6-ink: #6B5A00;
+  --color-p7: #FF9F0A;        /* réserve — orange */
+  --color-p7-ink: #7A4D00;
+  --color-p8: #5AC8FA;        /* réserve — bleu */
+  --color-p8-ink: #004A6B;
+
   /* Rayons — le rayon grandit avec l'élément. */
   --radius-8: 8px;
   --radius-12: 12px;

@@ -49,6 +49,7 @@ import {
   subscribeQueue,
 } from "@/lib/queue";
 import { UnauthorizedError, clearPin, getPin, PIN_HEADER, readStoredTranscript } from "@/lib/pin";
+import { enablePush, sendTestPush, readPushState, isStandalone, isIOS, type PushState } from "@/lib/push-client";
 import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
 import { zonedParts } from "@/lib/zoned";
@@ -585,33 +586,26 @@ export function BriefApp() {
           onTestPush={() => {
             void (async () => {
               try {
-                const res = await fetch("/api/push/test", { method: "POST", headers: pinHeader() });
-                if (res.ok) flash("Notification de test envoyée.");
-                else if (res.status === 409) flash("Active les notifications dans Réglages iOS.", "err");
-                else flash("Notifications non configurées.", "err");
-              } catch {
-                flash("Impossible d'envoyer la notification.", "err");
+                const { sent, total } = await sendTestPush();
+                if (sent > 0) flash("Notification envoyée — vérifie ton écran.");
+                else flash("Aucun abonnement actif. Active les notifications d'abord.", "err");
+              } catch (e) {
+                flash(e instanceof Error ? e.message : "Échec du test.", "err");
               }
             })();
           }}
           onEnablePush={() => {
             void (async () => {
               try {
-                const reg = await navigator.serviceWorker?.getRegistration();
-                if (!reg) { flash("Installe Brief sur ton écran d'accueil d'abord.", "err"); return; }
-                const sub = await reg.pushManager.subscribe({
-                  userVisibleOnly: true,
-                  applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-                });
-                await fetch("/api/push/subscribe", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", ...pinHeader() },
-                  body: JSON.stringify(sub.toJSON()),
-                });
-                setPushSubscribed(true);
-                flash("Notifications activées.");
-              } catch {
-                flash("Activation impossible. Vérifie les autorisations iOS.", "err");
+                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                if (!vapidKey) { flash("Clé VAPID absente — recompile le build.", "err"); return; }
+                const state = await enablePush(vapidKey);
+                if (state.status === "on") {
+                  setPushSubscribed(true);
+                  flash("Notifications activées.");
+                }
+              } catch (e) {
+                flash(e instanceof Error ? e.message : "Activation impossible.", "err");
               }
             })();
           }}

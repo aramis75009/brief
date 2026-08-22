@@ -6,6 +6,7 @@ import { SkeletonCard } from "./Skeleton";
 import { VoiceBadge } from "./VoiceBadge";
 import { AccountAvatar } from "./AccountAvatar";
 import { SearchSmallIcon, MicIcon, ChevronLeftIcon } from "./icons";
+import { skinFor, shapeFor } from "@/lib/projects";
 import { compareByDue } from "@/lib/due";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
 import { transcribeAudio } from "@/lib/api";
@@ -172,41 +173,55 @@ export function SearchScreen({
             const isIdea = item.status === "idea";
             const bgColor = isTask ? "var(--color-task-100)" : isIdea ? "var(--color-idea-100)" : "var(--color-meet-100)";
             const iconColor = isTask ? "var(--color-task-700)" : isIdea ? "var(--color-idea-700)" : "var(--color-meet-700)";
+            const skin = proj ? skinFor(proj) : null;
+            const shape = proj ? shapeFor(proj) : "disc";
 
             return (
               <button
                 key={item.id}
                 onClick={() => onOpenItem(item.id)}
-                className="flex items-center gap-3 rounded-20 border border-ink/[.06] bg-surface px-4 py-3.5 text-left"
+                className="flex items-center gap-3.5 rounded-20 border border-ink/[.06] bg-surface px-5 py-4.5 text-left"
               >
                 <span
-                  className="flex size-7 flex-none items-center justify-center rounded-full"
+                  className="flex size-9 flex-none items-center justify-center rounded-full"
                   style={{ background: bgColor }}
                 >
                   {isTask ? (
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.6} strokeLinecap="round">
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.6} strokeLinecap="round">
                       <path d="M4 12.5l5 5L20 6.5" />
                     </svg>
                   ) : isIdea ? (
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.4} strokeLinecap="round">
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.4} strokeLinecap="round">
                       <circle cx="12" cy="12" r="4" />
                       <path d="M12 4v2M12 18v2M4 12h2M18 12h2" />
                     </svg>
                   ) : (
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.2} strokeLinecap="round">
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.2} strokeLinecap="round">
                       <rect x="3.5" y="5" width="17" height="15" rx="4" />
                       <path d="M8 3v4M16 3v4" />
                     </svg>
                   )}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                <span className="flex min-w-0 flex-1 flex-col gap-[4px]">
                   <span
-                    className="truncate text-[15px] font-bold tracking-[-0.01em]"
+                    className="truncate text-[16px] font-bold tracking-[-0.01em]"
                     style={item.doneAt ? { textDecoration: "line-through", color: "var(--color-ink-faint)" } : undefined}
                   >
                     {highlightQuery(item.title, query)}
                   </span>
-                  <span className="flex items-center gap-[7px] text-[12px] font-semibold text-ink-faint">
+                  <span className="flex items-center gap-[7px] text-[13px] font-semibold text-ink-faint">
+                    {skin && (
+                      <span
+                        className="flex-none"
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: shape === "square" ? 2 : shape === "diamond" ? 2 : 99,
+                          background: skin.bg,
+                          transform: shape === "diamond" ? "rotate(45deg)" : "none",
+                        }}
+                      />
+                    )}
                     {item.doneAt && "Terminé · "}
                     {item.audioOrigin && <VoiceBadge size="small" />}
                     {item.audioOrigin ? "Dictée" : proj?.name || "Sans projet"}
