@@ -105,6 +105,38 @@ export function sanitizePatch(
     }
     out.overrides = Object.keys(clean).length > 0 ? clean : undefined;
   }
+  // Sous-tâches : tableau de { id, title, done }.
+  if (Array.isArray(v.subtasks)) {
+    out.subtasks = v.subtasks
+      .filter((s): s is Record<string, unknown> => typeof s === "object" && s !== null)
+      .map((s) => ({
+        id: String(s.id ?? ""),
+        title: String(s.title ?? "").trim().slice(0, 200),
+        done: !!s.done,
+      }))
+      .filter((s) => s.id && s.title)
+      .slice(0, 50);
+  }
+  // Tags : tableau de strings (IDs de tags), max 10.
+  if (Array.isArray(v.tags)) {
+    out.tags = v.tags
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim())
+      .slice(0, 10);
+  }
+  // Dépendances : tableau de strings (IDs d'items), max 20.
+  if (Array.isArray(v.dependsOn)) {
+    out.dependsOn = v.dependsOn
+      .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+      .map((d) => d.trim())
+      .slice(0, 20);
+  }
+  // Colonne Kanban : string (ID de colonne) ou null (non placée).
+  if (v.columnId === null) {
+    out.columnId = null;
+  } else if (typeof v.columnId === "string" && v.columnId.trim()) {
+    out.columnId = v.columnId.trim();
+  }
   return out;
 }
 
