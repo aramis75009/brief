@@ -187,7 +187,7 @@ export function DesktopTaskDetail({
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ animation: "fade .25s both" }}>
       {/* Barre d'actions supérieure */}
-      <div className="flex flex-none items-center justify-between" style={{ padding: "0 0 16px 0" }}>
+      <div className="mx-auto flex w-full max-w-[1080px] flex-none items-center justify-between" style={{ padding: "0 0 16px 0" }}>
         <div className="flex items-center gap-3">
           <button
             aria-label={editing ? "Annuler" : "Retour"}
@@ -231,9 +231,9 @@ export function DesktopTaskDetail({
       </div>
 
       {/* Corps — 2 colonnes */}
-      <div className="flex min-h-0 flex-1 gap-6 overflow-hidden">
+      <div className="mx-auto flex w-full max-w-[1080px] min-h-0 flex-1 gap-6 overflow-hidden">
         {/* Colonne principale */}
-        <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto" style={{ maxWidth: 680 }}>
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
           {editing ? (
             <div className="flex flex-col gap-4" style={{ paddingTop: 8 }}>
               <TypeSegmented value={draft.type} onChange={(t) => setDraft((d) => ({ ...d, type: t }))} />
