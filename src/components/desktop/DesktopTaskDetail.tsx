@@ -464,22 +464,6 @@ export function DesktopTaskDetail({
               </div>
             </div>
 
-            {/* Raccourcis clavier */}
-            <div style={{ marginTop: "auto", padding: "16px 4px 0" }}>
-              <div className="flex flex-col gap-1.5">
-                {[
-                  { k: "E", label: "Modifier" },
-                  { k: "⌘⏎", label: "Terminer" },
-                  { k: "R", label: "Reporter" },
-                  { k: "ESC", label: "Fermer" },
-                ].map((s) => (
-                  <div key={s.k} className="flex items-center gap-2">
-                    <span className="font-mono" style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5, background: C.bg, color: C.inkMuted, border: "1px solid rgba(16,16,16,.06)" }}>{s.k}</span>
-                    <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>{s.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
       </div>
