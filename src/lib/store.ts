@@ -2,7 +2,7 @@ import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { SEED_PROJECTS } from "./projects";
-import type { Item, Project } from "./types";
+import type { Item, KanbanBoard, Project, Tag } from "./types";
 
 /**
  * Stockage de Brief — fichiers JSON sur le disque du serveur.
@@ -80,6 +80,37 @@ export async function writeProjects(projects: Project[]): Promise<void> {
   return serialize(() => writeJson("projects.json", projects));
 }
 
+/* --- Board Kanban -------------------------------------------------------- */
+
+const SEED_BOARD: KanbanBoard = {
+  columns: [
+    { id: "col-todo", name: "À faire", order: 0 },
+    { id: "col-doing", name: "En cours", order: 1 },
+    { id: "col-done", name: "Fait", order: 2 },
+  ],
+  updatedAt: new Date().toISOString(),
+};
+
+export async function readBoard(): Promise<KanbanBoard> {
+  const stored = await readJson<KanbanBoard | null>("boards.json", null);
+  if (stored === null) return SEED_BOARD;
+  return stored;
+}
+
+export async function writeBoard(board: KanbanBoard): Promise<void> {
+  return serialize(() => writeJson("boards.json", board));
+}
+
+/* --- Tags ---------------------------------------------------------------- */
+
+export async function readTags(): Promise<Tag[]> {
+  return readJson<Tag[]>("tags.json", []);
+}
+
+export async function writeTags(tags: Tag[]): Promise<void> {
+  return serialize(() => writeJson("tags.json", tags));
+}
+
 /* --- Items --------------------------------------------------------------- */
 
 /**
@@ -102,7 +133,14 @@ function normalizeItem(it: Item): Item {
       return { ...it, due: null };
     }
   }
-  return it;
+  // Garantir les nouveaux champs Kanban — pas de réécriture du fichier,
+  // normalisation en mémoire seulement (comme pour `due`).
+  return {
+    ...it,
+    tags: Array.isArray(it.tags) ? it.tags : [],
+    dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
+    columnId: it.columnId ?? null,
+  };
 }
 
 export async function readItems(): Promise<Item[]> {

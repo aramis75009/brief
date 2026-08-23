@@ -113,6 +113,12 @@ export type DraftItem = {
   notes?: string;
   /** Sous-tâches d'un item. */
   subtasks?: SubTask[];
+  /** Tags / étiquettes (IDs de Tag). */
+  tags?: string[];
+  /** IDs d'items prédécesseurs — cette tâche ne peut pas démarrer avant. */
+  dependsOn?: string[];
+  /** ID de colonne Kanban (null = non placée). */
+  columnId?: string | null;
   /** Fil d'origine vocal — la dictée d'où provient cet item. */
   audioOrigin?: AudioOrigin;
   /** Identifiant de l'audio persisté (`audio_…`) — pour rejouer l'enregistrement. */
@@ -243,6 +249,52 @@ export type AudioOrigin = {
  * - "archived" : archivée
  */
 export type ItemStatus = "active" | "idea" | "archived";
+
+/**
+ * Une colonne du board Kanban — nom libre, position définie par l'utilisateur.
+ * Comme Trello : l'utilisateur crée, nomme et réordonne ses colonnes.
+ */
+export type KanbanColumn = {
+  id: string;
+  name: string;
+  /** Position dans le board (0 = gauche). */
+  order: number;
+};
+
+/**
+ * Le board Kanban complet — persisté dans `boards.json`.
+ */
+export type KanbanBoard = {
+  columns: KanbanColumn[];
+  updatedAt: string;
+};
+
+/**
+ * Palette de couleurs des tags (style Trello).
+ */
+export const TAG_COLORS = [
+  "yellow",
+  "orange",
+  "red",
+  "purple",
+  "blue",
+  "green",
+  "teal",
+  "brown",
+  "pink",
+  "sky",
+] as const;
+
+export type TagColor = (typeof TAG_COLORS)[number];
+
+/**
+ * Un tag / étiquette — comme Trello. Couleur dans une palette fixe.
+ */
+export type Tag = {
+  id: string;
+  name: string;
+  color: TagColor;
+};
 
 /**
  * Écran de l'app (design system Claude Design v1).

@@ -2,7 +2,7 @@
 
 import { PIN_HEADER, UnauthorizedError, clearPin, getPin } from "./pin";
 import type { AgendaItem } from "./agenda";
-import type { DraftItem, Item, Overview, Project, SaveResult } from "./types";
+import type { DraftItem, Item, KanbanBoard, Overview, Project, SaveResult, Tag } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -282,4 +282,72 @@ export function transcribeAudio(
 
     xhr.send(form);
   });
+}
+
+/* --- Board Kanban -------------------------------------------------------- */
+
+export async function fetchBoard(): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>("/api/board", {}, TIMEOUTS.projects);
+}
+
+export async function addColumn(name: string): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "add", name }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function renameColumn(id: string, name: string): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "rename", id, name }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function deleteColumn(id: string): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "delete", id }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function reorderColumns(ids: string[]): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "reorder", order: ids }) },
+    TIMEOUTS.projects,
+  );
+}
+
+/* --- Tags ---------------------------------------------------------------- */
+
+export async function fetchTags(): Promise<Tag[]> {
+  return jsonFetch<Tag[]>("/api/tags", {}, TIMEOUTS.projects);
+}
+
+export async function createTag(name: string, color: string): Promise<Tag> {
+  return jsonFetch<Tag>(
+    "/api/tags",
+    { method: "POST", body: JSON.stringify({ name, color }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function updateTag(id: string, patch: { name?: string; color?: string }): Promise<Tag> {
+  return jsonFetch<Tag>(
+    `/api/tags/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function deleteTag(id: string): Promise<{ ok: boolean }> {
+  return jsonFetch(
+    `/api/tags/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    TIMEOUTS.projects,
+  );
 }

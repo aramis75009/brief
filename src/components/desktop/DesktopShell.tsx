@@ -8,18 +8,20 @@
  * propres au desktop.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DesktopHeader } from "./DesktopHeader";
 import { DesktopDashboard } from "./DesktopDashboard";
 import { DesktopCalendar } from "./DesktopCalendar";
 import { DesktopTasks } from "./DesktopTasks";
+import { DesktopKanban } from "./DesktopKanban";
 import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
 import { leastUrgentId } from "@/lib/desktopDashboard";
+import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags } from "@/lib/api";
 import type { DesktopScreen } from "./types";
 import type { AgendaItem } from "@/lib/agenda";
-import type { DraftItem, Item, Overview, Project } from "@/lib/types";
+import type { DraftItem, Item, KanbanBoard, Overview, Project, Tag } from "@/lib/types";
 
 const C = { bg: "var(--color-bg)" } as const;
 
@@ -79,6 +81,8 @@ export function DesktopShell({
   const [calendarSelectedId, setCalendarSelectedId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [board, setBoard] = useState<KanbanBoard>({ columns: [], updatedAt: "" });
+  const [tags, setTags] = useState<Tag[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -92,6 +96,46 @@ export function DesktopShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Charger le board et les tags au démarrage
+  useEffect(() => {
+    (async () => {
+      try {
+        const [b, t] = await Promise.all([fetchBoard(), fetchTags()]);
+        setBoard(b);
+        setTags(t);
+      } catch {
+        // Non bloquant — le Kanban affichera des colonnes vides
+      }
+    })();
+  }, []);
+
+  const handleAddColumn = useCallback(async (name: string) => {
+    try {
+      const b = await addColumn(name);
+      setBoard(b);
+    } catch { /* silencieux */ }
+  }, []);
+
+  const handleRenameColumn = useCallback(async (id: string, name: string) => {
+    try {
+      const b = await renameColumn(id, name);
+      setBoard(b);
+    } catch { /* silencieux */ }
+  }, []);
+
+  const handleDeleteColumn = useCallback(async (id: string) => {
+    try {
+      const b = await deleteColumn(id);
+      setBoard(b);
+    } catch { /* silencieux */ }
+  }, []);
+
+  const handleMoveCard = useCallback(async (itemId: string, columnId: string) => {
+    try {
+      await onSaveItem(itemId, { columnId });
+    } catch { /* silencieux */ }
+  }, [onSaveItem]);
 
   const openTask = (id: string) => {
     setCalendarSelectedId(id);
@@ -159,6 +203,20 @@ export function DesktopShell({
               onOpenTask={openTask}
               onPostpone={onPostpone}
               onQuickAdd={onQuickAddTask}
+            />
+          )}
+
+          {screen === "kanban" && (
+            <DesktopKanban
+              items={activeItems}
+              projects={projects}
+              board={board}
+              tags={tags}
+              onMoveCard={handleMoveCard}
+              onAddColumn={handleAddColumn}
+              onRenameColumn={handleRenameColumn}
+              onDeleteColumn={handleDeleteColumn}
+              onOpenTask={openTask}
             />
           )}
 
