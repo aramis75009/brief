@@ -2,8 +2,8 @@
 
 /**
  * Fiche de détail d'une tâche — version desktop.
- * Reprend l'écran mobile (TaskDetailScreen) avec une mise en page adaptée :
- * plein écran, pas coincé dans un panneau latéral de calendrier.
+ * Layout 2 colonnes : gauche (titre, notes, audio, sous-tâches, actions)
+ * + droite (métadonnées : projet, échéance, tags, dépendances, historique).
  */
 
 import { useCallback, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import { isoToLocalInputValue, localInputToIso } from "@/lib/due";
 import { itemType, type ItemType } from "@/lib/item-type";
 import { apiFetch } from "@/lib/pin";
 import { skinFor, shapeFor } from "@/lib/projects";
+import { calendarForProjectName } from "@/lib/calendarMapping";
 import { TIMEZONE } from "@/lib/zoned";
 import type { DraftItem, Item, Project } from "@/lib/types";
 
@@ -55,22 +56,26 @@ function draftFrom(item: Item): EditDraft {
 
 export function DesktopTaskDetail({
   item,
+  items,
   projects,
   onBack,
   onDone,
   onPostpone,
   onDelete,
   onToggleSub,
+  onAddSubtask,
   onOpenSibling,
   onSave,
 }: {
   item: Item | null;
+  items: Item[];
   projects: Project[];
   onBack: () => void;
   onDone: (id: string) => void;
   onPostpone: (id: string) => void;
   onDelete: (id: string) => void;
   onToggleSub?: (itemId: string, subId: string) => void;
+  onAddSubtask?: (itemId: string, title: string) => void;
   onOpenSibling?: (id: string) => void;
   onSave: (id: string, patch: Partial<DraftItem>) => Promise<boolean>;
 }) {
@@ -80,6 +85,7 @@ export function DesktopTaskDetail({
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [newSubTitle, setNewSubTitle] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const handlePlayAudio = useCallback(async () => {
@@ -151,11 +157,23 @@ export function DesktopTaskDetail({
   const chipVariant = currentType === "event" ? "meet" : currentType;
   const skin = project ? skinFor(project) : null;
   const shape = project ? shapeFor(project) : "disc";
+  const calName = calendarForProjectName(item.projectId);
+
+  // Items liés (siblings de la même dictée + dépendances)
+  const siblings = audio?.siblingIds
+    ? audio.siblingIds.map((id) => items.find((it) => it.id === id)).filter(Boolean) as Item[]
+    : [];
+  const deps = (item.dependsOn ?? [])
+    .map((id) => items.find((it) => it.id === id))
+    .filter(Boolean) as Item[];
+
+  // Métadonnées pour la sidebar
+  const createdLabel = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: TIMEZONE }).format(new Date(item.createdAt));
 
   return (
     <div className="flex h-full overflow-hidden" style={{ animation: "fade .25s both" }}>
       {/* Colonne principale — la fiche */}
-      <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto" style={{ maxWidth: 640, padding: "24px 32px" }}>
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto" style={{ maxWidth: 720, padding: "24px 32px" }}>
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <button
@@ -248,7 +266,7 @@ export function DesktopTaskDetail({
 
         {!editing && (
           <>
-            {/* Fil d'origine — audio avec métadonnées */}
+            {/* Audio — Fil d'origine */}
             {audio && (
               <div className="mb-4" style={{ padding: 20, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -279,22 +297,16 @@ export function DesktopTaskDetail({
                 <p className="mb-3 text-[14px] font-semibold leading-[1.5]" style={{ color: C.inkMuted }}>
                   « …<span style={{ background: "var(--color-idea-100)", borderRadius: 5, padding: "1px 5px", color: C.ink }}>{audio.highlight}</span>… »
                 </p>
-                {audio.siblingIds.length > 0 && (
-                  <button
-                    onClick={() => audio.siblingIds[0] && onOpenSibling?.(audio.siblingIds[0])}
-                    className="flex w-full items-center justify-between gap-2"
-                    style={{ borderTop: "1px solid rgba(16,16,16,.07)", paddingTop: 12, minHeight: 44, background: "none", border: "none", borderBottom: "none", borderLeft: "none", borderRight: "none", cursor: "pointer", fontFamily: "inherit" }}
-                  >
-                    <span className="text-[13px] font-bold" style={{ color: C.ink }}>
-                      {audio.siblingIds.length} autre{audio.siblingIds.length > 1 ? "s" : ""} item{audio.siblingIds.length > 1 ? "s" : ""} de cette dictée
-                    </span>
-                    <ChevronRightIcon size={16} />
-                  </button>
+                {/* Transcription complète */}
+                {audio.text && (
+                  <p className="mb-3 text-[13px] font-medium leading-[1.6]" style={{ color: C.inkFaint, whiteSpace: "pre-wrap" }}>
+                    {audio.text}
+                  </p>
                 )}
               </div>
             )}
 
-            {/* Enregistrement vocal — audioId seul */}
+            {/* Audio — Enregistrement vocal (audioId seul) */}
             {!audio && item?.audioId && (
               <div className="mb-4" style={{ padding: 20, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
                 <div className="flex items-center justify-between gap-3">
@@ -312,38 +324,117 @@ export function DesktopTaskDetail({
               </div>
             )}
 
-            {/* Sous-tâches */}
-            {subs.length > 0 && (
+            {/* Audio — section vide (préparée pour les futures tâches) */}
+            {!audio && !item?.audioId && (
               <div className="mb-4" style={{ padding: 20, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
-                <div className="mb-3 flex items-baseline justify-between">
-                  <span className="text-[16px] font-bold">Sous-tâches</span>
-                  <span className="text-[13px] font-bold" style={{ color: C.inkFaint }}>{doneSubs}/{subs.length}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint }}>AUDIO</span>
+                  <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucun enregistrement</span>
                 </div>
+                <p className="mt-2 text-[12px] font-medium" style={{ color: C.inkFaint, lineHeight: 1.4 }}>
+                  Les nouvelles tâches dictées à la voix stockent automatiquement l'audio.
+                </p>
+              </div>
+            )}
+
+            {/* Sous-tâches + Items liés (fusionnés) */}
+            <div className="mb-4" style={{ padding: 20, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
+              {/* Sous-tâches */}
+              <div className="mb-3 flex items-baseline justify-between">
+                <span className="text-[16px] font-bold">Sous-tâches</span>
+                {subs.length > 0 && <span className="text-[13px] font-bold" style={{ color: C.inkFaint }}>{doneSubs}/{subs.length}</span>}
+              </div>
+              {subs.length > 0 && (
                 <div className="mb-4" style={{ height: 5, borderRadius: 99, overflow: "hidden", background: "rgba(16,16,16,.07)" }}>
                   <div style={{ height: "100%", borderRadius: 99, width: `${subPct}%`, background: C.ink, transition: "width .35s cubic-bezier(.2,.9,.3,1)" }} />
                 </div>
-                <div className="flex flex-col gap-1">
-                  {subs.map((sub) => (
-                    <div key={sub.id} className="flex items-center gap-3" style={{ padding: "10px 0" }}>
-                      <button
-                        aria-label="Cocher"
-                        onClick={() => onToggleSub?.(item.id, sub.id)}
-                        className="flex flex-none items-center justify-center"
-                        style={{ width: 26, height: 26, borderRadius: 99, border: "2px solid rgba(16,16,16,.18)", background: sub.done ? C.ink : C.surface, cursor: "pointer" }}
-                      >
-                        {sub.done && <CheckIcon size={13} className="text-white" />}
-                      </button>
-                      <span
-                        className="text-[15px] font-semibold"
-                        style={{ color: sub.done ? C.inkFaint : C.ink, textDecoration: sub.done ? "line-through" : "none" }}
-                      >
-                        {sub.title}
-                      </span>
-                    </div>
-                  ))}
+              )}
+              <div className="flex flex-col gap-1">
+                {subs.map((sub) => (
+                  <div key={sub.id} className="flex items-center gap-3" style={{ padding: "10px 0" }}>
+                    <button
+                      aria-label="Cocher"
+                      onClick={() => onToggleSub?.(item.id, sub.id)}
+                      className="flex flex-none items-center justify-center"
+                      style={{ width: 26, height: 26, borderRadius: 99, border: "2px solid rgba(16,16,16,.18)", background: sub.done ? C.ink : C.surface, cursor: "pointer" }}
+                    >
+                      {sub.done && <CheckIcon size={13} className="text-white" />}
+                    </button>
+                    <span
+                      className="text-[15px] font-semibold"
+                      style={{ color: sub.done ? C.inkFaint : C.ink, textDecoration: sub.done ? "line-through" : "none" }}
+                    >
+                      {sub.title}
+                    </span>
+                  </div>
+                ))}
+                {/* Ajouter une sous-tâche */}
+                <div className="flex items-center gap-3" style={{ padding: "10px 0" }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 99, border: "2px dashed rgba(16,16,16,.12)", flex: "none" }} />
+                  <input
+                    value={newSubTitle}
+                    onChange={(e) => setNewSubTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newSubTitle.trim()) {
+                        onAddSubtask?.(item.id, newSubTitle.trim());
+                        setNewSubTitle("");
+                      }
+                    }}
+                    placeholder="Ajouter une sous-tâche…"
+                    style={{ flex: 1, padding: "8px 0", background: "none", border: "none", borderBottom: "1px solid rgba(16,16,16,.06)", fontFamily: "inherit", fontSize: 15, fontWeight: 500, color: C.ink, outline: "none" }}
+                  />
                 </div>
               </div>
-            )}
+
+              {/* Items liés (siblings + dépendances) */}
+              {(siblings.length > 0 || deps.length > 0) && (
+                <div className="mt-4" style={{ borderTop: "1px solid rgba(16,16,16,.07)", paddingTop: 16 }}>
+                  <span className="mb-3 block text-[14px] font-bold">Items liés</span>
+                  <div className="flex flex-col gap-1">
+                    {siblings.map((sib) => {
+                      const sibProject = projects.find((p) => p.id === sib.projectId);
+                      const sibSkin = sibProject ? skinFor(sibProject) : null;
+                      const sibShape = sibProject ? shapeFor(sibProject) : "disc";
+                      return (
+                        <button
+                          key={sib.id}
+                          onClick={() => onOpenSibling?.(sib.id)}
+                          className="flex items-center gap-3"
+                          style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}
+                        >
+                          {sibSkin && <span style={{ width: 8, height: 8, borderRadius: sibShape === "square" ? 2 : 99, background: sibSkin.bg, flex: "none" }} />}
+                          <span className="text-[14px] font-semibold" style={{ color: sib.doneAt ? C.inkFaint : C.ink, textDecoration: sib.doneAt ? "line-through" : "none" }}>
+                            {sib.title}
+                          </span>
+                          <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· même dictée</span>
+                          <ChevronRightIcon size={14} />
+                        </button>
+                      );
+                    })}
+                    {deps.map((dep) => {
+                      const depProject = projects.find((p) => p.id === dep.projectId);
+                      const depSkin = depProject ? skinFor(depProject) : null;
+                      const depShape = depProject ? shapeFor(depProject) : "disc";
+                      return (
+                        <button
+                          key={dep.id}
+                          onClick={() => onOpenSibling?.(dep.id)}
+                          className="flex items-center gap-3"
+                          style={{ padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}
+                        >
+                          {depSkin && <span style={{ width: 8, height: 8, borderRadius: depShape === "square" ? 2 : 99, background: depSkin.bg, flex: "none" }} />}
+                          <span className="text-[14px] font-semibold" style={{ color: dep.doneAt ? C.inkFaint : C.ink, textDecoration: dep.doneAt ? "line-through" : "none" }}>
+                            {dep.title}
+                          </span>
+                          <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· bloqué par</span>
+                          <ChevronRightIcon size={14} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Actions */}
             <div className="mt-4 flex flex-col gap-3">
@@ -373,6 +464,87 @@ export function DesktopTaskDetail({
           </>
         )}
       </div>
+
+      {/* Sidebar droite — métadonnées */}
+      {!editing && (
+        <div className="flex h-full w-[340px] flex-none flex-col gap-3 overflow-y-auto" style={{ padding: "24px 24px 24px 0" }}>
+          {/* Projet */}
+          <div style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint, textTransform: "uppercase" }}>Projet</span>
+            <div className="mt-2.5 flex items-center gap-3">
+              {skin && <span style={{ width: 18, height: 18, borderRadius: shape === "square" ? 5 : 99, background: skin.bg, flex: "none" }} />}
+              <div className="flex flex-col">
+                <span className="text-[16px] font-bold" style={{ color: C.ink }}>{project?.name ?? "Sans projet"}</span>
+                <span className="text-[12px] font-medium" style={{ color: C.inkMuted }}>→ {calName}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Échéance */}
+          <div style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint, textTransform: "uppercase" }}>Échéance</span>
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <ClockIcon size={16} />
+              <span className="text-[15px] font-bold" style={{ color: C.ink }}>
+                {item.due ? dueLabel : "Sans échéance"}
+              </span>
+            </div>
+          </div>
+
+          {/* Tags (section préparée) */}
+          <div style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint, textTransform: "uppercase" }}>Étiquettes</span>
+            <div className="mt-2.5">
+              {item.tags && item.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {item.tags.map((tagId) => (
+                    <span key={tagId} style={{ padding: "4px 10px", borderRadius: 99, background: C.bg, fontSize: 12, fontWeight: 600, color: C.inkMuted }}>
+                      {tagId}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune étiquette</span>
+              )}
+            </div>
+          </div>
+
+          {/* Dépendances */}
+          <div style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint, textTransform: "uppercase" }}>Dépendances</span>
+            <div className="mt-2.5">
+              {deps.length > 0 ? (
+                <span className="text-[13px] font-medium" style={{ color: C.ink }}>{deps.length} tâche{deps.length > 1 ? "s" : ""} prédécesseure{deps.length > 1 ? "s" : ""}</span>
+              ) : (
+                <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune dépendance</span>
+              )}
+            </div>
+          </div>
+
+          {/* Historique */}
+          <div style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 20 }}>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint, textTransform: "uppercase" }}>Historique</span>
+            <div className="mt-2.5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <span style={{ width: 6, height: 6, borderRadius: 99, background: C.inkFaint, flex: "none" }} />
+                <span className="text-[13px] font-medium" style={{ color: C.inkMuted }}>Créée le {createdLabel}</span>
+              </div>
+              {item.doneAt && (
+                <div className="flex items-center gap-2">
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--color-p6)", flex: "none" }} />
+                  <span className="text-[13px] font-medium" style={{ color: C.inkMuted }}>Terminée</span>
+                </div>
+              )}
+              {item.caldavSyncedDue && (
+                <div className="flex items-center gap-2">
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--color-p1)", flex: "none" }} />
+                  <span className="text-[13px] font-medium" style={{ color: C.inkMuted }}>Sync CalDAV</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

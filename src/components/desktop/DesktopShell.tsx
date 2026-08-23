@@ -147,6 +147,13 @@ export function DesktopShell({
     try { await onSaveItem(itemId, { subtasks }); } catch { /* silencieux */ }
   }, [items, onSaveItem]);
 
+  const handleAddSubtask = useCallback(async (itemId: string, title: string) => {
+    const item = items.find((it) => it.id === itemId);
+    if (!item) return;
+    const subtasks = [...(item.subtasks ?? []), { id: `sub-${Date.now().toString(36)}`, title: title.trim(), done: false }];
+    try { await onSaveItem(itemId, { subtasks }); } catch { /* silencieux */ }
+  }, [items, onSaveItem]);
+
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const detailItem = detailId ? items.find((it) => it.id === detailId) ?? null : null;
@@ -237,12 +244,14 @@ export function DesktopShell({
           {screen === "détail" && (
             <DesktopTaskDetail
               item={detailItem}
+              items={items}
               projects={projects}
               onBack={() => setScreen("dashboard")}
               onDone={onToggleDone}
               onPostpone={onPostpone}
               onDelete={(id) => { onDeleteItem(id); setScreen("dashboard"); }}
               onToggleSub={handleToggleSub}
+              onAddSubtask={handleAddSubtask}
               onOpenSibling={(id) => { setDetailId(id); }}
               onSave={onSaveItem}
             />
