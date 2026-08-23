@@ -17,6 +17,7 @@ import { ChatSheet } from "./ChatSheet";
 import { BottomNav, type Screen } from "./BottomNav";
 import { CaptureBar } from "./CaptureBar";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
+import { DesktopShell } from "./desktop/DesktopShell";
 import { PinGate } from "./PinGate";
 import { Toast } from "./Toast";
 import { EmptyState } from "./EmptyState";
@@ -41,7 +42,7 @@ import {
   uploadAudio,
 } from "@/lib/api";
 import type { AgendaItem } from "@/lib/agenda";
-import { formatDue, resolveDue } from "@/lib/due";
+import { formatDue, resolveDue, toIsoWithOffset } from "@/lib/due";
 import { uid } from "@/lib/ids";
 import {
   enqueue,
@@ -55,7 +56,8 @@ import { UnauthorizedError, clearPin, getPin, PIN_HEADER, readStoredTranscript }
 import { enablePush, sendTestPush, readPushState, isStandalone, isIOS, type PushState } from "@/lib/push-client";
 import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
-import { zonedParts } from "@/lib/zoned";
+import { useIsDesktop } from "@/lib/useIsDesktop";
+import { zonedParts, shiftDays, zonedTime } from "@/lib/zoned";
 import type { DraftItem, Item, Overview, Phase, Project, ToastKind } from "@/lib/types";
 
 /** Date du jour, `AAAA-MM-JJ` en Europe/Paris — clé attendue par `/api/agenda`. */
@@ -77,6 +79,7 @@ function pinHeader(): Record<string, string> {
 
 export function BriefApp() {
   const hydrated = useHydrated();
+  const isDesktop = useIsDesktop();
   const [unlocked, setUnlocked] = useState(() => !!getPin());
 
   // Navigation
@@ -269,6 +272,43 @@ export function BriefApp() {
     }
   }, [flash, refreshOverview, refreshTodayAgenda, fail]);
 
+  /* --- Idées : archiver (bouton « Abandonner », mobile et desktop) --- */
+  const archiveIdea = useCallback((id: string) => {
+    void (async () => {
+      try {
+        const updated = await updateItem(id, { status: "archived" });
+        setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+        flash("Idée archivée.");
+      } catch (e) {
+        if (e instanceof UnauthorizedError) { fail(e, ""); return; }
+        flash("Archivage impossible.", "err");
+      }
+    })();
+  }, [flash, fail]);
+
+  /**
+   * Idées : « Planifier demain » (desktop) — fixe une échéance concrète
+   * (demain 09:00, priorité 2), contrairement à la simple conversion mobile
+   * qui laisse l'échéance vide. Deux comportements distincts, assumés : sur
+   * desktop, l'idée quitte réellement la boîte pour se poser sur l'agenda.
+   */
+  const promoteIdeaTomorrow = useCallback((id: string) => {
+    void (async () => {
+      try {
+        const tomorrow = shiftDays(zonedParts(new Date()), 1);
+        const due = toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
+        const updated = await updateItem(id, { status: "active", due, allDay: false, priority: 2 });
+        setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+        flash("Planifié demain 09:00.");
+        void refreshOverview();
+        void refreshTodayAgenda();
+      } catch (e) {
+        if (e instanceof UnauthorizedError) { fail(e, ""); return; }
+        flash("Planification impossible.", "err");
+      }
+    })();
+  }, [flash, fail, refreshOverview, refreshTodayAgenda]);
+
   /* --- Refresh items --- */
   const refreshItems = useCallback(async () => {
     try {
@@ -282,6 +322,28 @@ export function BriefApp() {
       void refreshTodayAgenda();
     } catch { /* non bloquant */ }
   }, [flash, refreshOverview, refreshTodayAgenda]);
+
+  /** Tâches : ajout rapide sans passer par la voix (écran Tâches desktop). */
+  const quickAddTask = useCallback((title: string, projectId: string) => {
+    const t = title.trim();
+    if (!t) { flash("Écris quelque chose d'abord.", "err"); return; }
+    void (async () => {
+      try {
+        const tomorrow = shiftDays(zonedParts(new Date()), 1);
+        const due = toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
+        const draft: DraftItem = {
+          id: uid(), kind: "task", title: t, projectId, due, allDay: false,
+          priority: 2, rrule: null, status: "active",
+        };
+        const { saved, total } = await saveItems([draft]);
+        if (saved < total) { flash("Non enregistré.", "err"); return; }
+        await refreshItems();
+        flash(`Rangé dans ${projectsRef.current.find((p) => p.id === projectId)?.name ?? projectId}.`);
+      } catch (e) {
+        fail(e, "L'ajout a échoué.");
+      }
+    })();
+  }, [flash, fail, refreshItems]);
 
   /* --- Projects --- */
   const loadProjects = useCallback(async (opts: { silent?: boolean } = {}) => {
@@ -518,6 +580,47 @@ export function BriefApp() {
     );
   }
 
+  if (isDesktop) {
+    return (
+      <>
+        <DesktopShell
+          items={sent}
+          activeItems={activeItems}
+          ideaItems={ideaItems}
+          todayAgenda={todayAgenda}
+          projects={projects}
+          overview={overview}
+          transcript={transcript}
+          calendarSyncAt={calendarSyncAt}
+          pushSubscribed={pushSubscribed}
+          onToggleDone={toggleDoneSimple}
+          onPostpone={(id) => void postponeItem(id)}
+          onArchiveIdea={archiveIdea}
+          onPromoteIdea={promoteIdeaTomorrow}
+          onSaveItem={saveItemEdit}
+          onQuickAddTask={quickAddTask}
+          onEnablePush={() => {
+            void (async () => {
+              try {
+                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                if (!vapidKey) { flash("Clé VAPID absente — recompile le build.", "err"); return; }
+                const state = await enablePush(vapidKey);
+                if (state.status === "on") { setPushSubscribed(true); flash("Notifications activées."); }
+              } catch (e) {
+                flash(e instanceof Error ? e.message : "Activation impossible.", "err");
+              }
+            })();
+          }}
+          onOpenCapture={openCapture}
+          onOpenChat={openChat}
+          onOpenAccount={openAccount}
+          onOpenNotifications={() => setNotificationsOpen(true)}
+        />
+        {renderSharedSheets()}
+      </>
+    );
+  }
+
   return (
     <PhoneFrame>
       <StatusBar />
@@ -580,17 +683,7 @@ export function BriefApp() {
                 }
               })();
             }}
-            onArchive={(id) => {
-              void (async () => {
-                try {
-                  const updated = await updateItem(id, { status: "archived" });
-                  setSent((s) => s.map((t) => (t.id === id ? updated : t)));
-                  flash("Idée archivée.");
-                } catch (e) {
-                  flash("Archivage impossible.", "err");
-                }
-              })();
-            }}
+            onArchive={archiveIdea}
             onBack={() => setScreen("home")}
             onCapture={openCapture}
             loading={loading}
@@ -619,89 +712,130 @@ export function BriefApp() {
         onCapture={openCapture}
       />
 
-      {captureOpen && (
-        <CaptureSheet
-          open={captureOpen}
-          stage={captureStage}
-          seconds={recorder.seconds}
-          transcript={transcript}
-          drafts={drafts}
-          projects={projects}
-          micError={recorder.error ? { title: "Micro refusé", description: "Autorise le micro dans les réglages pour dicter." } : null}
-          onStartListen={toggleMic}
-          onStopListen={() => recorder.stop()}
-          onSubmitText={handleSubmitText}
-          onUpdateDraft={updateDraft}
-          onConfirm={() => void send()}
-          onReplay={() => { setCaptureStage("idle"); setDrafts([]); }}
-          onClose={closeCapture}
-        />
-      )}
-
-      {accountOpen && (
-        <AccountSheet
-          open={accountOpen}
-          calendarSyncAt={calendarSyncAt}
-          onClose={() => setAccountOpen(false)}
-          onOpenVoice={() => { setAccountOpen(false); setVoiceSettingsOpen(true); }}
-          onOpenPrivacy={() => { setAccountOpen(false); setPrivacyOpen(true); }}
-          onOpenSubscription={() => { setAccountOpen(false); setSubscriptionOpen(true); }}
-        />
-      )}
-
-      {helpOpen && (
-        <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
-      )}
-
-      {notificationsOpen && (
-        <NotificationsSheet
-          open={notificationsOpen}
-          subscribed={pushSubscribed}
-          onTestPush={() => {
-            void (async () => {
-              try {
-                const { sent, total } = await sendTestPush();
-                if (sent > 0) flash("Notification envoyée — vérifie ton écran.");
-                else flash("Aucun abonnement actif. Active les notifications d'abord.", "err");
-              } catch (e) {
-                flash(e instanceof Error ? e.message : "Échec du test.", "err");
-              }
-            })();
-          }}
-          onEnablePush={() => {
-            void (async () => {
-              try {
-                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-                if (!vapidKey) { flash("Clé VAPID absente — recompile le build.", "err"); return; }
-                const state = await enablePush(vapidKey);
-                if (state.status === "on") {
-                  setPushSubscribed(true);
-                  flash("Notifications activées.");
-                }
-              } catch (e) {
-                flash(e instanceof Error ? e.message : "Activation impossible.", "err");
-              }
-            })();
-          }}
-          onClose={() => setNotificationsOpen(false)}
-        />
-      )}
-
-      {voiceSettingsOpen && (
-        <VoiceSettingsSheet open={voiceSettingsOpen} onClose={() => setVoiceSettingsOpen(false)} />
-      )}
-
-      {privacyOpen && (
-        <PrivacySheet open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
-      )}
-
-      {subscriptionOpen && (
-        <SubscriptionSheet open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
-      )}
-
-      <ChatSheet open={chatOpen} onClose={() => setChatOpen(false)} onSend={handleChatSend} />
-
-      {toast && <Toast message={toast.msg} kind={toast.kind} />}
+      {renderSharedSheets()}
     </PhoneFrame>
   );
+
+  /**
+   * Feuilles partagées mobile/desktop — Capture, Compte, Aide, Notifications,
+   * Voix, Confidentialité, Abonnement, Chat, Toast. Chacune dans son propre
+   * `fixed inset-0` : sur mobile ça équivaut à l'ancien `absolute inset-0`
+   * (le cadre `PhoneFrame` occupe déjà tout le viewport hors aperçu `sm:`),
+   * sur desktop ça les épingle au vrai viewport plutôt qu'au flux, qui peut
+   * dépasser la hauteur visible (tableau de bord long). `CaptureSheet` seule
+   * change de variante : centrée sur desktop (`DESIGN.md` §7 — revue éditable),
+   * feuille montante sur mobile.
+   */
+  function renderSharedSheets() {
+    return (
+      <>
+        {captureOpen && (
+          <div className="fixed inset-0 z-70">
+            <CaptureSheet
+              open={captureOpen}
+              stage={captureStage}
+              seconds={recorder.seconds}
+              transcript={transcript}
+              drafts={drafts}
+              projects={projects}
+              micError={recorder.error ? { title: "Micro refusé", description: "Autorise le micro dans les réglages pour dicter." } : null}
+              variant={isDesktop ? "modal" : "sheet"}
+              onStartListen={toggleMic}
+              onStopListen={() => recorder.stop()}
+              onSubmitText={handleSubmitText}
+              onUpdateDraft={updateDraft}
+              onConfirm={() => void send()}
+              onReplay={() => { setCaptureStage("idle"); setDrafts([]); }}
+              onClose={closeCapture}
+            />
+          </div>
+        )}
+
+        {accountOpen && (
+          <div className="fixed inset-0 z-70">
+            <AccountSheet
+              open={accountOpen}
+              calendarSyncAt={calendarSyncAt}
+              onClose={() => setAccountOpen(false)}
+              onOpenVoice={() => { setAccountOpen(false); setVoiceSettingsOpen(true); }}
+              onOpenPrivacy={() => { setAccountOpen(false); setPrivacyOpen(true); }}
+              onOpenSubscription={() => { setAccountOpen(false); setSubscriptionOpen(true); }}
+            />
+          </div>
+        )}
+
+        {helpOpen && (
+          <div className="fixed inset-0 z-70">
+            <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
+          </div>
+        )}
+
+        {notificationsOpen && (
+          <div className="fixed inset-0 z-70">
+            <NotificationsSheet
+              open={notificationsOpen}
+              subscribed={pushSubscribed}
+              onTestPush={() => {
+                void (async () => {
+                  try {
+                    const { sent, total } = await sendTestPush();
+                    if (sent > 0) flash("Notification envoyée — vérifie ton écran.");
+                    else flash("Aucun abonnement actif. Active les notifications d'abord.", "err");
+                  } catch (e) {
+                    flash(e instanceof Error ? e.message : "Échec du test.", "err");
+                  }
+                })();
+              }}
+              onEnablePush={() => {
+                void (async () => {
+                  try {
+                    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                    if (!vapidKey) { flash("Clé VAPID absente — recompile le build.", "err"); return; }
+                    const state = await enablePush(vapidKey);
+                    if (state.status === "on") {
+                      setPushSubscribed(true);
+                      flash("Notifications activées.");
+                    }
+                  } catch (e) {
+                    flash(e instanceof Error ? e.message : "Activation impossible.", "err");
+                  }
+                })();
+              }}
+              onClose={() => setNotificationsOpen(false)}
+            />
+          </div>
+        )}
+
+        {voiceSettingsOpen && (
+          <div className="fixed inset-0 z-70">
+            <VoiceSettingsSheet open={voiceSettingsOpen} onClose={() => setVoiceSettingsOpen(false)} />
+          </div>
+        )}
+
+        {privacyOpen && (
+          <div className="fixed inset-0 z-70">
+            <PrivacySheet open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+          </div>
+        )}
+
+        {subscriptionOpen && (
+          <div className="fixed inset-0 z-70">
+            <SubscriptionSheet open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
+          </div>
+        )}
+
+        {chatOpen && (
+          <div className="fixed inset-0 z-70">
+            <ChatSheet open={chatOpen} onClose={() => setChatOpen(false)} onSend={handleChatSend} />
+          </div>
+        )}
+
+        {toast && (
+          <div className="pointer-events-none fixed inset-0">
+            <Toast message={toast.msg} kind={toast.kind} />
+          </div>
+        )}
+      </>
+    );
+  }
 }

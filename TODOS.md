@@ -218,10 +218,26 @@ raison nouvelle.
 
 **Tranché par Aramis le 2026-08-15 :**
 
-### Version Desktop & Vue Kanban (Trello-like)
-- Refonte / layout adapté grand écran (navigation latérale, vue d'ensemble étendue).
-- Vue en colonnes Kanban / Board interactif avec glisser-déposer (Drag & Drop) d'un statut/horizon à un autre.
-- Prototype préliminaire / preview HTML via Claude Design.
+### ~~Version Desktop~~ — V1 livrée le 2026-08-23, en attente de revue
+- **Quoi :** port fidèle du prototype Claude Design `Brief Desktop.dc.html`
+  (5 écrans : Dashboard, Calendrier, Tâches, Idées, Réglages, + palette ⌘K +
+  modale de capture) en composants React réels, `src/components/desktop/`,
+  bascule à 1024px via `useIsDesktop()`. Mobile inchangé. Voir
+  `docs/handoffs/2026-08-23-...` (prochaine archive) pour le détail.
+- **Reste à faire :** revue visuelle d'Aramis sur écran large, `npm run build`
+  (non lancé pendant la session d'implémentation — `dev` tournait en
+  parallèle), commit/déploiement sur demande explicite.
+- **Effort :** fait (Claude Code) · **Priorité :** revue avant merge
+
+### Vue Kanban (Trello-like) — hors périmètre de la V1 desktop
+- **Quoi :** colonnes Kanban / board interactif avec glisser-déposer
+  (Drag & Drop) d'un statut/horizon à un autre.
+- **Pourquoi différée :** le prototype fourni par Aramis pour la V1 desktop
+  (`Brief Desktop.dc.html`) ne contient aucun board Kanban — seulement les 5
+  écrans listés ci-dessus. Le tranchage du 2026-08-15 groupait les deux sous
+  un même chantier ; ils sont désormais deux chantiers distincts.
+- **Effort :** M-L (nécessite un vrai brainstorming — modèle de statuts/
+  colonnes, drag & drop) · **Priorité :** P2, à spécifier séparément
 
 ### Workflow Conversationnel Telegram ↔ Hermes ↔ Brief
 - Consultation des tâches en langage naturel (synthèse ultra lisible, priorités, deadlines).

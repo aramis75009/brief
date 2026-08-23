@@ -32,6 +32,7 @@ export function CaptureSheet({
   drafts,
   projects,
   micError,
+  variant = "sheet",
   onStartListen,
   onStopListen,
   onSubmitText,
@@ -47,6 +48,8 @@ export function CaptureSheet({
   drafts: DraftItem[];
   projects: Project[];
   micError: { title: string; description: string } | null;
+  /** "sheet" (mobile, par défaut) monte du bas ; "modal" (desktop) est centrée. */
+  variant?: "sheet" | "modal";
   onStartListen: () => void;
   onStopListen: () => void;
   onSubmitText: (text: string) => void;
@@ -57,24 +60,28 @@ export function CaptureSheet({
 }) {
   if (!open) return null;
 
+  const isModal = variant === "modal";
+
   return (
     <div
-      className="absolute inset-0 z-80 flex flex-col justify-end"
-      style={{ background: "rgba(16,16,16,.34)", animation: "fade .22s both" }}
+      className={isModal ? "fixed inset-0 z-60 flex items-center justify-center p-10" : "absolute inset-0 z-80 flex flex-col justify-end"}
+      style={{ background: "rgba(16,16,16,.34)", backdropFilter: isModal ? "blur(3px)" : undefined, animation: "fade .22s both" }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Capturer"
     >
       <div
-        className="rounded-t-[30px] bg-surface px-5 pt-3 pb-8"
-        style={{ animation: "sheet .3s cubic-bezier(.2,.9,.3,1) both" }}
+        className={isModal ? "w-full overflow-y-auto rounded-24 bg-surface p-7" : "rounded-t-[30px] bg-surface px-5 pt-3 pb-8"}
+        style={{ maxWidth: isModal ? 720 : undefined, maxHeight: isModal ? "88vh" : undefined, animation: "sheet .3s cubic-bezier(.2,.9,.3,1) both" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
-        <div className="mb-3.5 flex justify-center">
-          <span className="h-[5px] w-[42px] rounded-full bg-ink/[.14]" />
-        </div>
+        {!isModal && (
+          <div className="mb-3.5 flex justify-center">
+            <span className="h-[5px] w-[42px] rounded-full bg-ink/[.14]" />
+          </div>
+        )}
 
         {/* Header */}
         <div className="mb-4.5 flex items-center justify-between">
