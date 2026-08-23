@@ -254,6 +254,31 @@ export function DesktopShell({
               onAddSubtask={handleAddSubtask}
               onOpenSibling={(id) => { setDetailId(id); }}
               onSave={onSaveItem}
+              allTags={tags}
+              onAddTag={async (itemId, tagId) => {
+                const it = items.find((i) => i.id === itemId);
+                if (!it) return;
+                const newTags = [...(it.tags ?? []), tagId];
+                await onSaveItem(itemId, { tags: newTags });
+              }}
+              onRemoveTag={async (itemId, tagId) => {
+                const it = items.find((i) => i.id === itemId);
+                if (!it) return;
+                const newTags = (it.tags ?? []).filter((t) => t !== tagId);
+                await onSaveItem(itemId, { tags: newTags });
+              }}
+              onAddDependency={async (itemId, depId) => {
+                const it = items.find((i) => i.id === itemId);
+                if (!it) return;
+                const newDeps = [...(it.dependsOn ?? []), depId];
+                await onSaveItem(itemId, { dependsOn: newDeps });
+              }}
+              onRemoveDependency={async (itemId, depId) => {
+                const it = items.find((i) => i.id === itemId);
+                if (!it) return;
+                const newDeps = (it.dependsOn ?? []).filter((d) => d !== depId);
+                await onSaveItem(itemId, { dependsOn: newDeps });
+              }}
             />
           )}
 

@@ -26,7 +26,7 @@ import { apiFetch } from "@/lib/pin";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { calendarForProjectName } from "@/lib/calendarMapping";
 import { TIMEZONE } from "@/lib/zoned";
-import type { DraftItem, Item, Project } from "@/lib/types";
+import type { DraftItem, Item, Project, Tag } from "@/lib/types";
 
 const C = {
   bg: "var(--color-bg)",
@@ -36,6 +36,19 @@ const C = {
   inkFaint: "var(--color-ink-faint)",
   danger: "var(--color-danger)",
 } as const;
+
+const TAG_COLOR_MAP: Record<string, string> = {
+  yellow: "#FBE2AE",
+  orange: "#FFCC00",
+  red: "#FF3B30",
+  purple: "#AF52DE",
+  blue: "#007AFF",
+  green: "#34C759",
+  teal: "#5AC8FA",
+  brown: "#A2845E",
+  pink: "#FF2D55",
+  sky: "#64D2FF",
+};
 
 type EditDraft = {
   title: string;
@@ -65,6 +78,90 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+function ChainSection({
+  item,
+  items,
+  deps,
+  projects,
+  onOpenSibling,
+  onAddDependency,
+  onRemoveDependency,
+}: {
+  item: Item;
+  items: Item[];
+  deps: Item[];
+  projects: Project[];
+  onOpenSibling?: (id: string) => void;
+  onAddDependency?: (itemId: string, depId: string) => void;
+  onRemoveDependency?: (itemId: string, depId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const after = items.filter((it) => (it.dependsOn ?? []).includes(item.id));
+  if (deps.length === 0 && after.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 12, padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 18 }}>
+      <button onClick={() => setOpen(!open)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+        <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint }}>CHAÎNE {open ? "↑" : "↓"}</span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2" style={{ marginTop: 12 }}>
+          {deps.length > 0 && <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint }}>AVANT</span>}
+          {deps.map((dep) => {
+            const dp = projects.find((p) => p.id === dep.projectId);
+            const ds = dp ? skinFor(dp) : null;
+            return (
+              <button key={dep.id} onClick={() => onOpenSibling?.(dep.id)} className="flex items-center gap-2.5" style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", padding: "4px 0" }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: ds?.bg ?? C.inkFaint, flex: "none" }} />
+                <span className="text-[13px] font-semibold" style={{ color: dep.doneAt ? C.inkFaint : C.ink, textDecoration: dep.doneAt ? "line-through" : "none" }}>{dep.title}</span>
+                {dep.doneAt && <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· fait</span>}
+                {onRemoveDependency && <span onClick={(e) => { e.stopPropagation(); onRemoveDependency(item.id, dep.id); }} style={{ marginLeft: "auto", cursor: "pointer", color: C.inkFaint, fontSize: 14 }}>×</span>}
+              </button>
+            );
+          })}
+          <div className="flex items-center gap-2.5" style={{ padding: "4px 0" }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--color-p1)", flex: "none" }} />
+            <span className="text-[13px] font-bold" style={{ color: C.ink }}>{item.title}</span>
+            <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· ici</span>
+          </div>
+          {after.length > 0 && <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginTop: 4 }}>APRÈS</span>}
+          {after.map((aft) => {
+            const ap = projects.find((p) => p.id === aft.projectId);
+            const as = ap ? skinFor(ap) : null;
+            return (
+              <button key={aft.id} onClick={() => onOpenSibling?.(aft.id)} className="flex items-center gap-2.5" style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", padding: "4px 0" }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: as?.bg ?? C.inkFaint, flex: "none" }} />
+                <span className="text-[13px] font-semibold" style={{ color: aft.doneAt ? C.inkFaint : C.ink }}>{aft.title}</span>
+                {!aft.doneAt && <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· en attente</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagPicker({ allTags, itemTags, onAdd }: { allTags: Tag[]; itemTags: string[]; onAdd: (tagId: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const available = allTags.filter((t) => !itemTags.includes(t.id));
+  if (available.length === 0) return null;
+  return (
+    <>
+      <button onClick={() => setOpen(!open)} style={{ padding: "4px 10px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}>+ Étiquette</button>
+      {open && (
+        <div className="flex flex-wrap gap-1.5" style={{ marginTop: 6 }}>
+          {available.map((tag) => (
+            <button key={tag.id} onClick={() => { onAdd(tag.id); setOpen(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue, fontSize: 12, fontWeight: 700, color: C.ink, border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+              {tag.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function DesktopTaskDetail({
   item,
   items,
@@ -77,6 +174,11 @@ export function DesktopTaskDetail({
   onAddSubtask,
   onOpenSibling,
   onSave,
+  allTags,
+  onAddTag,
+  onRemoveTag,
+  onAddDependency,
+  onRemoveDependency,
 }: {
   item: Item | null;
   items: Item[];
@@ -89,6 +191,11 @@ export function DesktopTaskDetail({
   onAddSubtask?: (itemId: string, title: string) => void;
   onOpenSibling?: (id: string) => void;
   onSave: (id: string, patch: Partial<DraftItem>) => Promise<boolean>;
+  allTags?: Tag[];
+  onAddTag?: (itemId: string, tagId: string) => void;
+  onRemoveTag?: (itemId: string, tagId: string) => void;
+  onAddDependency?: (itemId: string, depId: string) => void;
+  onRemoveDependency?: (itemId: string, depId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() =>
@@ -262,6 +369,62 @@ export function DesktopTaskDetail({
             </div>
           ) : (
             <>
+              {/* Bandeau de blocage — dépendances non terminées */}
+              {deps.filter((d) => !d.doneAt).length > 0 && (
+                <div style={{ padding: "14px 18px", background: "rgba(16,16,16,.04)", borderRadius: 18, marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ color: C.inkMuted, flex: "none" }}>
+                    <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.5" />
+                    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+                  </svg>
+                  <span className="text-[13px] font-bold" style={{ color: C.inkMuted }}>
+                    Bloquée par {deps.filter((d) => !d.doneAt).length} tâche{deps.filter((d) => !d.doneAt).length > 1 ? "s" : ""}
+                  </span>
+                  {deps.find((d) => !d.doneAt) && (
+                    <button
+                      onClick={() => onOpenSibling?.(deps.find((d) => !d.doneAt)!.id)}
+                      style={{ marginLeft: "auto", padding: "7px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700 }}
+                    >
+                      Terminer d'abord
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Chaîne AVANT / ICI / APRÈS */}
+              {(deps.length > 0 || items.some((it) => (it.dependsOn ?? []).includes(item.id))) && (
+                <ChainSection item={item} items={items} deps={deps} projects={projects} onOpenSibling={onOpenSibling} onAddDependency={onAddDependency} onRemoveDependency={onRemoveDependency} />
+              )}
+
+              {/* Étiquettes */}
+              <div style={{ marginBottom: 12 }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
+                  <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint }}>ÉTIQUETTES</span>
+                  {item.tags && item.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.tags.map((tagId) => {
+                        const tag = allTags?.find((t) => t.id === tagId);
+                        const bg = tag ? (TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue) : TAG_COLOR_MAP.blue;
+                        const count = items.filter((it) => (it.tags ?? []).includes(tagId)).length;
+                        return (
+                          <span key={tagId} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: bg, fontSize: 12, fontWeight: 700, color: C.ink }}>
+                            {tag?.name ?? tagId}
+                            {count > 1 && <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.6 }}>{count}</span>}
+                            {onRemoveTag && (
+                              <button onClick={() => onRemoveTag(item.id, tagId)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, opacity: 0.4, color: C.ink }}>×</button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune</span>
+                  )}
+                  {onAddTag && allTags && allTags.length > 0 && (
+                    <TagPicker allTags={allTags} itemTags={item.tags ?? []} onAdd={(tagId) => onAddTag(item.id, tagId)} />
+                  )}
+                </div>
+              </div>
+
               {/* Chips + titre */}
               <div className="flex flex-wrap gap-2.5" style={{ marginBottom: 12 }}>
                 <Chip variant={chipVariant}>{currentType === "event" ? "Rendez-vous" : "Tâche"}</Chip>
