@@ -136,29 +136,97 @@ function ChainSection({
               </button>
             );
           })}
+          {onAddDependency && (
+            <DependencyPicker items={items} currentItem={item} onAdd={(depId) => onAddDependency(item.id, depId)} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function TagPicker({ allTags, itemTags, onAdd }: { allTags: Tag[]; itemTags: string[]; onAdd: (tagId: string) => void }) {
+function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; itemTags: string[]; onAdd: (tagId: string) => void; onCreateTag?: (name: string, color: string) => Promise<Tag | null> }) {
   const [open, setOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const available = allTags.filter((t) => !itemTags.includes(t.id));
-  if (available.length === 0) return null;
+  const colors = ["yellow", "orange", "red", "purple", "blue", "green", "teal", "brown", "pink", "sky"];
   return (
     <>
       <button onClick={() => setOpen(!open)} style={{ padding: "4px 10px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}>+ Étiquette</button>
       {open && (
-        <div className="flex flex-wrap gap-1.5" style={{ marginTop: 6 }}>
-          {available.map((tag) => (
-            <button key={tag.id} onClick={() => { onAdd(tag.id); setOpen(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue, fontSize: 12, fontWeight: 700, color: C.ink, border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-              {tag.name}
-            </button>
-          ))}
+        <div style={{ marginTop: 8, padding: 14, background: C.surface, border: "1px solid rgba(16,16,16,.08)", borderRadius: 18, maxWidth: 320 }}>
+          {available.length > 0 && (
+            <>
+              <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block" }}>EXistantes</span>
+              <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 12 }}>
+                {available.map((tag) => (
+                  <button key={tag.id} onClick={() => { onAdd(tag.id); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue, fontSize: 12, fontWeight: 700, color: C.ink, border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {onCreateTag && (
+            <>
+              <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block" }}>CRÉER</span>
+              <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+                <input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="Nom…" style={{ flex: 1, padding: "8px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }} />
+                <select id="tag-color-picker" defaultValue="blue" style={{ padding: "8px 8px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }}>
+                  {colors.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <button
+                  onClick={async () => {
+                    const name = newTagName.trim();
+                    if (!name) return;
+                    const sel = document.getElementById("tag-color-picker") as HTMLSelectElement | null;
+                    const color = sel?.value ?? "blue";
+                    const tag = await onCreateTag(name, color);
+                    if (tag) { onAdd(tag.id); setNewTagName(""); setOpen(false); }
+                  }}
+                  style={{ padding: "8px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}
+                >Créer</button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </>
+  );
+}
+
+function DependencyPicker({ items, currentItem, onAdd }: { items: Item[]; currentItem: Item; onAdd: (depId: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const existing = new Set(currentItem.dependsOn ?? []);
+  const candidates = items
+    .filter((it) => it.id !== currentItem.id && !existing.has(it.id) && !it.doneAt)
+    .filter((it) => !query || it.title.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 8);
+  return (
+    <div style={{ marginTop: 8 }}>
+      {open ? (
+        <div style={{ padding: 12, background: C.bg, borderRadius: 14, border: "1px solid rgba(16,16,16,.06)" }}>
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une tâche…"
+            style={{ width: "100%", padding: "8px 12px", background: C.surface, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none", marginBottom: 8 }}
+            onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } }}
+          />
+          {candidates.length === 0 && <span className="text-[12px] font-medium" style={{ color: C.inkFaint }}>Aucune tâche trouvée.</span>}
+          {candidates.map((it) => (
+            <button key={it.id} onClick={() => { onAdd(it.id); setOpen(false); setQuery(""); }} className="flex items-center gap-2.5" style={{ display: "flex", width: "100%", padding: "7px 4px", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: C.inkFaint, flex: "none" }} />
+              <span className="text-[13px] font-semibold" style={{ color: C.ink }}>{it.title}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button onClick={() => setOpen(true)} style={{ padding: "6px 12px", background: "none", border: "1px dashed rgba(16,16,16,.12)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}>+ Lier une tâche…</button>
+      )}
+    </div>
   );
 }
 
@@ -177,6 +245,7 @@ export function DesktopTaskDetail({
   allTags,
   onAddTag,
   onRemoveTag,
+  onCreateTag,
   onAddDependency,
   onRemoveDependency,
 }: {
@@ -194,6 +263,7 @@ export function DesktopTaskDetail({
   allTags?: Tag[];
   onAddTag?: (itemId: string, tagId: string) => void;
   onRemoveTag?: (itemId: string, tagId: string) => void;
+  onCreateTag?: (name: string, color: string) => Promise<Tag | null>;
   onAddDependency?: (itemId: string, depId: string) => void;
   onRemoveDependency?: (itemId: string, depId: string) => void;
 }) {
@@ -419,8 +489,8 @@ export function DesktopTaskDetail({
                   ) : (
                     <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune</span>
                   )}
-                  {onAddTag && allTags && allTags.length > 0 && (
-                    <TagPicker allTags={allTags} itemTags={item.tags ?? []} onAdd={(tagId) => onAddTag(item.id, tagId)} />
+                  {onAddTag && (
+                    <TagPicker allTags={allTags ?? []} itemTags={item.tags ?? []} onAdd={(tagId) => onAddTag(item.id, tagId)} onCreateTag={onCreateTag} />
                   )}
                 </div>
               </div>

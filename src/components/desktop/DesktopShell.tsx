@@ -19,7 +19,7 @@ import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
 import { leastUrgentId } from "@/lib/desktopDashboard";
-import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags } from "@/lib/api";
+import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag } from "@/lib/api";
 import type { DesktopScreen } from "./types";
 import type { AgendaItem } from "@/lib/agenda";
 import type { DraftItem, Item, KanbanBoard, Overview, Project, Tag } from "@/lib/types";
@@ -255,6 +255,13 @@ export function DesktopShell({
               onOpenSibling={(id) => { setDetailId(id); }}
               onSave={onSaveItem}
               allTags={tags}
+              onCreateTag={async (name, color) => {
+                try {
+                  const tag = await createTag(name, color);
+                  setTags((t) => [...t, tag]);
+                  return tag;
+                } catch { return null; }
+              }}
               onAddTag={async (itemId, tagId) => {
                 const it = items.find((i) => i.id === itemId);
                 if (!it) return;
