@@ -65,13 +65,13 @@ export const SEED_PROJECTS: Project[] = [
   {
     id: "fake",
     name: "Fake",
-    tint: 7,
+    tint: 8,
     shape: "square",
   },
   {
     id: "permis",
     name: "Permis",
-    tint: 8,
+    tint: 7,
     shape: "diamond",
   },
 ];

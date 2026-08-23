@@ -48,10 +48,10 @@
   --color-p5-ink: #6B5A00;
   --color-p6: #34C759;        /* IA — vert (calendrier IA) */
   --color-p6-ink: #0A6B2E;
-  --color-p7: #FF9F0A;        /* réserve — orange */
-  --color-p7-ink: #7A4D00;
-  --color-p8: #5AC8FA;        /* réserve — bleu */
-  --color-p8-ink: #004A6B;
+  --color-p7: #FF9500;        /* Permis — orange (calendrier Permis) */
+  --color-p7-ink: #7A4400;
+  --color-p8: #A2845E;        /* Fake — marron (calendrier Fake) */
+  --color-p8-ink: #5C4A2E;
 
   /* Rayons — le rayon grandit avec l'élément. */
   --radius-8: 8px;
