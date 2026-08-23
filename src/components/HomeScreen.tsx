@@ -226,14 +226,14 @@ const RowCheckbox = memo(function RowCheckbox({
         width: 26,
         height: 26,
         borderRadius: 99,
-        border: `2px solid ${C.hairline18}`,
-        background: C.surface,
-        color: C.ink,
+        border: done ? `2px solid ${C.ink}` : `2px solid ${C.hairline18}`,
+        background: done ? C.ink : C.surface,
+        color: "#fff",
         cursor: "pointer",
         padding: 0,
       }}
     >
-      {done && <CheckIcon size={13} />}
+      {done && <CheckIcon size={13} className="text-white" />}
     </button>
   );
 });

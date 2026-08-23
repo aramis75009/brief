@@ -212,6 +212,8 @@ export function BriefApp() {
       // termine l'occurrence du jour (masquée de l'agenda et de l'accueil),
       // et la série continue à la prochaine occurrence — le toast le dit.
       if (outcome === "advanced") flash(`Terminée — prochaine le ${formatDue(item.due, item.allDay)}.`);
+      else if (done) flash("Tâche terminée ✓");
+      else flash("Tâche rouverte");
       void refreshOverview();
       void refreshTodayAgenda();
     } catch (e) {

@@ -9,6 +9,7 @@
 import { useMemo, useState } from "react";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { formatDue } from "@/lib/due";
+import { CheckIcon } from "../icons";
 import { TASK_FILTERS, filterTasks, groupByProject, type TaskFilterKey } from "@/lib/desktopDashboard";
 import type { Item, Project } from "@/lib/types";
 
@@ -100,7 +101,7 @@ export function DesktopTasks({
                       className="flex flex-none items-center justify-center"
                       style={{ width: 26, height: 26, borderRadius: 99, padding: 0, cursor: "pointer", background: it.doneAt ? C.ink : C.surface, border: it.doneAt ? `2px solid ${C.ink}` : "2px solid rgba(16,16,16,.18)" }}
                     >
-                      {it.doneAt && <span style={{ width: 8, height: 8, borderRadius: 99, background: "#fff" }} />}
+                      {it.doneAt && <CheckIcon size={14} className="text-white" />}
                     </button>
                     <button onClick={() => onOpenTask(it.id)} className="flex min-w-0 flex-1 flex-col gap-1 text-left" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
                       <span className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: it.doneAt ? C.inkFaint : C.ink, textDecoration: it.doneAt ? "line-through" : "none" }}>{it.title}</span>

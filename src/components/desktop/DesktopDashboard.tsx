@@ -14,7 +14,7 @@
  */
 
 import { useMemo } from "react";
-import { MicIcon, StarIcon } from "../icons";
+import { MicIcon, StarIcon, CheckIcon } from "../icons";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { compareByDue } from "@/lib/due";
 import { TIMEZONE } from "@/lib/zoned";
@@ -257,7 +257,7 @@ export function DesktopDashboard({
                     className="flex flex-none items-center justify-center"
                     style={{ width: 26, height: 26, borderRadius: 99, padding: 0, cursor: it ? "pointer" : "default", background: done ? C.ink : C.surface, border: done ? `2px solid ${C.ink}` : "2px solid rgba(16,16,16,.18)" }}
                   >
-                    {done && <span style={{ width: 8, height: 8, borderRadius: 99, background: "#fff" }} />}
+                    {done && <CheckIcon size={14} className="text-white" />}
                   </button>
                   <button
                     onClick={() => it && onOpenTask(it.id)}
