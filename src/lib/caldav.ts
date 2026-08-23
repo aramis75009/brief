@@ -73,6 +73,8 @@ const DEFAULT_CALENDAR_MAPPING: Record<string, string> = {
   sport: "Sport",
   webacademie: "Web@académie",
   ia: "IA",
+  fake: "Fake",
+  permis: "Permis",
 };
 
 const FALLBACK_CALENDAR = "Personnel";
@@ -715,10 +717,14 @@ export async function readAgendaSnapshot(): Promise<AgendaSnapshot | null> {
  * projet, plus le repli « Personnel », plus les calendriers additionnels
  * qu'Aramis utilise pour poser des tâches (ex. « Fake »).
  */
-const EXTRA_AGENDA_CALENDARS = ["Fake"];
-
+/**
+ * Calendriers dont l'agenda doit tenir compte : ceux que Brief mappe à un
+ * projet, plus le repli « Personnel ». Les calendriers additionnels
+ * qu'Aramis utilise pour poser des tâches sont maintenant des vrais projets
+ * (Fake, Permis) et sont donc inclus via le mapping ci-dessus.
+ */
 function agendaCalendarNames(): Set<string> {
-  return new Set([...Object.values(loadCalendarMapping()), FALLBACK_CALENDAR, ...EXTRA_AGENDA_CALENDARS]);
+  return new Set([...Object.values(loadCalendarMapping()), FALLBACK_CALENDAR]);
 }
 
 /* --- Réconciliation --------------------------------------------------------
@@ -1078,7 +1084,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   const agendaCalendars = agendaCalendarNames();
   const snapshotEvents: CalendarEvent[] = [];
   // uid -> événement + calendrier d'origine, pour l'adoption externe (Phase 3) —
-  // uniquement les calendriers que Brief affiche, jamais Permis/Fake/Fêtes…
+  // uniquement les calendriers que Brief affiche (les calendriers projet + Personnel).
   const externalByUid = new Map<string, { remote: RemoteEvent; calendarName: string; calendarUrl: string }>();
   // Calendriers agenda dont CETTE lecture (bornée) a échoué — distinct de
   // `readFailed` (qui ne parle que de la réconciliation `brief-*` non bornée) :
@@ -1103,8 +1109,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
       continue;
     }
     // Bornée (`agendaWindow`) : seule cette lecture voit l'historique perso
-    // d'Aramis (calendriers agenda uniquement — jamais Permis/Fake/Fêtes…),
-    // jamais la réconciliation `brief-*` ci-dessus.
+    // d'Aramis (calendriers agenda uniquement), jamais la réconciliation `brief-*` ci-dessus.
     if (agendaCalendars.has(calName)) {
       let all: RemoteEvent[];
       try {

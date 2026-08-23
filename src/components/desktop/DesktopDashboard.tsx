@@ -128,11 +128,12 @@ export function DesktopDashboard({
           </div>
           <button
             onClick={onOpenChat}
-            className="flex items-center gap-2.5 text-left"
-            style={{ maxWidth: 400, padding: "12px 15px", background: C.surface, border: "1px solid rgba(16,16,16,.08)", borderRadius: 18, cursor: "pointer", fontFamily: "inherit" }}
+            className="flex items-center gap-3 text-left"
+            style={{ maxWidth: 420, padding: "14px 18px", background: C.ink, border: "none", borderRadius: 18, cursor: "pointer", fontFamily: "inherit" }}
           >
-            <StarIcon size={16} className="text-ink" />
-            <span className="text-[13px] font-semibold" style={{ color: C.inkMuted }}>Demander à l’IA — « qu’est-ce qui traîne ? »</span>
+            <StarIcon size={18} className="text-white" />
+            <span className="text-[14px] font-bold" style={{ color: "#fff" }}>Demander à l'IA</span>
+            <span className="text-[13px] font-medium" style={{ color: "rgba(255,255,255,.6)" }}>— « qu’est-ce qui traîne ? »</span>
           </button>
         </div>
 
@@ -186,7 +187,7 @@ export function DesktopDashboard({
           <div className="flex items-start justify-between">
             <div>
               <div className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(255,255,255,.45)" }}>Capture</div>
-              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" }}>Je parle,<br />c’est rangé.</div>
+              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" }}>Parle.<br />Je m'occupe du reste.</div>
             </div>
           </div>
 

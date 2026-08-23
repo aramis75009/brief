@@ -164,7 +164,9 @@ describe("calendarForProject", () => {
     expect(calendarForProject("sport")).toBe("Sport");
     expect(calendarForProject("webacademie")).toBe("Web@académie");
     expect(calendarForProject("ia")).toBe("IA");
-  });
+    expect(calendarForProject("fake")).toBe("Fake");
+    expect(calendarForProject("permis")).toBe("Permis");
+    });
 
   it("retombe sur Personnel pour un projet inconnu ou absent", () => {
     expect(calendarForProject("projet-inconnu")).toBe("Personnel");
@@ -668,8 +670,8 @@ describe("projectForCalendar", () => {
     expect(projectForCalendar("Web@académie")).toBe("webacademie");
   });
 
-  it("rend null pour un calendrier inconnu (Permis, Fake, Fêtes de France…)", () => {
-    expect(projectForCalendar("Permis")).toBeNull();
+  it("rend null pour un calendrier inconnu (Fêtes de France…)", () => {
+    expect(projectForCalendar("Fêtes de France")).toBeNull();
   });
 });
 

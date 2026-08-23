@@ -44,6 +44,36 @@ export const SEED_PROJECTS: Project[] = [
       "bug", "API", "déploiement", "git", "soutenance", "formateur", "dossier scolaire", "TP",
     ],
   },
+  {
+    id: "perso",
+    name: "Perso",
+    tint: 4,
+    shape: "disc",
+  },
+  {
+    id: "sport",
+    name: "Sport",
+    tint: 5,
+    shape: "capsule",
+  },
+  {
+    id: "ia",
+    name: "IA",
+    tint: 6,
+    shape: "disc",
+  },
+  {
+    id: "fake",
+    name: "Fake",
+    tint: 7,
+    shape: "square",
+  },
+  {
+    id: "permis",
+    name: "Permis",
+    tint: 8,
+    shape: "diamond",
+  },
 ];
 
 /**

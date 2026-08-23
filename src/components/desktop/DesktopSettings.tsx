@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import { skinFor, shapeFor } from "@/lib/projects";
+import { calendarForProjectName } from "@/lib/calendarMapping";
 import type { Overview, Project } from "@/lib/types";
 
 const C = {
@@ -44,9 +45,6 @@ function ToggleRow({ label, desc, on, onClick }: { label: string; desc: string; 
   );
 }
 
-const SWATCHES = ["#F4F4F2", "#101010", "#CFE0FF", "#CBE9D6", "#FBE2AE", "#E23A2E"];
-const RADII = [8, 12, 18, 20, 24];
-
 export function DesktopSettings({
   projects,
   overview,
@@ -77,15 +75,19 @@ export function DesktopSettings({
           const skin = skinFor(p);
           const shape = shapeFor(p);
           const stats = byProject.get(p.id);
+          const calName = calendarForProjectName(p.id);
           return (
-            <div key={p.id} className="flex flex-col gap-2.5" style={{ padding: 16, background: C.bg, borderRadius: 20 }}>
-              <div className="flex items-center gap-2.75">
-                <span style={{ width: 12, height: 12, flex: "none", borderRadius: shape === "square" ? 3 : 99, background: skin.bg }} />
+            <div key={p.id} className="flex flex-col gap-2" style={{ padding: 16, background: C.bg, borderRadius: 20 }}>
+              <div className="flex items-center gap-3">
+                <span style={{ width: 18, height: 18, flex: "none", borderRadius: shape === "square" ? 5 : 99, background: skin.bg, boxShadow: "0 0 0 1px rgba(16,16,16,.04)" }} />
                 <span className="text-[15px] font-bold tracking-[-0.02em]">{p.name}</span>
                 <span className="ml-auto font-mono" style={{ fontSize: 10, letterSpacing: "0.06em", color: C.inkMuted }}>
                   {stats ? `${stats.total} ouverts · ${stats.overdue} en retard` : "aucun item ouvert"}
                 </span>
               </div>
+              <span className="text-[11px] font-medium" style={{ color: C.inkMuted, paddingLeft: 30 }}>
+                → {calName}
+              </span>
             </div>
           );
         })}
@@ -101,33 +103,6 @@ export function DesktopSettings({
           <ToggleRow label="Verrou PIN" desc="Code à l’ouverture, mémorisé par appareil." on={pinOn} onClick={() => setPinOn((v) => !v)} />
         </div>
 
-        <div className="flex flex-none flex-col gap-2.5" style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)" }}>
-          <span className="text-[17px] font-bold tracking-[-0.02em]">Jetons du design system</span>
-          <div className="flex gap-2.5">
-            {SWATCHES.map((hex) => (
-              <div key={hex} className="flex flex-1 flex-col gap-1.75">
-                <div style={{ height: 44, borderRadius: 12, border: "1px solid rgba(16,16,16,.06)", background: hex }} />
-                <span className="font-mono" style={{ fontSize: 9, letterSpacing: "0.04em", color: C.inkMuted }}>{hex}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-end gap-2.5">
-            <span className="font-extrabold tracking-[-0.03em]" style={{ fontSize: 28, lineHeight: 1 }}>Aa</span>
-            <span className="text-[12px] font-semibold" style={{ color: C.inkMuted }}>Plus Jakarta Sans · 400 → 800</span>
-            <span className="ml-auto font-mono" style={{ fontSize: 12, color: C.inkMuted }}>JetBrains Mono</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {RADII.map((r) => (
-              <span
-                key={r}
-                className="flex items-center justify-center font-mono"
-                style={{ width: 52, height: 38, background: C.bg, border: "1px solid rgba(16,16,16,.06)", fontSize: 10, color: C.inkMuted, borderRadius: r }}
-              >
-                {r}
-              </span>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
