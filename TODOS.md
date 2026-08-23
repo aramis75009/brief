@@ -239,6 +239,21 @@ raison nouvelle.
 - **Effort :** M-L (nécessite un vrai brainstorming — modèle de statuts/
   colonnes, drag & drop) · **Priorité :** P2, à spécifier séparément
 
+### Calendrier desktop — gros chantier (reporté par Aramis le 23/08)
+- **Quoi :** l'écran Calendrier desktop (`DesktopCalendar.tsx`) a un affichage
+  buggé. Aramis le sait et reporte : « c'est un gros chantier, on s'en
+  occupera plus tard ».
+- **Effort :** L · **Priorité :** P2, à reprendre quand Aramis le demande
+
+### Scraper les concurrents (Asana, Monday, Trello) → "Asana personnalisé"
+- **Quoi :** Aramis veut enrichir Brief avec des fonctionnalités inspirées
+  des outils de gestion de projet (cards style Trello, vues multiples,
+  fonctions de projet). Démarche : scraper tous les sites concurrents,
+  analyser ce qu'ils proposent, adapter à Brief.
+- **Demandé le :** 2026-08-23 par Aramis
+- **Effort :** XL (recherche + design + dev) · **Priorité :** P2, à lancer
+  après stabilisation de la V1 desktop
+
 ### Workflow Conversationnel Telegram ↔ Hermes ↔ Brief
 - Consultation des tâches en langage naturel (synthèse ultra lisible, priorités, deadlines).
 - Actions directes depuis Telegram : cocher/valider une tâche ("la 1 est faite"), reporter/décaler une date, ajouter une tâche sur un projet ("sur Trezo", "sur Frip & Trend").

@@ -11,135 +11,141 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-23 (matin) · Déploiement desktop V1 + audio/IA du 22/08
+# Passation — 2026-08-23 (matin, 2e session) · Desktop V1.1 : Réglages, priorités, IA, projets
 
 | | |
 |---|---|
 | **Agent** | Hermes Agent (glm-5.2 via Ollama Cloud) |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `8f58884` (head) — déployé en prod |
+| **Commits** | `9cc33b7` (head) — déployé en prod |
 | **Prod** | https://brief.srv1899780.hstgr.cloud — `brief-app-1 Healthy` |
-| **Tests** | `npx vitest run` ✅ 261 passed | 1 skipped (validé par Claude Code avant push) |
+| **Tests** | `TZ=UTC npx vitest run` ✅ 262 passed ; `npx tsc --noEmit` ✅ |
 
 ## Goal — l'objectif
 
-Déployer en production la version desktop V1 (commit `8f58884` de Claude Code)
-ainsi que le travail audio/IA/sheets du 22/08 (jamais déployé jusqu'ici). La prod
-était sur `06e90e5` — 23 commits de retard, deux sessions cumulées.
+Corriger les 4 problèmes remontés par Aramis sur la version desktop V1 après
+sa première revue visuelle (screenshots du 23/08 matin) :
+
+1. Réglages : projets manquants (Fake, Permis), couleurs, jetons design system
+2. Tâches : priorités fausses (inventées par le LLM, pas par Aramis)
+3. Dashboard : copywriting + visibilité "Demander à l'IA"
+4. Tâches stale : "Faire des pâtes", "Tester le micro" — plus dans Apple Calendar
 
 ## Current state — ce qui a été fait
 
-### Déploiement
+### 1. Réglages (DesktopSettings.tsx)
 
-1. **Fast-forward copie VPS** (`/opt/data/Projets/brief`) : `bb9891f` → `8f58884`
-2. **Vérification prod avant déploiement** : branche `feat/ui-redesign-claude`,
-   HEAD `06e90e5`, conteneur healthy, `.env.production` présent avec VAPID key,
-   `git status` propre
-3. **Sauvegarde** : `bash deploy/backup.sh` → `brief-data-20260823-105621.tar.gz` (144K)
-4. **Git pull** sur `/docker/brief` : `06e90e5` → `8f58884` (fast-forward, 20 fichiers, +4478/-180 lignes)
-5. **Build Docker** : `docker compose --env-file .env.production up -d --build`
-   - Next.js 16.3.0 (Turbopack), build en 43s
-   - 3 warnings Turbopack (dynamic filesystem access dans `store.ts` — pré-existants, non bloquants)
-   - Conteneur `brief-app-1` recréé, démarré, **Healthy** à 10:57:30 UTC
+- **Supprimé "Jetons du design system"** (swatches, Aa, radius) — artefact de
+  démo du prototype Claude Design, rien à faire en prod
+- **Pastilles agrandies** : 12px → 18px avec bordure subtile pour mieux
+  distinguer les couleurs
+- **Nom du calendrier Apple** affiché sous chaque projet (ex: "→ Vinted
+  Frip&Trend") via `calendarForProjectName()` (nouveau fichier
+  `src/lib/calendarMapping.ts`, client-safe)
+- **Projets Fake + Permis ajoutés** comme vrais projets :
+  - `SEED_PROJECTS` : Fake (tint 7, square), Permis (tint 8, diamond)
+  - `DEFAULT_CALENDAR_MAPPING` (caldav.ts) : `fake: "Fake"`, `permis: "Permis"`
+  - `projects.json` en prod : 8 projets (Ia → IA corrigé, Fake + Permis ajoutés)
+  - `EXTRA_AGENDA_CALENDARS` supprimé : Fake n'est plus un calendrier
+    "additionnel" — c'est un vrai projet, inclus via le mapping
+- **"Ia" → "IA"** corrigé dans `SEED_PROJECTS` et dans `projects.json` en prod
 
-### Vérifications post-déploiement (toutes ✅)
+### 2. Tâches (DesktopTasks.tsx)
 
-| Check | Résultat |
+- **Badge `p{N}` supprimé** sur chaque ligne de tâche — les priorités sont
+  inventées par le parseur LLM (`priority: 3` par défaut, `4` en fallback),
+  Aramis ne les a pas définies
+- **Carte "Par priorité" supprimée** de la colonne de droite
+- La colonne de droite ne contient plus que le bloc "Ajouter sans parler"
+- Le champ `priority` reste dans le modèle de données — juste pas affiché
+
+### 3. Dashboard (DesktopDashboard.tsx)
+
+- **"Demander à l'IA" en noir** : fond `C.ink`, texte blanc, plus grand
+  (14px bold + 13px medium pour la question), bordure supprimée
+- **Copywriting "Je parle, c'est rangé" → "Parle. Je m'occupe du reste."**
+  (choix d'Aramis parmi 3 options proposées)
+
+### 4. Nettoyage des données en prod
+
+- **"Faire des pâtes"** et **"Tester le micro avec le brief"** marqués
+  `doneAt: 2026-08-23T11:00:00.000Z` — ces tâches n'étaient plus dans le
+  calendrier Apple mais n'avaient pas de `due` ni `caldavSyncedDue`, donc
+  le sync ne pouvait pas les détecter comme supprimées
+
+### 5. TODOS.md mis à jour
+
+- **Calendrier desktop buggé** : reporté par Aramis, gros chantier (P2)
+- **Scraper concurrents (Asana, Monday, Trello)** : "Asana personnalisé" (P2)
+- Kanban reste séparé (P2)
+
+## Decisions — choix critiques
+
+- **Fake + Permis = vrais projets** (décision Aramis 23/08) : ce ne sont plus
+  des calendriers "additionnels" mais des projets à part entière avec leur
+  teinte (7, 8) et leur forme. Le mapping CalDAV les inclut.
+- **Pas de priorités affichées** : tant qu'Aramis ne les définit pas lui-même,
+  on n'affiche rien. Le modèle de données les garde. À rediscuter avec Aramis
+  sur la méthode de saisie.
+- **`calendarMapping.ts` client-safe** : dupliqué depuis `caldav.ts`
+  (server-only) pour permettre à DesktopSettings d'afficher le calendrier
+  Apple associé. Le mapping change rarement. Acceptable.
+
+## Changed — fichiers
+
+| Fichier | Nature |
 |---|---|
-| `brief-app-1` status | ✅ Up, Healthy |
-| Container StartedAt | ✅ `2026-08-23T10:57:30Z` (après commit `8f58884`) |
-| Git HEAD prod | ✅ `8f58884` |
-| HTTP 200 URL publique | ✅ `https://brief.srv1899780.hstgr.cloud/` |
-| VAPID key dans le bundle | ✅ `BHvZ6NNa1WlbNRBO...` trouvé dans chunk JS |
-| PIN gate sans PIN | ✅ 401 (refusé) |
-| PIN gate avec PIN | ✅ 200 (accepté) |
-| Routes API (items, overview, projects, agenda) | ✅ toutes 200 |
-| Composants desktop dans le bundle | ✅ `desktop` trouvé dans chunks JS |
-| Manifest PWA mobile | ✅ inchangé (portrait, standalone, Brief) |
-| Labels Traefik | ✅ intacts ( Host `brief.srv1899780.hstgr.cloud`, port 3000) |
-
-### Ce qui est maintenant en prod (23 commits, 2 sessions)
-
-**Session du 22/08 (Hermes Agent, déjà pushée mais jamais déployée) :**
-- Stockage audio vocal (`/api/audio` upload + serve)
-- Assistant IA (`/api/chat` via Ollama Cloud, `deepseek-v4-flash:0731`)
-- 6 sheets câblés (Help, Notifications, Voice, Privacy, Subscription, Chat)
-- Notifications push réelles (enablePush, sendTestPush, readPushState)
-- Fil d'origine complet sur la fiche tâche (audioOrigin)
-- Sous-tâches générées par le parseur LLM
-- Sélecteur de projet dans la capture
-- Couleurs boutons Tâche/RDV/Idée (bleu/vert/jaune)
-- Couleurs projets = couleurs Apple Calendar exactes
-- Calendrier "Fake" visible dans l'agenda
-- Recherche améliorée (tuiles agrandies, pastilles, micro vocal)
-- Performance iPhone (React.memo, formateurs module-level, useCallback)
-
-**Session du 23/08 nuit (Claude Code, desktop V1) :**
-- 5 écrans desktop (`DesktopShell`, `DesktopHeader`, `DesktopDashboard`,
-  `DesktopCalendar`, `DesktopTasks`, `DesktopIdeas`, `DesktopSettings`)
-- Bascule mobile/desktop via `useIsDesktop` (matchMedia 1024px, SSR-safe)
-- Command palette ⌘K
-- Dashboard 3 cartes (Capture animée / Aujourd'hui / Avancement+En retard)
-- Densité "tout tient sur un écran sans scroll de page" (h-dvh overflow-hidden)
-- CaptureSheet `variant: "sheet" | "modal"` (modale centrée sur desktop)
-- `desktopDashboard.ts` — calculs purs (16 tests)
-- 3 bugs corrigés (décalage jour UTC, bascules 0×0, justify-center + overflow)
-
-## Decisions — choix critiques ou irréversibles
-
-(Aucune nouvelle décision dans cette session — déploiement seul. Les décisions
-des deux sessions déployées sont dans leurs passations respectives, archivées
-dans `docs/handoffs/`.)
-
-## Changed — fichiers et composants
-
-Aucun fichier modifié dans cette session. Déploiement seul.
+| `src/components/desktop/DesktopSettings.tsx` | Jetons supprimés, pastilles 18px, nom calendrier Apple |
+| `src/components/desktop/DesktopTasks.tsx` | Badges priorité + carte "Par priorité" supprimés |
+| `src/components/desktop/DesktopDashboard.tsx` | IA button noir, copywriting "Parle. Je m'occupe du reste." |
+| `src/lib/projects.ts` | SEED_PROJECTS : +Perso, Sport, IA (corrigé), Fake, Permis |
+| `src/lib/caldav.ts` | Mapping +Fake, +Permis ; EXTRA_AGENDA_CALENDARS supprimé |
+| `src/lib/calendarMapping.ts` | **NEW** — mapping client-safe pour DesktopSettings |
+| `src/lib/caldav.test.ts` | Tests à jour (Fake, Permis mappés) |
+| `src/lib/projects.test.ts` | Test formes → test teintes (8 projets, 5 formes) |
+| `TODOS.md` | +Calendrier desktop buggé, +Scraper concurrents |
 
 ## Validations
 
 | Commande | Résultat |
 |---|---|
-| `docker compose --env-file .env.production up -d --build` | ✅ Build réussi, conteneur Healthy |
+| `npx tsc --noEmit` | ✅ propre |
+| `TZ=UTC npx vitest run` | ✅ 262 passed |
+| `docker compose up -d --build` | ✅ Healthy |
 | `curl -sI https://brief.srv1899780.hstgr.cloud/` | ✅ HTTP 200 |
-| `curl -X POST -H "x-brief-pin: <PIN>" /api/session` | ✅ 200 |
-| `curl -X POST /api/session` (sans PIN) | ✅ 401 |
-| VAPID dans bundle JS | ✅ présent |
-| Traefik labels | ✅ intacts |
+| Projects en prod | ✅ 8 projets (IA corrigé, Fake + Permis ajoutés) |
+| Tâches stale | ✅ "Faire des pâtes" + "Tester le micro" marqués done |
 
 ## Blockers
 
-Aucun. Prod saine sur `8f58884`.
+Aucun. Prod saine sur `9cc33b7`.
 
-## Points à connaître ( transmis par Claude Code, non bloquants)
+## Points à connaître (non bloquants)
 
-1. **Le prototype fait foi sur DESIGN.md §7** (nav horizontale, pas le rail
-   248px décrit) — pas corrigé, à faire dans une session dédiée au design system.
-2. **Horizon 7 jours / Ton mur / aperçu Idées / Chaîne & sync** retirés du
-   Dashboard sur demande d'Aramis (« on verra ce qu'on en fait ») — pas
-   supprimés du code, juste plus affichés. Ne pas les faire réapparaître sans
-   qu'il le redemande.
-3. **Deux items de test** créés dans `.data/items.json` **local au Mac
-   d'Aramis** (pas la prod) pendant la QA desktop de Claude Code : « Vérifier
-   le test desktop » (Frip & Trend) et « Appeler le plombier pour le devis »
-   (My Flip). Sans conséquence pour la prod.
-4. **Kanban explicitement hors périmètre V1** — `TODOS.md` sépare les deux.
-5. **Tests de Claude Code** : `npx vitest run` ✅ 261 passed | 1 skipped,
-   `npx tsc --noEmit` ✅, `npm run build` ✅ — validés avant push, non rejoués
-   sur le VPS (déploiement seul, pas de modification de code).
+1. **Calendrier desktop buggé** : Aramis le sait, reporté (gros chantier, TODOS.md)
+2. **Priorités** : retirées de l'affichage, le modèle les garde. À rediscuter
+   sur la méthode de saisie (Aramis veut les mettre lui-même)
+3. **DESIGN.md §7** : nav horizontale réelle vs rail 248px décrit — pas corrigé
+4. **Horizon 7 jours / Ton mur / Idées / Chaîne & sync** : retirés du Dashboard
+   sur demande d'Aramis, pas supprimés du code. Ne pas les faire réapparaître
+   sans qu'il le redemande.
+5. **Couleurs Fake/Permis** : utilisent les teintes 7 (orange #FF9F0A) et 8
+   (bleu #5AC8FA) — les couleurs "réserve" des tokens CSS. Si Aramis a des
+   calendriers Apple avec d'autres couleurs pour Fake et Permis, il faudra
+   ajuster les tokens `--color-p7` et `--color-p8` dans `globals.css`.
 
 ## Next — la prochaine action
 
-1. **Vérification visuelle sur iPhone** : Aramis doit force-quitter l'app PWA
-   et la rouvrir pour voir les changements. Sur un écran ≥1024px (Mac, iPad
-   landscape), la version desktop doit apparaître (nav pilule horizontale, pas
-   le cadre téléphone). Sur iPhone, rien ne doit changer.
-2. **Vérifier le FIL D'ORIGINE + sous-tâches** sur une nouvelle dictée (bug
-   FormData corrigé, race condition corrigé — session du 22/08).
-3. **Améliorer l'assistant IA** : permettre la création de tâches directement
-   depuis le chat (appeler `/api/parse` ou `/api/items`).
-4. **DESIGN.md §7** à corriger pour refléter la nav horizontale réelle.
-5. **Statuer sur Horizon 7 jours / Ton mur / Idées / Chaîne & sync** —
-   Aramis doit décider ce qu'on en fait.
+1. **Revue visuelle d'Aramis** sur écran ≥1024px : force-quitter la PWA,
+   rouvrir, vérifier que Réglages n'a plus les jetons, que les pastilles sont
+   plus grosses avec le nom du calendrier, que Tâches n'a plus les priorités,
+   que "Demander à l'IA" est en noir, et que le copywriting est bon.
+2. **Scraper les concurrents** (Asana, Monday, Trello) pour identifier les
+   fonctionnalités à adapter — chantier demandé par Aramis.
+3. **Calendrier desktop** à reprendre quand Aramis le demande (gros chantier).
+4. **Priorités** : définir avec Aramis comment il veut les saisir.
+5. **Couleurs Fake/Permis** : vérifier avec Aramis si les teintes 7/8
+   correspondent à ses calendriers Apple.
 
 ---
 
@@ -147,7 +153,8 @@ Aucun. Prod saine sur `8f58884`.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-23 (matin)** | **Déploiement desktop V1 + audio/IA du 22/08** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-23 (matin, 2e)** | **Desktop V1.1 : Réglages, priorités, IA, projets** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-23 (matin) | Déploiement desktop V1 + audio/IA du 22/08 | Hermes Agent | [fiche](docs/handoffs/2026-08-23-hermes-deploy-desktop-v1.md) |
 | 2026-08-23 (nuit) | Version desktop V1 (5 écrans, nav pilule, dashboard 3 cartes) | Claude Code | [fiche](docs/handoffs/2026-08-23-claude-code-desktop-v1.md) |
 | 2026-08-22 (soir) | Audio storage, assistant IA, sheets, couleurs projets, perf iPhone | Hermes Agent | [fiche](docs/handoffs/2026-08-22-audio-storage-ia-sheets-couleurs.md) |
 | 2026-08-20 (soir 2) | Coche d'une occurrence dont `due` a déjà avancé (cron) | Hermes Agent | [fiche](docs/handoffs/2026-08-22-hermes-audio-ia-sheets.md) |
