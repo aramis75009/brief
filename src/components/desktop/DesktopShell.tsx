@@ -14,6 +14,7 @@ import { DesktopDashboard } from "./DesktopDashboard";
 import { DesktopCalendar } from "./DesktopCalendar";
 import { DesktopTasks } from "./DesktopTasks";
 import { DesktopKanban } from "./DesktopKanban";
+import { DesktopTaskDetail } from "./DesktopTaskDetail";
 import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
@@ -50,6 +51,7 @@ export function DesktopShell({
   onPromoteIdea,
   onSaveItem,
   onQuickAddTask,
+  onDeleteItem,
   onEnablePush,
   onOpenCapture,
   onOpenChat,
@@ -71,6 +73,7 @@ export function DesktopShell({
   onPromoteIdea: (id: string) => void;
   onSaveItem: (id: string, patch: Partial<DraftItem>) => Promise<boolean>;
   onQuickAddTask: (title: string, projectId: string) => void;
+  onDeleteItem: (id: string) => void;
   onEnablePush: () => void;
   onOpenCapture: () => void;
   onOpenChat: () => void;
@@ -137,9 +140,20 @@ export function DesktopShell({
     } catch { /* silencieux */ }
   }, [onSaveItem]);
 
+  const handleToggleSub = useCallback(async (itemId: string, subId: string) => {
+    const item = items.find((it) => it.id === itemId);
+    if (!item?.subtasks) return;
+    const subtasks = item.subtasks.map((s) => s.id === subId ? { ...s, done: !s.done } : s);
+    try { await onSaveItem(itemId, { subtasks }); } catch { /* silencieux */ }
+  }, [items, onSaveItem]);
+
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  const detailItem = detailId ? items.find((it) => it.id === detailId) ?? null : null;
+
   const openTask = (id: string) => {
-    setCalendarSelectedId(id);
-    setScreen("calendrier");
+    setDetailId(id);
+    setScreen("détail");
   };
 
   const onLighten = () => {
@@ -217,6 +231,20 @@ export function DesktopShell({
               onRenameColumn={handleRenameColumn}
               onDeleteColumn={handleDeleteColumn}
               onOpenTask={openTask}
+            />
+          )}
+
+          {screen === "détail" && (
+            <DesktopTaskDetail
+              item={detailItem}
+              projects={projects}
+              onBack={() => setScreen("dashboard")}
+              onDone={onToggleDone}
+              onPostpone={onPostpone}
+              onDelete={(id) => { onDeleteItem(id); setScreen("dashboard"); }}
+              onToggleSub={handleToggleSub}
+              onOpenSibling={(id) => { setDetailId(id); }}
+              onSave={onSaveItem}
             />
           )}
 

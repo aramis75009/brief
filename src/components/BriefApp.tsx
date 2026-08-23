@@ -599,6 +599,7 @@ export function BriefApp() {
           onPromoteIdea={promoteIdeaTomorrow}
           onSaveItem={saveItemEdit}
           onQuickAddTask={quickAddTask}
+          onDeleteItem={(id) => void removeItem(id)}
           onEnablePush={() => {
             void (async () => {
               try {
