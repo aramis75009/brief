@@ -95,9 +95,8 @@ function ChainSection({
   onAddDependency?: (itemId: string, depId: string) => void;
   onRemoveDependency?: (itemId: string, depId: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const after = items.filter((it) => (it.dependsOn ?? []).includes(item.id));
-  if (deps.length === 0 && after.length === 0) return null;
 
   return (
     <div style={{ marginBottom: 12, padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 18 }}>
@@ -460,10 +459,8 @@ export function DesktopTaskDetail({
                 </div>
               )}
 
-              {/* Chaîne AVANT / ICI / APRÈS */}
-              {(deps.length > 0 || items.some((it) => (it.dependsOn ?? []).includes(item.id))) && (
-                <ChainSection item={item} items={items} deps={deps} projects={projects} onOpenSibling={onOpenSibling} onAddDependency={onAddDependency} onRemoveDependency={onRemoveDependency} />
-              )}
+              {/* Chaîne AVANT / ICI / APRÈS — toujours affichée pour permettre l'ajout */}
+              <ChainSection item={item} items={items} deps={deps} projects={projects} onOpenSibling={onOpenSibling} onAddDependency={onAddDependency} onRemoveDependency={onRemoveDependency} />
 
               {/* Étiquettes */}
               <div style={{ marginBottom: 12 }}>
