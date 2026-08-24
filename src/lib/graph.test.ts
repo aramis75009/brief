@@ -78,9 +78,17 @@ describe("graphStatus — trois statuts dérivés de doneAt", () => {
   });
 });
 
-describe("graphTasks — le graphe ne parle que de tâches", () => {
+describe("graphTasks — le graphe ne parle que de tâches actives", () => {
   it("écarte les rendez-vous", () => {
     const list = [item({ id: "a" }), item({ id: "e", kind: "event" })];
+    expect(graphTasks(list).map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("écarte les tâches terminées (barrées)", () => {
+    const list = [
+      item({ id: "a" }),
+      item({ id: "b", doneAt: "2026-08-23T10:00:00+02:00" }),
+    ];
     expect(graphTasks(list).map((t) => t.id)).toEqual(["a"]);
   });
 });
@@ -111,6 +119,28 @@ describe("visibleTasks — filtres projet et « bloquées »", () => {
     ];
     const got = visibleTasks(list, { projectFilter: ["frip"], blockedOnly: true });
     expect(got.map((t) => t.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("« bloquées » : un maillon terminé n'est plus bloquant — vue vide", () => {
+    // `b` ne dépend que de `a`, terminée : elle est prête, donc le filtre
+    // « bloquées » n'a plus rien à montrer.
+    const list = [
+      item({ id: "a", doneAt: "2026-08-23T10:00:00+02:00" }),
+      item({ id: "b", dependsOn: ["a"] }),
+    ];
+    const got = visibleTasks(list, { projectFilter: [], blockedOnly: true });
+    expect(got).toEqual([]);
+    expect(graphStatus(list[1], indexById(graphTasks(list)))).toBe("ready");
+  });
+
+  it("un maillon terminé disparaît du graphe, la suite reste prête", () => {
+    const list = [
+      item({ id: "a", doneAt: "2026-08-23T10:00:00+02:00" }),
+      item({ id: "b", dependsOn: ["a"] }),
+    ];
+    const got = visibleTasks(list, { projectFilter: [], blockedOnly: false });
+    expect(got.map((t) => t.id)).toEqual(["b"]);
+    expect(graphStatus(list[1], indexById(graphTasks(list)))).toBe("ready");
   });
 
   it("« bloquées » sans aucun blocage rend une vue vide", () => {

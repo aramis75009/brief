@@ -66,6 +66,7 @@ const TAG_COLOR_MAP: Record<string, string> = {
 const STATUS: Record<GraphStatus, { color: string; label: string }> = {
   ready: { color: "#34C759", label: "Prête à démarrer" },
   blocked: { color: "#E23A2E", label: "Bloquée" },
+  // Pas de « terminée » dans la vue : les tâches faites n'y figurent plus.
   done: { color: "#A9A9A2", label: "Terminée" },
 };
 
@@ -571,8 +572,8 @@ export function DependencyGraph({
                   style={{
                     lineHeight: 1.25,
                     paddingRight: 14,
-                    color: t.doneAt ? C.inkFaint : C.ink,
-                    textDecoration: t.doneAt ? "line-through" : "none",
+                    color: C.ink,
+                    textDecoration: "none",
                   }}
                 >
                   {t.title}
@@ -654,10 +655,10 @@ export function DependencyGraph({
           <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint }}>
             LÉGENDE
           </span>
-          {(["ready", "blocked", "done"] as const).map((k) => (
+          {(["ready", "blocked"] as const).map((k) => (
             <span key={k} className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: C.ink }}>
               <span style={{ width: 8, height: 8, borderRadius: 99, background: STATUS[k].color }} />
-              {k === "ready" ? "prête" : k === "blocked" ? "bloquée" : "terminée"}
+              {k === "ready" ? "prête" : "bloquée"}
             </span>
           ))}
           <span style={{ width: 1, height: 14, background: "rgba(16,16,16,.08)" }} />
@@ -807,12 +808,12 @@ function DetailPanel({
         <span style={{ width: 8, height: 8, flex: "none", borderRadius: 99, background: STATUS[graphStatus(x, allById)].color }} />
         <span
           className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold"
-          style={{ color: x.doneAt ? C.inkFaint : C.ink, textDecoration: x.doneAt ? "line-through" : "none" }}
+          style={{ color: C.ink, textDecoration: "none" }}
         >
           {x.title}
         </span>
         <span className="whitespace-nowrap text-[11px] font-bold" style={{ color: C.inkMuted }}>
-          {x.doneAt ? "terminée" : "à faire"}
+          à faire
         </span>
       </button>
     );

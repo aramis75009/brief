@@ -64,13 +64,16 @@ export function graphStatus(item: Item, byId: Map<string, Item>): GraphStatus {
 }
 
 /**
- * Les tâches candidates au graphe : des tâches actives, jamais des rendez-vous.
+ * Les tâches candidates au graphe : des tâches ACTIVES, jamais des
+ * rendez-vous ni des tâches terminées.
  *
- * Le graphe parle de chaînes « fais ceci avant cela » ; un VEVENT occupe un
- * créneau et ne se met pas en attente d'autre chose.
+ * Une tâche cochée (`doneAt`) n'a plus rien à faire dans le graphe — elle
+ * n'attend plus rien et plus rien ne l'attend ; la montrer ferait s'y perdre
+ * entre tâches actives et faites. Le graphe ne parle que de chaînes « fais
+ * ceci avant cela » encore en cours.
  */
 export function graphTasks(items: Item[]): Item[] {
-  return items.filter((it) => it.kind === "task");
+  return items.filter((it) => it.kind === "task" && !it.doneAt);
 }
 
 /**
