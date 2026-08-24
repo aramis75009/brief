@@ -136,7 +136,7 @@ function ChainSection({
             );
           })}
           {onAddDependency && (
-            <DependencyPicker items={items} currentItem={item} onAdd={(depId) => onAddDependency(item.id, depId)} />
+            <DependencyPicker items={items} currentItem={item} projects={projects} onAdd={(depId) => onAddDependency(item.id, depId)} />
           )}
         </div>
       )}
@@ -194,39 +194,57 @@ function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; 
   );
 }
 
-function DependencyPicker({ items, currentItem, onAdd }: { items: Item[]; currentItem: Item; onAdd: (depId: string) => void }) {
+function DependencyPicker({ items, currentItem, projects, onAdd }: { items: Item[]; currentItem: Item; projects: Project[]; onAdd: (depId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const existing = new Set(currentItem.dependsOn ?? []);
   const candidates = items
     .filter((it) => it.id !== currentItem.id && !existing.has(it.id) && !it.doneAt)
     .filter((it) => !query || it.title.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 8);
+    .slice(0, 10);
   return (
     <div style={{ marginTop: 8 }}>
       {open ? (
-        <div style={{ padding: 12, background: C.bg, borderRadius: 14, border: "1px solid rgba(16,16,16,.06)" }}>
+        <div style={{ padding: 14, background: C.bg, borderRadius: 14, border: "1px solid rgba(16,16,16,.08)" }}>
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher une tâche…"
-            style={{ width: "100%", padding: "8px 12px", background: C.surface, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none", marginBottom: 8 }}
+            style={{ width: "100%", padding: "10px 14px", background: C.surface, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none", marginBottom: 10 }}
             onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } }}
           />
-          {candidates.length === 0 && <span className="text-[12px] font-medium" style={{ color: C.inkFaint }}>Aucune tâche trouvée.</span>}
-          {candidates.map((it) => (
-            <button key={it.id} onClick={() => { onAdd(it.id); setOpen(false); setQuery(""); }} className="flex items-center gap-2.5" style={{ display: "flex", width: "100%", padding: "7px 4px", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-              <span style={{ width: 6, height: 6, borderRadius: 99, background: C.inkFaint, flex: "none" }} />
-              <span className="text-[13px] font-semibold" style={{ color: C.ink }}>{it.title}</span>
-            </button>
-          ))}
+          {candidates.length === 0 && <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune tâche trouvée.</span>}
+          {candidates.map((it) => {
+            const proj = projects.find((p) => p.id === it.projectId);
+            const sk = proj ? skinFor(proj) : null;
+            const shp = proj ? shapeFor(proj) : "disc";
+            return (
+              <button key={it.id} onClick={() => { onAdd(it.id); setOpen(false); setQuery(""); }} className="flex items-center gap-3" style={{ display: "flex", width: "100%", padding: "8px 4px", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {sk && <span style={{ width: 10, height: 10, borderRadius: shp === "square" ? 2 : 99, background: sk.bg, flex: "none" }} />}
+                <span className="text-[14px] font-semibold" style={{ color: C.ink, flex: 1 }}>{it.title}</span>
+                {proj && <span className="text-[12px] font-medium" style={{ color: C.inkFaint }}>{proj.name}</span>}
+                {it.due && <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>{formatDueShort(it.due)}</span>}
+              </button>
+            );
+          })}
         </div>
       ) : (
-        <button onClick={() => setOpen(true)} style={{ padding: "6px 12px", background: "none", border: "1px dashed rgba(16,16,16,.12)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}>+ Lier une tâche…</button>
+        <button onClick={() => setOpen(true)} style={{ padding: "7px 14px", background: "none", border: "1px dashed rgba(16,16,16,.12)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, color: C.inkMuted }}>+ Lier une tâche…</button>
       )}
     </div>
   );
+}
+
+function formatDueShort(due: string): string {
+  const d = new Date(due);
+  const now = new Date();
+  const diffDays = Math.round((d.getTime() - now.getTime()) / 86400000);
+  if (diffDays === 0) return "aujourd'hui";
+  if (diffDays === 1) return "demain";
+  if (diffDays < 0) return "en retard";
+  if (diffDays < 7) return `+${diffDays}j`;
+  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(d);
 }
 
 export function DesktopTaskDetail({
@@ -634,12 +652,6 @@ export function DesktopTaskDetail({
                     </div>
                   </div>
                 )}
-
-                {/* Boutons + discrets */}
-                <div className="flex gap-2" style={{ marginTop: 14 }}>
-                  <button className="text-[12px] font-bold" style={{ padding: "6px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", color: C.inkMuted }}>+ Étiquette</button>
-                  <button className="text-[12px] font-bold" style={{ padding: "6px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", color: C.inkMuted }}>+ Dépendance</button>
-                </div>
               </div>
             </>
           )}
