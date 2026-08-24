@@ -296,7 +296,7 @@ export function DesktopDashboard({
         <div className="flex flex-col gap-4" style={{ gridColumn: "span 4", padding: 22, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)", minHeight: 0, overflow: "hidden" }}>
           <div className="flex flex-none items-baseline justify-between">
             <span className="font-bold tracking-[-0.02em]" style={{ fontSize: 20 }}>Avancement</span>
-            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>Journée</span>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>Aujourd'hui</span>
           </div>
           <div className="flex flex-none items-center gap-6">
             <div className="relative flex-none" style={{ width: 116, height: 116, borderRadius: 99, background: `conic-gradient(${C.ink} 0 ${donutPct}%, #EDEDEA ${donutPct}% 100%)` }}>
@@ -306,6 +306,7 @@ export function DesktopDashboard({
               </div>
             </div>
             <div className="flex flex-1 flex-col gap-2.5">
+              <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>Cette semaine</span>
               {progressRows.length === 0 && <span className="text-[12px] font-medium" style={{ color: C.inkMuted }}>Rien cette semaine.</span>}
               {progressRows.map(({ project, done, total }) => (
                 <div key={project.id} className="flex flex-col gap-1.5">
