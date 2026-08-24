@@ -151,9 +151,9 @@ function ChainSection({
 function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; itemTags: string[]; onAdd: (tagId: string) => void; onCreateTag?: (name: string, color: string) => Promise<Tag | null> }) {
   const [open, setOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("blue");
   const ref = useRef<HTMLDivElement>(null);
   const available = allTags.filter((t) => !itemTags.includes(t.id));
-  const colors = ["yellow", "orange", "red", "purple", "blue", "green", "teal", "brown", "pink", "sky"];
 
   useEffect(() => {
     if (!open) return;
@@ -185,23 +185,21 @@ function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; 
           {onCreateTag && (
             <>
               <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block" }}>CRÉER</span>
-              <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
-                <input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="Nom…" style={{ flex: 1, padding: "8px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }} />
-                <select id="tag-color-picker" defaultValue="blue" style={{ padding: "8px 8px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }}>
-                  {colors.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <button
-                  onClick={async () => {
-                    const name = newTagName.trim();
-                    if (!name) return;
-                    const sel = document.getElementById("tag-color-picker") as HTMLSelectElement | null;
-                    const color = sel?.value ?? "blue";
-                    const tag = await onCreateTag(name, color);
-                    if (tag) { onAdd(tag.id); setNewTagName(""); setOpen(false); }
-                  }}
-                  style={{ padding: "8px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}
-                >Créer</button>
+              <input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="Nom…" style={{ width: "100%", padding: "8px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none", marginBottom: 8 }} />
+              <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 10 }}>
+                {Object.keys(TAG_COLOR_MAP).map((c) => (
+                  <button key={c} onClick={() => setNewTagColor(c)} title={c} style={{ width: 24, height: 24, borderRadius: 99, background: TAG_COLOR_MAP[c], border: newTagColor === c ? "2px solid var(--color-ink)" : "2px solid rgba(16,16,16,.1)", cursor: "pointer", padding: 0, flex: "none" }} />
+                ))}
               </div>
+              <button
+                onClick={async () => {
+                  const name = newTagName.trim();
+                  if (!name) return;
+                  const tag = await onCreateTag(name, newTagColor);
+                  if (tag) { onAdd(tag.id); setNewTagName(""); setOpen(false); }
+                }}
+                style={{ width: "100%", padding: "10px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}
+              >Créer</button>
             </>
           )}
         </div>

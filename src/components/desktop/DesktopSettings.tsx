@@ -19,7 +19,36 @@ const TAG_COLOR_MAP: Record<string, string> = {
   blue: "#007AFF", green: "#34C759", teal: "#5AC8FA", brown: "#A2845E",
   pink: "#FF2D55", sky: "#64D2FF",
 };
-const COLOR_NAMES = ["yellow", "orange", "red", "purple", "blue", "green", "teal", "brown", "pink", "sky"];
+const COLOR_LABELS: Record<string, string> = {
+  yellow: "Jaune", orange: "Orange", red: "Rouge", purple: "Violet",
+  blue: "Bleu", green: "Vert", teal: "Turquoise", brown: "Marron",
+  pink: "Rose", sky: "Bleu ciel",
+};
+const COLOR_KEYS = Object.keys(COLOR_LABELS);
+
+function ColorPicker({ value, onChange, compact }: { value: string; onChange: (c: string) => void; compact?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-1.5" style={{ maxWidth: compact ? 180 : 280 }}>
+      {COLOR_KEYS.map((c) => (
+        <button
+          key={c}
+          onClick={() => onChange(c)}
+          title={COLOR_LABELS[c]}
+          style={{
+            width: compact ? 22 : 28,
+            height: compact ? 22 : 28,
+            borderRadius: 99,
+            background: TAG_COLOR_MAP[c] ?? TAG_COLOR_MAP.blue,
+            border: value === c ? "2px solid var(--color-ink)" : "2px solid rgba(16,16,16,.1)",
+            cursor: "pointer",
+            padding: 0,
+            flex: "none",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 const C = {
   bg: "var(--color-bg)",
@@ -105,9 +134,7 @@ function TagManager() {
               {editingId === tag.id ? (
                 <>
                   <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder={tag.name} style={{ flex: 1, padding: "8px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }} />
-                  <select value={editColor || tag.color} onChange={(e) => setEditColor(e.target.value)} style={{ padding: "8px 8px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }}>
-                    {COLOR_NAMES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <ColorPicker value={editColor || tag.color} onChange={setEditColor} compact />
                   <button onClick={() => handleSaveEdit(tag.id)} style={{ padding: "7px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700 }}>OK</button>
                 </>
               ) : (
@@ -125,12 +152,12 @@ function TagManager() {
       {tags.length === 0 && <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune étiquette. Crée la première ci-dessous.</span>}
 
       {/* Création */}
-      <div className="flex items-center gap-2" style={{ paddingTop: 4, borderTop: tags.length > 0 ? "1px solid rgba(16,16,16,.06)" : "none" }}>
-        <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }} placeholder="Nouvelle étiquette…" style={{ flex: 1, padding: "10px 14px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none" }} />
-        <select value={newColor} onChange={(e) => setNewColor(e.target.value)} style={{ padding: "10px 8px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none" }}>
-          {COLOR_NAMES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <button onClick={handleCreate} style={{ padding: "10px 16px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 700 }}>Créer</button>
+      <div className="flex flex-col gap-2" style={{ paddingTop: 8, borderTop: tags.length > 0 ? "1px solid rgba(16,16,16,.06)" : "none" }}>
+        <div className="flex items-center gap-2">
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }} placeholder="Nouvelle étiquette…" style={{ flex: 1, padding: "10px 14px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none" }} />
+          <button onClick={handleCreate} style={{ padding: "10px 18px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 700, flex: "none" }}>Créer</button>
+        </div>
+        <ColorPicker value={newColor} onChange={setNewColor} />
       </div>
     </div>
   );
