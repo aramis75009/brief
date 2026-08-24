@@ -84,11 +84,26 @@ export function DesktopDashboard({
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
 
   const todaySorted = useMemo(() => [...todayAgenda].sort(compareByDue), [todayAgenda]);
+
+  // Le donut compte les tâches du jour, y compris celles déjà terminées.
+  // L'agenda (`todayAgenda`) exclut les items terminés — donc on calcule
+  // séparément depuis les items avec une échéance aujourd'hui.
+  const todayItems = useMemo(() => {
+    const todayStr = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(now);
+    return items.filter((it) => {
+      if (!it.due || it.status === "idea" || it.status === "archived") return false;
+      const d = new Date(it.due);
+      if (Number.isNaN(d.getTime())) return false;
+      const itemDate = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(d);
+      return itemDate === todayStr;
+    });
+  }, [items, now]);
+
   const todayDoneCount = useMemo(
-    () => todaySorted.filter((e) => (e.briefItemId ? itemById.get(e.briefItemId)?.doneAt : false)).length,
-    [todaySorted, itemById],
+    () => todayItems.filter((it) => it.doneAt).length,
+    [todayItems],
   );
-  const donutPct = todaySorted.length ? Math.round((todayDoneCount / todaySorted.length) * 100) : 0;
+  const donutPct = todayItems.length ? Math.round((todayDoneCount / todayItems.length) * 100) : 0;
 
   const overdue = useMemo(() => overdueItems(items, now).slice(0, 3), [items, now]);
   const progressRows = useMemo(() => weekProgressByProject(items, projects, now), [items, projects, now]);
