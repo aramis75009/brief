@@ -8,10 +8,18 @@
  * push » agit réellement, sur le même chemin que `NotificationsSheet`.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { calendarForProjectName } from "@/lib/calendarMapping";
-import type { Overview, Project } from "@/lib/types";
+import { fetchTags, createTag, deleteTag, updateTag } from "@/lib/api";
+import type { Overview, Project, Tag } from "@/lib/types";
+
+const TAG_COLOR_MAP: Record<string, string> = {
+  yellow: "#FBE2AE", orange: "#FFCC00", red: "#FF3B30", purple: "#AF52DE",
+  blue: "#007AFF", green: "#34C759", teal: "#5AC8FA", brown: "#A2845E",
+  pink: "#FF2D55", sky: "#64D2FF",
+};
+const COLOR_NAMES = ["yellow", "orange", "red", "purple", "blue", "green", "teal", "brown", "pink", "sky"];
 
 const C = {
   bg: "var(--color-bg)",
@@ -41,6 +49,89 @@ function ToggleRow({ label, desc, on, onClick }: { label: string; desc: string; 
           style={{ top: 3, width: 22, height: 22, borderRadius: 99, background: "#fff", boxShadow: "0 2px 6px rgba(16,16,16,.2)", transition: "left .22s cubic-bezier(.4,0,.2,1)", left: on ? 23 : 3 }}
         />
       </button>
+    </div>
+  );
+}
+
+function TagManager() {
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState("blue");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try { setTags(await fetchTags()); } catch { /* silencieux */ }
+    })();
+  }, []);
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      const tag = await createTag(name, newColor);
+      setTags((t) => [...t, tag]);
+      setNewName("");
+    } catch { /* silencieux */ }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteTag(id);
+      setTags((t) => t.filter((tag) => tag.id !== id));
+    } catch { /* silencieux */ }
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    try {
+      const patch: { name?: string; color?: string } = {};
+      if (editName.trim()) patch.name = editName.trim();
+      if (editColor) patch.color = editColor;
+      await updateTag(id, patch);
+      setTags((t) => t.map((tag) => tag.id === id ? { ...tag, name: patch.name ?? tag.name, color: (patch.color as Tag["color"]) ?? tag.color } : tag));
+      setEditingId(null);
+    } catch { /* silencieux */ }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Liste des tags existants */}
+      {tags.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {tags.map((tag) => (
+            <div key={tag.id} className="flex items-center gap-3" style={{ padding: "8px 0" }}>
+              {editingId === tag.id ? (
+                <>
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder={tag.name} style={{ flex: 1, padding: "8px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }} />
+                  <select value={editColor || tag.color} onChange={(e) => setEditColor(e.target.value)} style={{ padding: "8px 8px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none" }}>
+                    {COLOR_NAMES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <button onClick={() => handleSaveEdit(tag.id)} style={{ padding: "7px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700 }}>OK</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ width: 28, height: 10, borderRadius: 99, background: TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue, flex: "none" }} />
+                  <span className="text-[14px] font-semibold" style={{ color: C.ink, flex: 1 }}>{tag.name}</span>
+                  <button onClick={() => { setEditingId(tag.id); setEditName(tag.name); setEditColor(tag.color); setEditName(tag.name); }} className="text-[12px] font-bold" style={{ background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", padding: "5px 10px", color: C.inkMuted }}>Modifier</button>
+                  <button onClick={() => handleDelete(tag.id)} aria-label="Supprimer" style={{ background: "none", border: "none", cursor: "pointer", color: C.inkFaint, fontSize: 16, padding: "2px 6px" }}>×</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {tags.length === 0 && <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune étiquette. Crée la première ci-dessous.</span>}
+
+      {/* Création */}
+      <div className="flex items-center gap-2" style={{ paddingTop: 4, borderTop: tags.length > 0 ? "1px solid rgba(16,16,16,.06)" : "none" }}>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }} placeholder="Nouvelle étiquette…" style={{ flex: 1, padding: "10px 14px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none" }} />
+        <select value={newColor} onChange={(e) => setNewColor(e.target.value)} style={{ padding: "10px 8px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none" }}>
+          {COLOR_NAMES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <button onClick={handleCreate} style={{ padding: "10px 16px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 700 }}>Créer</button>
+      </div>
     </div>
   );
 }
@@ -91,6 +182,12 @@ export function DesktopSettings({
             </div>
           );
         })}
+        </div>
+
+        {/* Étiquettes */}
+        <div className="flex flex-none flex-col gap-3" style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)" }}>
+          <span className="text-[17px] font-bold tracking-[-0.02em]">Étiquettes</span>
+          <TagManager />
         </div>
       </div>
 

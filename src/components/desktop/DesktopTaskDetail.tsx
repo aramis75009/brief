@@ -6,7 +6,7 @@
  * Layout : barre d'actions en haut + 2 colonnes (contenu + sidebar méta).
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { Chip } from "../Chip";
 import { TypeSegmented } from "../TypeSegmented";
 import { WaveformStatic } from "../Waveform";
@@ -110,12 +110,16 @@ function ChainSection({
             const dp = projects.find((p) => p.id === dep.projectId);
             const ds = dp ? skinFor(dp) : null;
             return (
-              <button key={dep.id} onClick={() => onOpenSibling?.(dep.id)} className="flex items-center gap-2.5" style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", padding: "4px 0" }}>
+              <div key={dep.id} className="flex items-center gap-2.5" style={{ padding: "4px 0" }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: ds?.bg ?? C.inkFaint, flex: "none" }} />
-                <span className="text-[13px] font-semibold" style={{ color: dep.doneAt ? C.inkFaint : C.ink, textDecoration: dep.doneAt ? "line-through" : "none" }}>{dep.title}</span>
-                {dep.doneAt && <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· fait</span>}
-                {onRemoveDependency && <span onClick={(e) => { e.stopPropagation(); onRemoveDependency(item.id, dep.id); }} style={{ marginLeft: "auto", cursor: "pointer", color: C.inkFaint, fontSize: 14 }}>×</span>}
-              </button>
+                <button onClick={() => onOpenSibling?.(dep.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", padding: 0, flex: 1 }}>
+                  <span className="text-[13px] font-semibold" style={{ color: dep.doneAt ? C.inkFaint : C.ink, textDecoration: dep.doneAt ? "line-through" : "none" }}>{dep.title}</span>
+                  {dep.doneAt && <span className="text-[11px] font-medium" style={{ color: C.inkFaint }}>· fait</span>}
+                </button>
+                {onRemoveDependency && (
+                  <button onClick={() => onRemoveDependency(item.id, dep.id)} aria-label="Retirer la dépendance" style={{ marginLeft: "auto", cursor: "pointer", color: C.inkFaint, fontSize: 16, background: "none", border: "none", padding: "2px 6px", fontFamily: "inherit", lineHeight: 1 }}>×</button>
+                )}
+              </div>
             );
           })}
           <div className="flex items-center gap-2.5" style={{ padding: "4px 0" }}>
@@ -147,10 +151,22 @@ function ChainSection({
 function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; itemTags: string[]; onAdd: (tagId: string) => void; onCreateTag?: (name: string, color: string) => Promise<Tag | null> }) {
   const [open, setOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
   const available = allTags.filter((t) => !itemTags.includes(t.id));
   const colors = ["yellow", "orange", "red", "purple", "blue", "green", "teal", "brown", "pink", "sky"];
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setNewTagName("");
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
   return (
-    <>
+    <div ref={ref} style={{ display: "inline-block" }}>
       <button onClick={() => setOpen(!open)} style={{ padding: "4px 10px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}>+ Étiquette</button>
       {open && (
         <div style={{ marginTop: 8, padding: 14, background: C.surface, border: "1px solid rgba(16,16,16,.08)", borderRadius: 18, maxWidth: 320 }}>
@@ -190,20 +206,32 @@ function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; 
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 function DependencyPicker({ items, currentItem, projects, onAdd }: { items: Item[]; currentItem: Item; projects: Project[]; onAdd: (depId: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
   const existing = new Set(currentItem.dependsOn ?? []);
   const candidates = items
     .filter((it) => it.id !== currentItem.id && !existing.has(it.id) && !it.doneAt)
     .filter((it) => !query || it.title.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 10);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
   return (
-    <div style={{ marginTop: 8 }}>
+    <div style={{ marginTop: 8 }} ref={ref}>
       {open ? (
         <div style={{ padding: 14, background: C.bg, borderRadius: 14, border: "1px solid rgba(16,16,16,.08)" }}>
           <input
