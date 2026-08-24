@@ -14,6 +14,40 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-24 (après-midi) · Deux statuts de tâche, pas quatre
+
+**Décision.** Une tâche n'a que **deux statuts : à faire et fait** — c'est-à-dire
+le seul champ `doneAt`. Aucun état « en cours » n'est stocké ni dérivé.
+
+La vue Graphe en tire **trois** statuts d'affichage, et pas un de plus :
+
+| Statut affiché | Règle | Couleur |
+|---|---|---|
+| terminée | `doneAt` renseigné | gris `#A9A9A2` |
+| bloquée | au moins un prédécesseur non terminé | rouge `#E23A2E` |
+| prête | tout le reste | vert `#34C759` |
+
+**Pourquoi.** Le prototype Claude Design décrivait quatre états, le quatrième
+(orange, « bientôt disponible ») supposant un `todo | doing | done` par tâche.
+Le faire apparaître aurait demandé soit un `startedAt` — que la décision du
+2026-08-24 (matin) écarte, « c'est l'utilisateur qui place ses cartes, pas un
+statut dérivé » —, soit une inférence depuis les sous-tâches ou la colonne
+Kanban. Une inférence se trompe en silence : une tâche paraîtrait « en cours »
+sans que personne l'ait décidé. Arbitrage d'Aramis : rester sur la version
+simple tant que les vrais statuts n'existent pas.
+
+**Ce qui viendra.** Aramis a annoncé qu'on passera à de **vrais statuts de
+tâche** — choisis explicitement, pas devinés. Quand ce sera le cas, c'est
+`graphStatus()` dans `src/lib/graph.ts` qui change, **et elle seule** : la vue,
+la légende et le panneau lisent tous leur statut par cette fonction. Le
+quatrième état (orange) redeviendra alors possible sans retoucher le dessin.
+
+**Ne pas.** Réintroduire un orange « bientôt » par inférence (sous-tâches
+entamées, nom de colonne Kanban) sans que de vrais statuts existent — c'est
+exactement ce qui a été écarté ici.
+
+---
+
 ## 2026-08-22 (soir) · Stockage audio, assistant IA, couleurs projets, calendrier Fake
 
 ### Stockage des audios vocaux

@@ -12,7 +12,7 @@
 | 1 | **GitHub** `aramis75009/brief` | cloud | *aucun* — c'est la **vérité centrale**, le seul mécanisme d'alignement | toujours à jour (git) |
 | 2 | `/opt/data/Projets/brief` | VPS (même machine que la prod) | **Hermes Agent** | copie de travail |
 | 3 | `/docker/brief` | VPS — **la production**, servie par Docker | *personne* — on y lit, on y déploie, on n'y code pas | ⚠️ conteneur `brief-app-1` |
-| 4 | dossier local sur le Mac d'Aramis | Mac | **Claude Code** | copie de travail |
+| 4 | dossier local sur la machine d'Aramis | Mac **ou Windows** | **Claude Code** | copie de travail |
 
 **Règle absolue : GitHub aligne, jamais une copie de fichiers d'un dossier à
 l'autre.** Les copies 2, 3 et 4 ne communiquent qu'en passant par le repo
@@ -113,10 +113,10 @@ Après un passage du panneau, vérifier que les labels Traefik sont intacts :
 ### PWA iOS en cache — le test décisif
 
 Quand un utilisateur signale « l'app ne s'ouvre plus » alors que le serveur
-répond 200 et que `curl` depuis le Mac donne 200 aussi : le problème est le
+répond 200 et que `curl` depuis la machine locale donne 200 aussi : le problème est le
 **cache du vieux shell PWA** sur l'iPhone (ancien service worker + HTML avec
 `Cache-Control: s-maxage=31536000` — corrigé depuis `c8c175c` mais l'iPhone
-garde l'ancienne version). Test depuis le Mac :
+garde l'ancienne version). Test depuis la machine locale :
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" -X POST -H "x-brief-pin: <PIN>" \
