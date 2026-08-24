@@ -47,12 +47,9 @@ export function weekProgressByProject(
   const end = zonedTime(nextMonday.y, nextMonday.m, nextMonday.d, 0, 0);
   const weekItems = items.filter((it) => {
     if (!it.due) return false;
-    // Inclure les items actifs ET les récurrentes cochées (doneAt=null mais
-    // lastCompletedOccurrenceAt posé par le cron). Les récurrentes n'ont
-    // jamais doneAt — le cron avance due à la prochaine occurrence.
-    const isActiveItem = !it.doneAt && it.status !== "idea" && it.status !== "archived";
-    const isCompletedRecurring = !it.doneAt && !!it.lastCompletedOccurrenceAt;
-    if (!isActiveItem && !isCompletedRecurring) return false;
+    if (it.status === "idea" || it.status === "archived") return false;
+    // Inclure : items actifs (non doneAt), items terminés (doneAt dans la semaine),
+    // et récurrentes cochées (lastCompletedOccurrenceAt dans la semaine)
     const d = new Date(it.due);
     return !Number.isNaN(d.getTime()) && d >= start && d < end;
   });
@@ -61,7 +58,6 @@ export function weekProgressByProject(
       const mine = weekItems.filter((it) => it.projectId === project.id);
       const done = mine.filter((it) => {
         if (it.doneAt) return true;
-        // Récurrente cochée : lastCompletedOccurrenceAt dans la semaine ?
         if (it.lastCompletedOccurrenceAt) {
           const cd = new Date(it.lastCompletedOccurrenceAt);
           return !Number.isNaN(cd.getTime()) && cd >= start && cd < end;
