@@ -88,20 +88,44 @@ export function DesktopDashboard({
   // Le donut compte les tâches du jour, y compris celles déjà terminées.
   // L'agenda (`todayAgenda`) exclut les items terminés — donc on calcule
   // séparément depuis les items avec une échéance aujourd'hui.
+  const todayStr = useMemo(() => new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(now), [now]);
   const todayItems = useMemo(() => {
-    const todayStr = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(now);
     return items.filter((it) => {
-      if (!it.due || it.status === "idea" || it.status === "archived") return false;
-      const d = new Date(it.due);
-      if (Number.isNaN(d.getTime())) return false;
-      const itemDate = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(d);
-      return itemDate === todayStr;
+      if (it.status === "idea" || it.status === "archived") return false;
+      // Tâche normale : due = aujourd'hui
+      if (it.due) {
+        const d = new Date(it.due);
+        if (!Number.isNaN(d.getTime())) {
+          const itemDate = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(d);
+          if (itemDate === todayStr) return true;
+        }
+      }
+      // Tâche récurrente cochée aujourd'hui : lastCompletedOccurrenceAt = aujourd'hui
+      // (le cron a déjà avancé due à la prochaine occurrence)
+      if (it.lastCompletedOccurrenceAt && !it.doneAt) {
+        const cd = new Date(it.lastCompletedOccurrenceAt);
+        if (!Number.isNaN(cd.getTime())) {
+          const cdDate = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(cd);
+          if (cdDate === todayStr) return true;
+        }
+      }
+      return false;
     });
-  }, [items, now]);
+  }, [items, todayStr]);
 
   const todayDoneCount = useMemo(
-    () => todayItems.filter((it) => it.doneAt).length,
-    [todayItems],
+    () => todayItems.filter((it) => {
+      if (it.doneAt) return true;
+      // Récurrente cochée aujourd'hui
+      if (it.lastCompletedOccurrenceAt && !it.doneAt) {
+        const cd = new Date(it.lastCompletedOccurrenceAt);
+        if (!Number.isNaN(cd.getTime())) {
+          return new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(cd) === todayStr;
+        }
+      }
+      return false;
+    }).length,
+    [todayItems, todayStr],
   );
   const donutPct = todayItems.length ? Math.round((todayDoneCount / todayItems.length) * 100) : 0;
 
