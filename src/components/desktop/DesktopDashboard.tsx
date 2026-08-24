@@ -106,7 +106,7 @@ export function DesktopDashboard({
   const donutPct = todayItems.length ? Math.round((todayDoneCount / todayItems.length) * 100) : 0;
 
   const overdue = useMemo(() => overdueItems(items, now).slice(0, 3), [items, now]);
-  const progressRows = useMemo(() => weekProgressByProject(items, projects, now), [items, projects, now]);
+  const progressRows = useMemo(() => weekProgressByProject(items, projects, now, 8), [items, projects, now]);
 
   const weekTasks = overview?.horizon.reduce((n, d) => n + (d.total - d.events), 0) ?? 0;
   const weekEvents = overview?.horizon.reduce((n, d) => n + d.events, 0) ?? 0;
