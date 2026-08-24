@@ -8,17 +8,19 @@
  * propres au desktop.
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { DesktopHeader } from "./DesktopHeader";
 import { DesktopDashboard } from "./DesktopDashboard";
 import { DesktopCalendar } from "./DesktopCalendar";
 import { DesktopTasks } from "./DesktopTasks";
 import { DesktopKanban } from "./DesktopKanban";
+import { DependencyGraph } from "./DependencyGraph";
 import { DesktopTaskDetail } from "./DesktopTaskDetail";
 import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
 import { leastUrgentId } from "@/lib/desktopDashboard";
+import { graphStatus, graphTasks, indexById } from "@/lib/graph";
 import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag } from "@/lib/api";
 import type { DesktopScreen } from "./types";
 import type { AgendaItem } from "@/lib/agenda";
@@ -168,9 +170,18 @@ export function DesktopShell({
     if (candidate) onPostpone(candidate);
   };
 
+  // Le badge « Graphe » compte les tâches bloquées : c'est le seul chiffre que
+  // cette vue apprend et qu'aucun autre onglet ne montre.
+  const blockedCount = useMemo(() => {
+    const tasks = graphTasks(activeItems);
+    const byId = indexById(tasks);
+    return tasks.filter((t) => graphStatus(t, byId) === "blocked").length;
+  }, [activeItems]);
+
   const badges: Partial<Record<DesktopScreen, number>> = {
     calendrier: (overview?.horizon ?? []).filter((d) => d.isToday).reduce((n, d) => n + d.events, 0),
     tâches: activeItems.filter((it) => it.kind === "task" && !it.doneAt).length,
+    graphe: blockedCount,
     idées: ideaItems.length,
   };
 
@@ -237,6 +248,15 @@ export function DesktopShell({
               onAddColumn={handleAddColumn}
               onRenameColumn={handleRenameColumn}
               onDeleteColumn={handleDeleteColumn}
+              onOpenTask={openTask}
+            />
+          )}
+
+          {screen === "graphe" && (
+            <DependencyGraph
+              items={activeItems}
+              projects={projects}
+              tags={tags}
               onOpenTask={openTask}
             />
           )}
