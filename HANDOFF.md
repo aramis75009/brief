@@ -11,99 +11,140 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-23 (matin, 2e session) · Desktop V1.1 : Réglages, priorités, IA, projets
+# Passation — 2026-08-24 (matin) · Kanban, tags, dépendances, fiche tâche, donut fix
 
 | | |
 |---|---|
 | **Agent** | Hermes Agent (glm-5.2 via Ollama Cloud) |
 | **Branche** | `feat/ui-redesign-claude` — **la branche que sert le VPS** |
-| **Commits** | `9cc33b7` (head) — déployé en prod |
+| **Commits** | `8c740e1` (head) — déployé en prod |
 | **Prod** | https://brief.srv1899780.hstgr.cloud — `brief-app-1 Healthy` |
 | **Tests** | `TZ=UTC npx vitest run` ✅ 262 passed ; `npx tsc --noEmit` ✅ |
 
 ## Goal — l'objectif
 
-Corriger les 4 problèmes remontés par Aramis sur la version desktop V1 après
-sa première revue visuelle (screenshots du 23/08 matin) :
+Transformer Brief desktop en un "Asana personnalisé" : Kanban avec colonnes
+libres, tags/étiquettes (style Trello), sous-tâches éditables, dépendances
+entre tâches, et une fiche tâche desktop digne de ce nom.
 
-1. Réglages : projets manquants (Fake, Permis), couleurs, jetons design system
-2. Tâches : priorités fausses (inventées par le LLM, pas par Aramis)
-3. Dashboard : copywriting + visibilité "Demander à l'IA"
-4. Tâches stale : "Faire des pâtes", "Tester le micro" — plus dans Apple Calendar
+## Current state — ce qui a été fait (depuis la dernière passation)
 
-## Current state — ce qui a été fait
+### Kanban v2 (Claude Design)
 
-### 1. Réglages (DesktopSettings.tsx)
+- **Filtres projets** en chips cliquables en haut (toggle par projet)
+- **Compteur "N ouvertes"** à côté du titre
+- **Section "Non placées"** avec cartes en pilules horizontales draggables
+- **WIP limit** affiché sur les colonnes
+- **Colonnes libres** : créer (bouton "+ Ajouter une liste"), renommer
+  (double-clic), supprimer (×), drag & drop entre colonnes via @dnd-kit
+- **Cartes** : tags en barres compactes (28×8px), badge "bloquée" avec cadenas,
+  mini waveform si audio, compteur sous-tâches avec barre de progression,
+  pastille projet + échéance
+- **Note en bas** : "Une liste vide se supprime seule au bout de 30 jours"
 
-- **Supprimé "Jetons du design system"** (swatches, Aa, radius) — artefact de
-  démo du prototype Claude Design, rien à faire en prod
-- **Pastilles agrandies** : 12px → 18px avec bordure subtile pour mieux
-  distinguer les couleurs
-- **Nom du calendrier Apple** affiché sous chaque projet (ex: "→ Vinted
-  Frip&Trend") via `calendarForProjectName()` (nouveau fichier
-  `src/lib/calendarMapping.ts`, client-safe)
-- **Projets Fake + Permis ajoutés** comme vrais projets :
-  - `SEED_PROJECTS` : Fake (tint 7, square), Permis (tint 8, diamond)
-  - `DEFAULT_CALENDAR_MAPPING` (caldav.ts) : `fake: "Fake"`, `permis: "Permis"`
-  - `projects.json` en prod : 8 projets (Ia → IA corrigé, Fake + Permis ajoutés)
-  - `EXTRA_AGENDA_CALENDARS` supprimé : Fake n'est plus un calendrier
-    "additionnel" — c'est un vrai projet, inclus via le mapping
-- **"Ia" → "IA"** corrigé dans `SEED_PROJECTS` et dans `projects.json` en prod
+### Fiche tâche desktop (DesktopTaskDetail.tsx)
 
-### 2. Tâches (DesktopTasks.tsx)
+- **Layout 2 colonnes** centré (max-w-1080px mx-auto) — gauche : contenu,
+  droite : sidebar méta
+- **Barre d'actions en haut** : Modifier, Reporter, Supprimer (icône), Terminer
+- **Breadcrumb** "TÂCHES / Projet"
+- **Bandeau de blocage** : "Bloquée par N tâche(s)" + bouton "Terminer d'abord"
+  si l'item a des dependsOn non terminés
+- **Chaîne AVANT/ICI/APRÈS** repliable (ouverte par défaut) avec bouton
+  "+ Lier une tâche…" (DependencyPicker avec recherche + pastilles projet)
+- **Étiquettes** : pilules nommées colorées + TagPicker (+ Étiquette) avec
+  création (nom + ColorPicker en pastilles françaises : Bleu, Rouge, etc.)
+- **Audio** : fil d'origine (waveform + transcription dépliable + citation
+  surlignée) / enregistrement vocal / section vide discrète
+- **Sous-tâches éditables** : checkboxes + progress bar + champ d'ajout
+  (Enter pour créer) + items liés (siblings + dépendances)
+- **Sidebar** : projet (pastille + calendrier Apple), échéance, étiquettes,
+  bloqué par, historique (créée/terminée/sync CalDAV)
+- **Click-outside** pour fermer TagPicker et DependencyPicker
+- **Suppression de dépendance** : bouton × séparé (pas un span dans un button)
 
-- **Badge `p{N}` supprimé** sur chaque ligne de tâche — les priorités sont
-  inventées par le parseur LLM (`priority: 3` par défaut, `4` en fallback),
-  Aramis ne les a pas définies
-- **Carte "Par priorité" supprimée** de la colonne de droite
-- La colonne de droite ne contient plus que le bloc "Ajouter sans parler"
-- Le champ `priority` reste dans le modèle de données — juste pas affiché
+### Tags / Étiquettes
 
-### 3. Dashboard (DesktopDashboard.tsx)
+- **API** : `GET/POST /api/tags`, `PATCH/DELETE /api/tags/[id]` (PIN gardé)
+- **Stockage** : `tags.json` dans `BRIEF_DATA_DIR`
+- **Palette** : 10 couleurs (yellow, orange, red, purple, blue, green, teal,
+  brown, pink, sky) avec labels français
+- **ColorPicker** : pastilles cliquables (pas de select dropdown)
+- **TagManager dans Réglages** : créer/modifier/supprimer des étiquettes
+  avec ColorPicker
+- **Sur la fiche** : TagPicker avec tags existants + création
+- **Sur les cartes Kanban** : barres compactes colorées (nom au title attr)
 
-- **"Demander à l'IA" en noir** : fond `C.ink`, texte blanc, plus grand
-  (14px bold + 13px medium pour la question), bordure supprimée
-- **Copywriting "Je parle, c'est rangé" → "Parle. Je m'occupe du reste."**
-  (choix d'Aramis parmi 3 options proposées)
+### Dépendances
 
-### 4. Nettoyage des données en prod
+- **Modèle** : `Item.dependsOn: string[]` (IDs d'items prédécesseurs)
+- **API** : `PATCH /api/items/[id]` accepte `dependsOn` (sanitizePatch corrigé)
+- **Chaîne** : AVANT (dependsOn) / ICI (item courant) / APRÈS (items qui
+  dépendent de celui-ci, calculé depuis items[])
+- **DependencyPicker** : recherche + pastilles projet + échéance courte
+- **Bandeau de blocage** en tête de fiche si dépendances non terminées
+- **Suppression** : bouton × à côté de chaque dépendance dans la chaîne
 
-- **"Faire des pâtes"** et **"Tester le micro avec le brief"** marqués
-  `doneAt: 2026-08-23T11:00:00.000Z` — ces tâches n'étaient plus dans le
-  calendrier Apple mais n'avaient pas de `due` ni `caldavSyncedDue`, donc
-  le sync ne pouvait pas les détecter comme supprimées
+### Dashboard
 
-### 5. TODOS.md mis à jour
+- **Donut "Aujourd'hui"** : compte les tâches du jour (depuis items[],
+  pas depuis l'agenda qui exclut les doneAt). Bug du 0% corrigé.
+- **Label "Cette semaine"** au-dessus des barres de progression
+- **weekProgressByProject** : limit 3 → 8 (tous les projets visibles)
+- **"Demander à l'IA"** en noir (fond C.ink, texte blanc)
+- **Copywriting** : "Parle. Je m'occupe du reste."
 
-- **Calendrier desktop buggé** : reporté par Aramis, gros chantier (P2)
-- **Scraper concurrents (Asana, Monday, Trello)** : "Asana personnalisé" (P2)
-- Kanban reste séparé (P2)
+### Coche de validation (desktop + mobile)
+
+- **CheckIcon** blanche sur fond noir quand doneAt (avant : point blanc 8px)
+- **Toast** "Tâche terminée ✓" / "Tâche rouverte" (avant : seulement
+  pour les récurrences)
+
+### Projets
+
+- **Fake** (tint 8 marron #A2845E) et **Permis** (tint 7 orange #FF9500)
+  ajoutés comme vrais projets
+- **"Ia" corrigé en "IA"** dans SEED_PROJECTS et projects.json
+- **Mapping CalDAV** : Fake et Permis ajoutés
+- **EXTRA_AGENDA_CALENDARS supprimé** : Fake est un vrai projet maintenant
+- **calendarMapping.ts** : fichier client-safe pour DesktopSettings
 
 ## Decisions — choix critiques
 
-- **Fake + Permis = vrais projets** (décision Aramis 23/08) : ce ne sont plus
-  des calendriers "additionnels" mais des projets à part entière avec leur
-  teinte (7, 8) et leur forme. Le mapping CalDAV les inclut.
-- **Pas de priorités affichées** : tant qu'Aramis ne les définit pas lui-même,
-  on n'affiche rien. Le modèle de données les garde. À rediscuter avec Aramis
-  sur la méthode de saisie.
-- **`calendarMapping.ts` client-safe** : dupliqué depuis `caldav.ts`
-  (server-only) pour permettre à DesktopSettings d'afficher le calendrier
-  Apple associé. Le mapping change rarement. Acceptable.
+- **Colonnes Kanban libres** (comme Trello) — pas dérivées d'un statut.
+  L'utilisateur crée, nomme, réordonne. Stockées dans `boards.json`.
+- **Tags en pastilles** (pas de select dropdown) — labels français, 10 couleurs
+- **Click-outside** pour fermer les pickers (useEffect + mousedown listener)
+- **Donut = aujourd'hui, barres = semaine** — labels clairs
+- **Pas de `startedAt`** sur Item — les colonnes ne sont pas dérivées d'un
+  statut, c'est l'utilisateur qui place ses cartes
 
-## Changed — fichiers
+## Changed — fichiers principaux
 
 | Fichier | Nature |
 |---|---|
-| `src/components/desktop/DesktopSettings.tsx` | Jetons supprimés, pastilles 18px, nom calendrier Apple |
-| `src/components/desktop/DesktopTasks.tsx` | Badges priorité + carte "Par priorité" supprimés |
-| `src/components/desktop/DesktopDashboard.tsx` | IA button noir, copywriting "Parle. Je m'occupe du reste." |
-| `src/lib/projects.ts` | SEED_PROJECTS : +Perso, Sport, IA (corrigé), Fake, Permis |
-| `src/lib/caldav.ts` | Mapping +Fake, +Permis ; EXTRA_AGENDA_CALENDARS supprimé |
-| `src/lib/calendarMapping.ts` | **NEW** — mapping client-safe pour DesktopSettings |
-| `src/lib/caldav.test.ts` | Tests à jour (Fake, Permis mappés) |
-| `src/lib/projects.test.ts` | Test formes → test teintes (8 projets, 5 formes) |
-| `TODOS.md` | +Calendrier desktop buggé, +Scraper concurrents |
+| `src/components/desktop/DesktopKanban.tsx` | Réécrit (filtres, non placées, WIP, colonnes libres) |
+| `src/components/desktop/KanbanCard.tsx` | Réécrit (tags barres, badge bloquée, waveform, progress) |
+| `src/components/desktop/DesktopTaskDetail.tsx` | Réécrit (2 colonnes, bandeau, chaîne, étiquettes, pickers) |
+| `src/components/desktop/DesktopSettings.tsx` | +TagManager (créer/modifier/supprimer étiquettes) |
+| `src/components/desktop/DesktopDashboard.tsx` | Donut fix + labels + "Cette semaine" |
+| `src/components/desktop/DesktopTasks.tsx` | CheckIcon au lieu de point blanc |
+| `src/components/desktop/DesktopShell.tsx` | Câblage Kanban + TaskDetail + tags + deps |
+| `src/components/desktop/DesktopHeader.tsx` | Onglet "Kanban" ajouté |
+| `src/components/desktop/types.ts` | +DesktopScreen "kanban", "détail", "graphe" |
+| `src/components/HomeScreen.tsx` | RowCheckbox : fond noir + CheckIcon blanche |
+| `src/components/BriefApp.tsx` | Toast "Tâche terminée ✓" + onDeleteItem prop |
+| `src/lib/types.ts` | +tags, +dependsOn, +columnId sur DraftItem ; +KanbanColumn, KanbanBoard, Tag, TagColor, TAG_COLORS |
+| `src/lib/store.ts` | +readBoard/writeBoard, +readTags/writeTags, normalizeItem (+tags/dependsOn/columnId) |
+| `src/lib/caldav.ts` | +Fake, +Permis dans mapping ; EXTRA_AGENDA_CALENDARS supprimé |
+| `src/lib/projects.ts` | +Perso, Sport, IA (corrigé), Fake, Permis dans SEED_PROJECTS |
+| `src/lib/calendarMapping.ts` | **NEW** — mapping client-safe |
+| `src/lib/api.ts` | +fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag, updateTag, deleteTag |
+| `src/app/api/board/route.ts` | **NEW** — GET/PATCH board |
+| `src/app/api/tags/route.ts` | **NEW** — GET/POST tags |
+| `src/app/api/tags/[id]/route.ts` | **NEW** — PATCH/DELETE tag |
+| `src/app/api/items/[id]/route.ts` | sanitizePatch : +columnId, +tags, +dependsOn, +subtasks |
+| `src/app/globals.css` | p7/p8 : Permis orange, Fake marron |
 
 ## Validations
 
@@ -111,41 +152,67 @@ sa première revue visuelle (screenshots du 23/08 matin) :
 |---|---|
 | `npx tsc --noEmit` | ✅ propre |
 | `TZ=UTC npx vitest run` | ✅ 262 passed |
-| `docker compose up -d --build` | ✅ Healthy |
-| `curl -sI https://brief.srv1899780.hstgr.cloud/` | ✅ HTTP 200 |
-| Projects en prod | ✅ 8 projets (IA corrigé, Fake + Permis ajoutés) |
-| Tâches stale | ✅ "Faire des pâtes" + "Tester le micro" marqués done |
+| Prod HTTP | ✅ 200 |
+| Conteneur | ✅ Healthy |
+| Sync CalDAV | ✅ Forcé, Fake découvert |
 
 ## Blockers
 
-Aucun. Prod saine sur `9cc33b7`.
+Aucun. Prod saine sur `8c740e1`.
 
-## Points à connaître (non bloquants)
+## Points à connaître
 
-1. **Calendrier desktop buggé** : Aramis le sait, reporté (gros chantier, TODOS.md)
-2. **Priorités** : retirées de l'affichage, le modèle les garde. À rediscuter
+1. **Vue graphe (nœuds n8n)** : le prompt Claude Design est prêt (voir plus
+   bas). Aramis va le donner à Claude Design via son MCP. Le prototype `.dc.html`
+   devra être implémenté avec `reactflow`.
+2. **Calendrier desktop buggé** : reporté (gros chantier, TODOS.md)
+3. **Priorités** : retirées de l'affichage, le modèle les garde. À rediscuter
    sur la méthode de saisie (Aramis veut les mettre lui-même)
-3. **DESIGN.md §7** : nav horizontale réelle vs rail 248px décrit — pas corrigé
-4. **Horizon 7 jours / Ton mur / Idées / Chaîne & sync** : retirés du Dashboard
-   sur demande d'Aramis, pas supprimés du code. Ne pas les faire réapparaître
-   sans qu'il le redemande.
-5. **Couleurs Fake/Permis** : utilisent les teintes 7 (orange #FF9F0A) et 8
-   (bleu #5AC8FA) — les couleurs "réserve" des tokens CSS. Si Aramis a des
-   calendriers Apple avec d'autres couleurs pour Fake et Permis, il faudra
-   ajuster les tokens `--color-p7` et `--color-p8` dans `globals.css`.
+4. **DESIGN.md §7** : nav horizontale réelle vs rail 248px décrit — pas corrigé
+5. **Horizon 7 jours / Ton mur / Idées / Chaîne & sync** : retirés du Dashboard
+   sur demande d'Aramis. Ne pas les faire réapparaître sans qu'il le redemande.
+6. **Projet Fake** : l'unique événement Fake ("Commander les sacs Nike") est
+   déjà doneAt. Les futurs événements seront adoptés avec projectId=fake.
+7. **Sous-agent échoué** : un delegate_task a échoué (erreur modèle) pour
+   réécrire les 3 composants. KanbanCard et DesktopKanban ont été faits par
+   le sous-agent avant l'échec. DesktopTaskDetail a été fait manuellement.
 
 ## Next — la prochaine action
 
-1. **Revue visuelle d'Aramis** sur écran ≥1024px : force-quitter la PWA,
-   rouvrir, vérifier que Réglages n'a plus les jetons, que les pastilles sont
-   plus grosses avec le nom du calendrier, que Tâches n'a plus les priorités,
-   que "Demander à l'IA" est en noir, et que le copywriting est bon.
-2. **Scraper les concurrents** (Asana, Monday, Trello) pour identifier les
-   fonctionnalités à adapter — chantier demandé par Aramis.
-3. **Calendrier desktop** à reprendre quand Aramis le demande (gros chantier).
-4. **Priorités** : définir avec Aramis comment il veut les saisir.
-5. **Couleurs Fake/Permis** : vérifier avec Aramis si les teintes 7/8
-   correspondent à ses calendriers Apple.
+**C'est Claude Code qui reprend la main** (demande explicite d'Aramis) :
+
+1. **Recevoir le prototype Claude Design** pour la vue graphe (nœuds n8n).
+   Aramis va utiliser Claude Design via son MCP pour générer un `.dc.html`.
+   Voir le prompt ci-dessous.
+
+2. **Implémenter la vue graphe** avec `reactflow` :
+   - Nouvel onglet "Graphe" dans la nav desktop
+   - `src/components/desktop/DependencyGraph.tsx`
+   - Nœuds = tâches, edges = dépendances (bézier curves)
+   - États : vert (disponible), orange (en cours), rouge (bloquée), gris (terminée)
+   - Zoom, pan, drag des nœuds
+   - Filtres par projet + "Voir seulement les bloquées"
+   - Panel de détail au clic, fiche complète au double-clic
+   - `npm install reactflow`
+
+3. **Corriger le calendrier desktop** (gros chantier, reporté)
+
+4. **Scraper les concurrents** — matrice dans
+   `docs/research/concurrents-matrix-2026-08-23.md`
+
+5. **Écrire la prochaine passation** avant de repartir
+
+### Prompt Claude Design pour la vue graphe
+
+Le prompt est dans le message Telegram d'Aramis. Il décrit :
+- Nœuds = tâches (pastille projet, titre, échéance, statut, tags, sous-tâches, audio)
+- Edges = dépendances (bézier, plein si levée, pointillé si bloquante)
+- Layout gauche→droite (AVANT → ICI → APRÈS)
+- Zoom, pan, drag
+- Filtres par projet + "Voir seulement les bloquées"
+- Panel de détail au clic, fiche au double-clic
+- États : vert/orange/rouge/gris
+- Tokens Claude Design v1
 
 ---
 
@@ -153,11 +220,8 @@ Aucun. Prod saine sur `9cc33b7`.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-23 (matin, 2e)** | **Desktop V1.1 : Réglages, priorités, IA, projets** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-24 (matin)** | **Kanban, tags, dépendances, fiche tâche, donut fix** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-23 (matin, 2e) | Desktop V1.1 : Réglages, priorités, IA, projets | Hermes Agent | [fiche](docs/handoffs/2026-08-23-hermes-kanban-tags-deps.md) |
 | 2026-08-23 (matin) | Déploiement desktop V1 + audio/IA du 22/08 | Hermes Agent | [fiche](docs/handoffs/2026-08-23-hermes-deploy-desktop-v1.md) |
 | 2026-08-23 (nuit) | Version desktop V1 (5 écrans, nav pilule, dashboard 3 cartes) | Claude Code | [fiche](docs/handoffs/2026-08-23-claude-code-desktop-v1.md) |
 | 2026-08-22 (soir) | Audio storage, assistant IA, sheets, couleurs projets, perf iPhone | Hermes Agent | [fiche](docs/handoffs/2026-08-22-audio-storage-ia-sheets-couleurs.md) |
-| 2026-08-20 (soir 2) | Coche d'une occurrence dont `due` a déjà avancé (cron) | Hermes Agent | [fiche](docs/handoffs/2026-08-22-hermes-audio-ia-sheets.md) |
-| 2026-08-20 (soir) | Occurrence cochée vs `due` avancé par le cron | Claude Code | [fiche](docs/handoffs/2026-08-20-occurrence-cochee-due-avance-cron.md) |
-| 2026-08-20 (après-midi) | Séance push corrigée + icône PWA + DESIGN.md restauré | Claude Code | [fiche](docs/handoffs/2026-08-20-phantom-occurrence-icone-design-restaure.md) |
-| 2026-08-20 (jour) | Accès agents aux tâches/RDV + query token | Hermes Agent | [fiche](docs/handoffs/2026-08-20-acces-agents-query-token.md) |
