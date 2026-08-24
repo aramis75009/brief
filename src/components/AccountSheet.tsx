@@ -34,11 +34,13 @@ export function AccountSheet({
   onOpenPrivacy?: () => void;
   onOpenSubscription?: () => void;
 }) {
-  if (!open) return null;
-
+  // Hooks avant le retour anticipé (règle de React) : `open` peut passer à
+  // false pendant la fermeture du sheet, l'ordre des hooks ne doit pas changer.
   const [caldavOn, setCaldavOn] = useState(true);
   const [autoStructOn, setAutoStructOn] = useState(false);
   const [remindersOn, setRemindersOn] = useState(true);
+
+  if (!open) return null;
 
   return (
     <div

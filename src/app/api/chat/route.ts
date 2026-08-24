@@ -41,7 +41,7 @@ function buildSystemPrompt(items: Item[], projects: Project[], now: Date): strin
     timeZone: TIMEZONE,
   });
 
-  let lines: string[] = [];
+  const lines: string[] = [];
   lines.push("Tu es l'assistant de Brief, l'organiseur personnel d'Aramis.");
   lines.push("");
   lines.push(`Nous sommes le ${fmtDate} (fuseau ${TIMEZONE}).`);

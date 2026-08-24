@@ -59,7 +59,7 @@ export function NotificationsSheet({
         {/* Info text */}
         <p className="text-[13px] font-medium text-ink-muted">
           Les rappels partent du serveur toutes les 60 secondes. Pour les recevoir,
-          Brief doit être installé sur ton écran d'accueil (PWA).
+          Brief doit être installé sur ton écran d&apos;accueil (PWA).
         </p>
 
         {/* Test button */}

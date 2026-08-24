@@ -171,7 +171,7 @@ export function DesktopDashboard({
             style={{ maxWidth: 420, padding: "14px 18px", background: C.ink, border: "none", borderRadius: 18, cursor: "pointer", fontFamily: "inherit" }}
           >
             <StarIcon size={18} className="text-white" />
-            <span className="text-[14px] font-bold" style={{ color: "#fff" }}>Demander à l'IA</span>
+            <span className="text-[14px] font-bold" style={{ color: "#fff" }}>Demander à l&apos;IA</span>
             <span className="text-[13px] font-medium" style={{ color: "rgba(255,255,255,.6)" }}>— « qu’est-ce qui traîne ? »</span>
           </button>
         </div>
@@ -226,7 +226,7 @@ export function DesktopDashboard({
           <div className="flex items-start justify-between">
             <div>
               <div className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(255,255,255,.45)" }}>Capture</div>
-              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" }}>Parle.<br />Je m'occupe du reste.</div>
+              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" }}>Parle.<br />Je m&apos;occupe du reste.</div>
             </div>
           </div>
 
@@ -320,7 +320,7 @@ export function DesktopDashboard({
         <div className="flex flex-col gap-4" style={{ gridColumn: "span 4", padding: 22, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)", minHeight: 0, overflow: "hidden" }}>
           <div className="flex flex-none items-baseline justify-between">
             <span className="font-bold tracking-[-0.02em]" style={{ fontSize: 20 }}>Avancement</span>
-            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>Aujourd'hui</span>
+            <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>Aujourd&apos;hui</span>
           </div>
           <div className="flex flex-none items-center gap-6">
             <div className="relative flex-none" style={{ width: 116, height: 116, borderRadius: 99, background: `conic-gradient(${C.ink} 0 ${donutPct}%, #EDEDEA ${donutPct}% 100%)` }}>

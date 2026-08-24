@@ -642,7 +642,7 @@ export function DesktopKanban({
             )}
             {/* Note en bas */}
             <p className="text-[11px] font-medium leading-[1.5]" style={{ margin: "12px 4px 0", color: C.inkFaint }}>
-              Une liste vide se supprime seule au bout de 30 jours. Les colonnes gardent l'ordre défini ici.
+              Une liste vide se supprime seule au bout de 30 jours. Les colonnes gardent l&apos;ordre défini ici.
             </p>
           </div>
 

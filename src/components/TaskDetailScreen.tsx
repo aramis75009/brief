@@ -79,6 +79,7 @@ export function TaskDetailScreen({
    * Rejoue l'enregistrement audio lié à l'item, s'il existe.
    * Fetch avec le header PIN (comme toutes les routes /api/*), puis lecture.
    */
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- useCallback
   const handlePlayAudio = useCallback(async () => {
     if (!item?.audioId) return;
     try {

@@ -61,6 +61,11 @@ function LockIcon({ size = 11 }: { size?: number }) {
   );
 }
 
+/** Une carte est « en retard » si son échéance est passée (horloge réelle). */
+function isLate(due: string | null | undefined): boolean {
+  return due ? new Date(due).getTime() < Date.now() : false;
+}
+
 export function KanbanCard({
   item,
   project,
@@ -76,7 +81,7 @@ export function KanbanCard({
 }) {
   const skin = project ? skinFor(project) : null;
   const shape = project ? shapeFor(project) : "disc";
-  const late = item.due ? new Date(item.due).getTime() < Date.now() : false;
+  const late = isLate(item.due);
   const subtaskCount = item.subtasks?.length ?? 0;
   const subtaskDone = item.subtasks?.filter((s) => s.done).length ?? 0;
   const hasAudio = !!(item.audioOrigin || item.audioId);

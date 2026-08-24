@@ -320,6 +320,7 @@ export function DesktopTaskDetail({
   const [showTranscript, setShowTranscript] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- useCallback est nécessaire
   const handlePlayAudio = useCallback(async () => {
     if (!item?.audioId) return;
     try {
@@ -497,7 +498,7 @@ export function DesktopTaskDetail({
                       onClick={() => onOpenSibling?.(deps.find((d) => !d.doneAt)!.id)}
                       style={{ marginLeft: "auto", padding: "7px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700 }}
                     >
-                      Terminer d'abord
+                      Terminer d&apos;abord
                     </button>
                   )}
                 </div>
@@ -558,7 +559,7 @@ export function DesktopTaskDetail({
                 <div style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 18, marginBottom: 12 }}>
                   <div className="flex items-center justify-between gap-3" style={{ marginBottom: 12 }}>
                     <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint }}>
-                      FIL D'ORIGINE · {new Date(audio.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }).toUpperCase()} · {audio.durationSec} S
+                      FIL D&apos;ORIGINE · {new Date(audio.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }).toUpperCase()} · {audio.durationSec} S
                     </span>
                     <button onClick={handlePlayAudio} className="flex items-center justify-center" style={{ width: 34, height: 34, borderRadius: 99, background: C.ink, border: "none", cursor: "pointer" }}>
                       <PlayIcon size={12} className="text-white" />

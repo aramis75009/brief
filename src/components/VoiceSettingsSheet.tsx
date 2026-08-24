@@ -28,7 +28,7 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
         <div className="flex flex-col gap-1 rounded-20 border border-ink/[.06] bg-surface p-4">
           <h3 className="text-[15px] font-bold">Structuration automatique</h3>
           <p className="text-[13px] font-medium text-ink-muted">
-            L'IA (gpt-oss-20b) structure tes notes en tâches et rendez-vous. Chaque
+            L&apos;IA (gpt-oss-20b) structure tes notes en tâches et rendez-vous. Chaque
             dictée est découpée, datée et classée automatiquement.
           </p>
         </div>

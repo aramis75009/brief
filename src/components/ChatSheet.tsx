@@ -37,16 +37,8 @@ export function ChatSheet({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Réinitialise la conversation à chaque ouverture — une nouvelle session
-  // repart du message d'accueil, sans traîner un historique obsolète.
-  useEffect(() => {
-    if (open) {
-      setMessages([WELCOME]);
-      setInput("");
-      setLoading(false);
-    }
-  }, [open]);
-
+  // Note : pas de reset dans un effet — ChatSheet est monté conditionnellement
+  // ({chatOpen && …}), la conversation repart donc neuve à chaque ouverture.
   // Auto-scroll vers le bas à chaque nouveau message ou changement d'état.
   useEffect(() => {
     const el = scrollRef.current;

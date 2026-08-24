@@ -381,10 +381,10 @@ raison nouvelle.
   mais le glisser-déposer `@dnd-kit` ne se simule pas fidèlement en automatisation.
   **À tester à la main**, c'est le seul geste du Kanban dont personne ne sait
   s'il marche.
-- **`DesktopTaskDetail.tsx` porte 3 erreurs eslint** (`react/no-unescaped-entities`
-  aux lignes ~500 et ~561, `react-hooks/preserve-manual-memoization` vers 338).
-  Antérieures à la vue Graphe ; `npx eslint src/` en compte 19 au total, réparties
-  sur 14 fichiers.
+- **`DesktopTaskDetail.tsx` portait 3 erreurs eslint** — **corrigées le 24/08
+  soir par Hermes** (apostrophes + `preserve-manual-memoization`). Le lint
+  global est désormais **0 erreur** (30 warnings d'imports morts, antérieurs,
+  inoffensifs).
 - `src/app/favicon.ico` date de l'ancienne identité — à régénérer depuis la capsule.
 - `docs/designs/preview-systeme.html` montre encore cinq teintes et aucune forme.
 - `docs/designs/organiseur-autonome.md` décrit l'architecture CalDAV abandonnée.

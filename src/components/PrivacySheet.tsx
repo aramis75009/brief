@@ -29,7 +29,7 @@ export function PrivacySheet({ open, onClose }: { open: boolean; onClose: () => 
         <PrivacyItem>
           Les données (tâches, rendez-vous) sont stockées sur le serveur, en France.
         </PrivacyItem>
-        <PrivacyItem>Aucune donnée n'est envoyée à un tiers.</PrivacyItem>
+        <PrivacyItem>Aucune donnée n&apos;est envoyée à un tiers.</PrivacyItem>
         <PrivacyItem>
           Tu peux supprimer ton compte et toutes tes données à tout temps.
         </PrivacyItem>

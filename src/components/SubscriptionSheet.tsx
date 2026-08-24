@@ -27,7 +27,7 @@ export function SubscriptionSheet({ open, onClose }: { open: boolean; onClose: (
         {/* Info */}
         <div className="flex flex-col gap-2">
           <p className="text-[13px] font-medium text-ink-muted">
-            Brief est gratuit pour l'instant.
+            Brief est gratuit pour l&apos;instant.
           </p>
           <p className="text-[13px] font-medium text-ink-muted">
             Tu profites de toutes les fonctionnalités sans limite.
