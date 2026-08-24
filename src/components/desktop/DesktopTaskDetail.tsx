@@ -172,7 +172,7 @@ function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; 
         <div style={{ marginTop: 8, padding: 14, background: C.surface, border: "1px solid rgba(16,16,16,.08)", borderRadius: 18, maxWidth: 320 }}>
           {available.length > 0 && (
             <>
-              <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block" }}>EXistantes</span>
+              <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block", letterSpacing: "0.09em" }}>EXISTANTES</span>
               <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 12 }}>
                 {available.map((tag) => (
                   <button key={tag.id} onClick={() => { onAdd(tag.id); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue, fontSize: 12, fontWeight: 700, color: C.ink, border: "none", cursor: "pointer", fontFamily: "inherit" }}>

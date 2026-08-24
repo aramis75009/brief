@@ -273,64 +273,73 @@ const TodayRow = memo(function TodayRow({
 
   const isVocal = !!item.audioOrigin;
 
+  /* La ligne n'est PAS un bouton : elle en contient déjà un (la case à cocher).
+     Un <button> dans un <button> est du HTML invalide — React le signalait par
+     une erreur d'hydratation. La case et la zone d'ouverture sont donc deux
+     boutons frères dans un conteneur neutre ; le rendu ne change pas. */
   return (
-    <button
-      onClick={() => onOpen(item.id)}
-      className="flex w-full items-center gap-3 text-left"
-      style={{ padding: "12px 14px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+    <div
+      className="flex w-full items-center gap-3"
+      style={{ padding: "12px 14px" }}
     >
       <RowCheckbox done={done} onClick={() => onToggle(item.id, due)} />
 
-      {/* Titre + métadonnées */}
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span
-          className="font-semibold tracking-[-0.01em]"
-          style={{
-            fontSize: 15,
-            lineHeight: 1.3,
-            color: done ? C.inkFaint : C.ink,
-            textDecoration: done ? "line-through" : "none",
-          }}
-        >
-          {item.title}
+      <button
+        onClick={() => onOpen(item.id)}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        style={{ padding: 0, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        {/* Titre + métadonnées */}
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span
+            className="font-semibold tracking-[-0.01em]"
+            style={{
+              fontSize: 15,
+              lineHeight: 1.3,
+              color: done ? C.inkFaint : C.ink,
+              textDecoration: done ? "line-through" : "none",
+            }}
+          >
+            {item.title}
+          </span>
+
+          {/* Métadonnées : pastille projet + libellé + badge vocal */}
+          <span className="flex items-center gap-[6px]">
+            {skin && (
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 6,
+                  height: 6,
+                  borderRadius: shape === "square" ? 1 : 99,
+                  background: skin.bg,
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            {project && (
+              <span
+                className="font-medium"
+                style={{ fontSize: 13, lineHeight: 1, color: C.inkMuted }}
+              >
+                {project.name}
+              </span>
+            )}
+            {isVocal && <VoiceBadge size="small" />}
+          </span>
         </span>
 
-        {/* Métadonnées : pastille projet + libellé + badge vocal */}
-        <span className="flex items-center gap-[6px]">
-          {skin && (
-            <span
-              style={{
-                display: "inline-block",
-                width: 6,
-                height: 6,
-                borderRadius: shape === "square" ? 1 : 99,
-                background: skin.bg,
-                flexShrink: 0,
-              }}
-            />
-          )}
-          {project && (
-            <span
-              className="font-medium"
-              style={{ fontSize: 13, lineHeight: 1, color: C.inkMuted }}
-            >
-              {project.name}
-            </span>
-          )}
-          {isVocal && <VoiceBadge size="small" />}
-        </span>
-      </span>
-
-      {/* Heure */}
-      {time && (
-        <span
-          className="shrink-0 font-bold tnum"
-          style={{ fontSize: 13, lineHeight: 1, color: done ? C.inkFaint : C.ink }}
-        >
-          {time}
-        </span>
-      )}
-    </button>
+        {/* Heure */}
+        {time && (
+          <span
+            className="shrink-0 font-bold tnum"
+            style={{ fontSize: 13, lineHeight: 1, color: done ? C.inkFaint : C.ink }}
+          >
+            {time}
+          </span>
+        )}
+      </button>
+    </div>
   );
 });
 
