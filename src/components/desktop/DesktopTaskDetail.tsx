@@ -148,59 +148,200 @@ function ChainSection({
   );
 }
 
-function TagPicker({ allTags, itemTags, onAdd, onCreateTag }: { allTags: Tag[]; itemTags: string[]; onAdd: (tagId: string) => void; onCreateTag?: (name: string, color: string) => Promise<Tag | null> }) {
+/**
+ * Couleur de texte d'une pastille d'étiquette, choisie par luminance.
+ *
+ * La palette d'étiquettes est faite de teintes saturées (`#FF3B30`, `#007AFF`,
+ * `#AF52DE`…) et le composant y posait de l'encre `#101010` : illisible sur la
+ * moitié d'entre elles. Le nom de l'étiquette est de l'information, il doit se
+ * lire sur les dix couleurs.
+ */
+function tagTextOn(hex: string): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? C.ink : "#FFFFFF";
+}
+
+/**
+ * Composeur d'étiquette — un seul geste.
+ *
+ * Avant le 2026-08-25 le panneau de création était un enfant flex d'une rangée
+ * horizontale (`flex items-center`) : large de 320px, il étirait la ligne et
+ * atterrissait au milieu de l'écran sans rapport visuel avec son bouton. Il
+ * occupe désormais sa propre ligne, en bloc, sous les étiquettes posées.
+ *
+ * Le champ fait les deux métiers que l'ancien flow séparait en trois gestes
+ * (saisir, choisir la couleur, valider) : il **filtre** les étiquettes
+ * existantes et **nomme** la nouvelle. Entrée attache la correspondance exacte
+ * s'il y en a une, sinon crée avec la couleur sélectionnée. Le libellé du
+ * bouton annonce toujours laquelle des deux choses va se produire — un contrôle
+ * ne fait jamais deux métiers en silence.
+ */
+function TagComposer({
+  allTags,
+  itemTags,
+  onAdd,
+  onCreateTag,
+}: {
+  allTags: Tag[];
+  itemTags: string[];
+  onAdd: (tagId: string) => void;
+  onCreateTag?: (name: string, color: string) => Promise<Tag | null>;
+}) {
   const [open, setOpen] = useState(false);
-  const [newTagName, setNewTagName] = useState("");
-  const [newTagColor, setNewTagColor] = useState("blue");
+  const [query, setQuery] = useState("");
+  const [color, setColor] = useState("blue");
+  const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const available = allTags.filter((t) => !itemTags.includes(t.id));
+  const raw = query.trim();
+  const needle = raw.toLowerCase();
+  const matches = needle ? available.filter((t) => t.name.toLowerCase().includes(needle)) : available;
+  const exact = available.find((t) => t.name.toLowerCase() === needle);
+  const canCreate = !!onCreateTag && raw.length > 0 && !exact;
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setNewTagName("");
-      }
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
     };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, close]);
+
+  const attach = (tagId: string) => {
+    onAdd(tagId);
+    close();
+  };
+
+  const commit = async () => {
+    if (busy) return;
+    if (exact) {
+      attach(exact.id);
+      return;
+    }
+    if (!canCreate || !onCreateTag) return;
+    setBusy(true);
+    try {
+      const tag = await onCreateTag(raw, color);
+      if (tag) attach(tag.id);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div ref={ref} style={{ display: "inline-block" }}>
-      <button onClick={() => setOpen(!open)} style={{ padding: "4px 10px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}>+ Étiquette</button>
-      {open && (
-        <div style={{ marginTop: 8, padding: 14, background: C.surface, border: "1px solid rgba(16,16,16,.08)", borderRadius: 18, maxWidth: 320 }}>
-          {available.length > 0 && (
+    <div ref={ref} style={{ display: "block" }}>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          style={{ padding: "5px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.06)", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, color: C.inkMuted }}
+        >
+          + Étiquette
+        </button>
+      ) : (
+        <div style={{ padding: 14, background: C.surface, border: "1px solid rgba(16,16,16,.08)", borderRadius: 18 }}>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            {/* La pastille de couleur montre ce que la création produira. */}
+            <span
+              aria-hidden
+              style={{ width: 14, height: 14, borderRadius: 99, background: TAG_COLOR_MAP[color], flex: "none", opacity: canCreate ? 1 : 0.35 }}
+            />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commit();
+                }
+              }}
+              placeholder="Filtrer ou nommer une étiquette…"
+              aria-label="Filtrer les étiquettes existantes ou nommer une nouvelle étiquette"
+              style={{ flex: 1, minWidth: 0, padding: "8px 0", background: "none", border: "none", borderBottom: "1px solid rgba(16,16,16,.08)", fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: C.ink, outline: "none" }}
+            />
+            <button
+              onClick={() => void commit()}
+              disabled={busy || (!exact && !canCreate)}
+              style={{
+                flex: "none", padding: "8px 14px", borderRadius: 99, border: "none",
+                background: exact || canCreate ? C.ink : "rgba(16,16,16,.08)",
+                color: exact || canCreate ? "#fff" : C.inkFaint,
+                cursor: exact || canCreate ? "pointer" : "default",
+                fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+              }}
+            >
+              {exact ? `Ajouter « ${exact.name} »` : canCreate ? `Créer « ${raw} »` : "Ajouter"}
+            </button>
+          </div>
+
+          {/* Couleurs — seulement utiles quand on crée. */}
+          {onCreateTag && (
+            <div className="flex flex-wrap" style={{ gap: 6, marginTop: 12 }}>
+              {Object.keys(TAG_COLOR_MAP).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  aria-label={`Couleur ${c}`}
+                  aria-pressed={color === c}
+                  style={{
+                    width: 22, height: 22, borderRadius: 99, background: TAG_COLOR_MAP[c],
+                    border: color === c ? "2px solid var(--color-ink)" : "2px solid rgba(16,16,16,.1)",
+                    cursor: "pointer", padding: 0, flex: "none",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Existantes, filtrées par la même saisie. */}
+          {matches.length > 0 && (
             <>
-              <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block", letterSpacing: "0.09em" }}>EXISTANTES</span>
-              <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 12 }}>
-                {available.map((tag) => (
-                  <button key={tag.id} onClick={() => { onAdd(tag.id); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue, fontSize: 12, fontWeight: 700, color: C.ink, border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                    {tag.name}
-                  </button>
-                ))}
+              <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint, display: "block", margin: "14px 0 8px" }}>
+                EXISTANTES
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {matches.map((tag) => {
+                  const bg = TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue;
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => attach(tag.id)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: bg, fontSize: 12, fontWeight: 700, color: tagTextOn(bg), border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {tag.name}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
-          {onCreateTag && (
-            <>
-              <span className="font-mono" style={{ fontSize: 10, color: C.inkFaint, marginBottom: 8, display: "block" }}>CRÉER</span>
-              <input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="Nom…" style={{ width: "100%", padding: "8px 12px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 12, fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: C.ink, outline: "none", marginBottom: 8 }} />
-              <div className="flex flex-wrap gap-1.5" style={{ marginBottom: 10 }}>
-                {Object.keys(TAG_COLOR_MAP).map((c) => (
-                  <button key={c} onClick={() => setNewTagColor(c)} title={c} style={{ width: 24, height: 24, borderRadius: 99, background: TAG_COLOR_MAP[c], border: newTagColor === c ? "2px solid var(--color-ink)" : "2px solid rgba(16,16,16,.1)", cursor: "pointer", padding: 0, flex: "none" }} />
-                ))}
-              </div>
-              <button
-                onClick={async () => {
-                  const name = newTagName.trim();
-                  if (!name) return;
-                  const tag = await onCreateTag(name, newTagColor);
-                  if (tag) { onAdd(tag.id); setNewTagName(""); setOpen(false); }
-                }}
-                style={{ width: "100%", padding: "10px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}
-              >Créer</button>
-            </>
+          {matches.length === 0 && !canCreate && (
+            <p className="text-[13px] font-medium" style={{ color: C.inkFaint, marginTop: 12 }}>
+              Toutes les étiquettes sont déjà posées. Tape un nom pour en créer une.
+            </p>
           )}
         </div>
       )}
@@ -504,41 +645,8 @@ export function DesktopTaskDetail({
                 </div>
               )}
 
-              {/* Chaîne AVANT / ICI / APRÈS — toujours affichée pour permettre l'ajout */}
-              <ChainSection item={item} items={items} deps={deps} projects={projects} onOpenSibling={onOpenSibling} onAddDependency={onAddDependency} onRemoveDependency={onRemoveDependency} />
-
-              {/* Étiquettes */}
-              <div style={{ marginBottom: 12 }}>
-                <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
-                  <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", color: C.inkFaint }}>ÉTIQUETTES</span>
-                  {item.tags && item.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {item.tags.map((tagId) => {
-                        const tag = allTags?.find((t) => t.id === tagId);
-                        const bg = tag ? (TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue) : TAG_COLOR_MAP.blue;
-                        const count = items.filter((it) => (it.tags ?? []).includes(tagId)).length;
-                        return (
-                          <span key={tagId} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: bg, fontSize: 12, fontWeight: 700, color: C.ink }}>
-                            {tag?.name ?? tagId}
-                            {count > 1 && <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.6 }}>{count}</span>}
-                            {onRemoveTag && (
-                              <button onClick={() => onRemoveTag(item.id, tagId)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, opacity: 0.4, color: C.ink }}>×</button>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <span className="text-[13px] font-medium" style={{ color: C.inkFaint }}>Aucune</span>
-                  )}
-                  {onAddTag && (
-                    <TagPicker allTags={allTags ?? []} itemTags={item.tags ?? []} onAdd={(tagId) => onAddTag(item.id, tagId)} onCreateTag={onCreateTag} />
-                  )}
-                </div>
-              </div>
-
-              {/* Chips + titre */}
-              <div className="flex flex-wrap gap-2.5" style={{ marginBottom: 12 }}>
+              {/* Chips — nature, projet, échéance */}
+              <div className="flex flex-wrap gap-2.5" style={{ marginBottom: 10 }}>
                 <Chip variant={chipVariant}>{currentType === "event" ? "Rendez-vous" : "Tâche"}</Chip>
                 <Chip variant={chipVariant}>{project?.name ?? "Sans projet"}</Chip>
                 {item.due && (
@@ -547,11 +655,54 @@ export function DesktopTaskDetail({
                   </span>
                 )}
               </div>
-              <h2 className="text-[28px] font-extrabold leading-[1.15] tracking-[-0.03em]" style={{ color: isDone ? C.inkFaint : C.ink, textDecoration: isDone ? "line-through" : "none", marginBottom: 12 }}>
+
+              {/*
+                Étiquettes en tête, comme sur une carte Trello : ce sont elles
+                qu'on balaie du regard pour trier. Le libellé mono « ÉTIQUETTES »
+                a sauté — les pastilles colorées se nomment elles-mêmes, et le
+                bouton dit « + Étiquette ». Une ligne de chrome en moins au
+                sommet de la fiche.
+
+                Le composeur est sur SA ligne, en bloc, plus dans la rangée
+                horizontale : c'est ce qui le faisait atterrir de travers.
+              */}
+              <div style={{ marginBottom: 18 }}>
+                {item.tags && item.tags.length > 0 && (
+                  <div className="flex flex-wrap items-center" style={{ gap: 6, marginBottom: 8 }}>
+                    {item.tags.map((tagId) => {
+                      const tag = allTags?.find((t) => t.id === tagId);
+                      const bg = tag ? (TAG_COLOR_MAP[tag.color] ?? TAG_COLOR_MAP.blue) : TAG_COLOR_MAP.blue;
+                      const fg = tagTextOn(bg);
+                      const count = items.filter((it) => (it.tags ?? []).includes(tagId)).length;
+                      return (
+                        <span key={tagId} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 99, background: bg, fontSize: 12, fontWeight: 700, color: fg }}>
+                          {tag?.name ?? tagId}
+                          {count > 1 && <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.7 }}>{count}</span>}
+                          {onRemoveTag && (
+                            <button
+                              onClick={() => onRemoveTag(item.id, tagId)}
+                              aria-label={`Retirer l'étiquette ${tag?.name ?? tagId}`}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1, opacity: 0.65, color: fg }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {onAddTag && (
+                  <TagComposer allTags={allTags ?? []} itemTags={item.tags ?? []} onAdd={(tagId) => onAddTag(item.id, tagId)} onCreateTag={onCreateTag} />
+                )}
+              </div>
+
+              {/* Titre — le point d'ancrage de la fiche, pas son cinquième bloc */}
+              <h2 className="text-[28px] font-extrabold leading-[1.15] tracking-[-0.03em]" style={{ color: isDone ? C.inkFaint : C.ink, textDecoration: isDone ? "line-through" : "none", marginBottom: item.notes ? 12 : 24 }}>
                 {item.title}
               </h2>
               {item.notes && (
-                <p className="text-[15px] font-medium leading-[1.55]" style={{ color: C.inkMuted, marginBottom: 16 }}>{item.notes}</p>
+                <p className="text-[15px] font-medium leading-[1.6]" style={{ color: C.inkMuted, marginBottom: 24, maxWidth: "62ch" }}>{item.notes}</p>
               )}
 
               {/* Audio — fil d'origine */}
@@ -680,6 +831,15 @@ export function DesktopTaskDetail({
                   </div>
                 )}
               </div>
+
+              {/*
+                Chaîne AVANT / ICI / APRÈS — descendue en fin de fiche le
+                2026-08-25. Elle occupait la deuxième place, avant même le
+                titre : c'est de la navigation vers d'AUTRES tâches, elle ne dit
+                rien de celle qu'on est venu lire. Elle reste toujours affichée,
+                y compris sans dépendance, pour garder le point d'ajout.
+              */}
+              <ChainSection item={item} items={items} deps={deps} projects={projects} onOpenSibling={onOpenSibling} onAddDependency={onAddDependency} onRemoveDependency={onRemoveDependency} />
             </>
           )}
         </div>
@@ -697,7 +857,16 @@ export function DesktopTaskDetail({
               <div className="text-[11px] font-medium" style={{ color: C.inkFaint, padding: "2px 0 4px 0", textAlign: "right" }}>→ {calName}</div>
               <MetaRow label="ÉCHÉANCE">{dueLong}</MetaRow>
               <MetaRow label="ÉTIQUETTES">
-                {item.tags && item.tags.length > 0 ? item.tags.join(", ") : "Aucune"}
+                {/*
+                  Résoudre le nom, pas l'identifiant. La ligne affichait
+                  `item.tags.join(", ")`, ce qui ne se voyait pas dans la
+                  fixture où l'id vaut le nom (« vinted »), mais donnait
+                  « tag-mt917nrp » dès qu'une étiquette était créée depuis
+                  l'app. Un identifiant machine n'a rien à faire à l'écran.
+                */}
+                {item.tags && item.tags.length > 0
+                  ? item.tags.map((id) => allTags?.find((t) => t.id === id)?.name ?? id).join(", ")
+                  : "Aucune"}
               </MetaRow>
               <MetaRow label="BLOQUÉ PAR">
                 {deps.length > 0 ? `${deps.length} tâche${deps.length > 1 ? "s" : ""}` : "Aucune"}
