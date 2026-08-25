@@ -243,7 +243,35 @@ raison nouvelle.
 - **Quoi :** l'écran Calendrier desktop (`DesktopCalendar.tsx`) a un affichage
   buggé. Aramis le sait et reporte : « c'est un gros chantier, on s'en
   occupera plus tard ».
+- **Mise à jour 2026-08-25 (soir) :** le **chevauchement** est traité (commit
+  `dcad9ce`) — les événements d'un même créneau se partagent la largeur du jour
+  en voies, conformément à `DESIGN.md` §7.2, avec un « +N » dépliable au-delà de
+  trois. C'était le défaut le plus visible, pas le seul : la vue **mois** et le
+  panneau latéral n'ont pas été touchés, et rien n'a été vérifié au-delà de 4
+  événements simultanés sur un créneau.
 - **Effort :** L · **Priorité :** P2, à reprendre quand Aramis le demande
+
+### Deux arbitrages produit ouverts, trouvés le 2026-08-25 (soir)
+
+Ni l'un ni l'autre n'est un bug : ce sont des décisions qui appartiennent à
+Aramis, laissées en place volontairement plutôt que tranchées à sa place.
+
+- **Le filtre projet ne s'applique pas à la ligne « Non placées ».**
+  `DesktopKanban.tsx:399` calcule `unplaced` (la liste filtrée par projet) et ne
+  s'en sert **jamais** : la barre et son badge utilisent tous deux `allUnplaced`.
+  Donc cocher un projet filtre les colonnes mais pas les non placées. La
+  variable morte suggère que l'intention initiale était l'inverse. Corriger dans
+  un sens ou dans l'autre change le comportement à l'écran : à trancher.
+  **Effort :** S · **Priorité :** P2
+- **La palette d'étiquettes sort du système de couleurs.** `TAG_COLOR_MAP`
+  (`DesktopTaskDetail.tsx:40`) contient dix teintes iOS saturées (`#FF3B30`,
+  `#007AFF`, `#AF52DE`…) alors que `DESIGN.md` n'admet que trois teintes de
+  destination plus `danger`, et pose qu'« une teinte désigne, elle ne décore
+  jamais ». Seul le **contraste** a été corrigé le 25/08 (`tagTextOn()` choisit
+  encre ou blanc par luminance) : le nom se lit désormais sur les dix couleurs.
+  Reste la question de fond — garder une palette libre choisie par
+  l'utilisateur, ou ramener les étiquettes dans le système. **Effort :** S
+  (contraste fait) → M (refonte palette) · **Priorité :** P2
 
 ### Scraper les concurrents (Asana, Monday, Trello) → "Asana personnalisé"
 - **Quoi :** Aramis veut enrichir Brief avec des fonctionnalités inspirées
@@ -375,17 +403,33 @@ raison nouvelle.
 
 ## Dette connue
 
-- **Le drag & drop du Kanban n'a jamais été vérifié à l'exécution.** Tout le
-  reste du Kanban l'a été le 2026-08-24 après-midi (colonnes créées, renommées,
-  supprimées ; carte placée en colonne et persistée ; filtres ; « Non placées »),
-  mais le glisser-déposer `@dnd-kit` ne se simule pas fidèlement en automatisation.
-  **À tester à la main**, c'est le seul geste du Kanban dont personne ne sait
-  s'il marche. C'est la première chose à vérifier à la reprise de la main par
-  Claude Code (passation 25/08).
+- ~~**Le drag & drop du Kanban n'a jamais été vérifié à l'exécution.**~~ —
+  **LEVÉE le 2026-08-25 soir**, et il était bel et bien cassé : les pilules de
+  la ligne « Non placées » se montaient **hors du `DndContext`**, donc leurs
+  capteurs n'étaient jamais enregistrés et le geste n'activait rien, sans lever
+  d'erreur (commit `5e07462`). Le geste est désormais vérifié à l'exécution —
+  `@dnd-kit` SE simule fidèlement avec de vrais événements pointer : `mousedown`,
+  franchir les 6px de l'`activationConstraint`, puis une trajectoire en une
+  quinzaine de pas. Trois cartes déplacées, `PATCH` et `columnId` vérifiés sur
+  disque. Voir la passation du 25/08 soir pour le script.
 - **`DesktopTaskDetail.tsx` portait 3 erreurs eslint** — **corrigées le 24/08
   soir par Hermes** (apostrophes + `preserve-manual-memoization`). Le lint
   global est désormais **0 erreur** (30 warnings d'imports morts, antérieurs,
   inoffensifs).
+- **Le tirage de lien du graphe n'écoute que la souris.** Les ancres de
+  `DependencyGraph.tsx` sont branchées sur `mousedown` / `mousemove` : sur écran
+  tactile, créer une dépendance au doigt ne marche pas. La vue est desktop
+  (bascule à 1024px), donc ce n'est pas bloquant, mais un iPad la sert.
+  **Effort :** S — passer aux `pointer events`, qui couvrent les deux.
+- **Le reset `prefers-reduced-motion` fige aussi les autres animations.**
+  `globals.css:234` pose `animation-iteration-count: 1 !important` sur `*`. La
+  waveform de capture n'en dépend plus (elle est pilotée par l'état depuis le
+  25/08), mais `WaveformIdle` de la `CaptureBar`, `pop`, `rail` et `shimmer` sont
+  immobiles sur toute machine réglée en « animations réduites » — ce qui est le
+  cas de celle d'Aramis (`SPI_GETCLIENTAREAANIMATION = False`). Pour un décor
+  c'est le comportement correct ; pour un **squelette de chargement** (`shimmer`)
+  c'est une perte d'information, puisque `DESIGN.md` en fait une mécanique et pas
+  un décor. À regarder si un écran de chargement paraît figé.
 - `src/app/favicon.ico` date de l'ancienne identité — à régénérer depuis la capsule.
 - `docs/designs/preview-systeme.html` montre encore cinq teintes et aucune forme.
 - `docs/designs/organiseur-autonome.md` décrit l'architecture CalDAV abandonnée.
