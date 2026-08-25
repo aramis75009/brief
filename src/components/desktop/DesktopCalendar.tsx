@@ -15,6 +15,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { PRIORITIES } from "@/lib/projects";
 import { fetchAgendaDay } from "@/lib/api";
+import { layoutDayLanes } from "@/lib/calendarLanes";
 import { UnauthorizedError } from "@/lib/pin";
 import { TIMEZONE, zonedParts, shiftDays, shiftMonths, weekdayOf, lastDayOfMonth, type CalendarDate } from "@/lib/zoned";
 import type { AgendaItem } from "@/lib/agenda";
@@ -32,6 +33,16 @@ const C = {
 const HOUR_START = 7;
 const HOUR_END = 21;
 const HOUR_PX = 56;
+/**
+ * Voies visibles au maximum par groupe d'événements qui se croisent. Sur une
+ * semaine à 7 jours, une colonne fait ~150px : au-delà de trois voies un titre
+ * ne se lit plus. Les suivantes sont repliées derrière un « +N » dépliable, ce
+ * qui garde la règle DESIGN.md §7.2 (jamais de recouvrement) sans produire des
+ * bandes de 30px illisibles.
+ */
+const MAX_LANES = 3;
+/** Gouttière entre deux voies, en px. */
+const LANE_GAP = 3;
 const HOURS = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i);
 
 const dowShortFmt = new Intl.DateTimeFormat("fr-FR", { weekday: "short", timeZone: TIMEZONE });
@@ -79,6 +90,19 @@ export function DesktopCalendar({
   const [view, setView] = useState<"semaine" | "mois">("semaine");
   const [anchor, setAnchor] = useState<CalendarDate>(today);
   const [cache, setCache] = useState<Record<string, AgendaItem[]>>({});
+  /**
+   * Groupes dépliés, clés `jour#groupe`. Déplier lève le plafond de voies pour
+   * ce seul groupe : le « +N autres » montre donc ce qu'il annonce, au lieu
+   * d'être un compteur mort.
+   */
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(() => new Set());
+  const toggleCluster = (key: string) =>
+    setExpandedClusters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const weekStart = useMemo(() => mondayOf(anchor), [anchor]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => shiftDays(weekStart, i)), [weekStart]);
@@ -207,25 +231,77 @@ export function DesktopCalendar({
                 const key = dateKey(d);
                 const events = (cache[key] ?? []).filter((e) => !e.allDay);
                 const isToday = sameDate(d, today);
+
+                /* --- Voies (DESIGN.md §7 règle 2) ------------------------
+                 * Deux plans sont calculés : l'un plafonné à MAX_LANES, l'autre
+                 * sans plafond. Le découpage en groupes ne dépend pas du
+                 * plafond, donc les indices de groupe concordent, et un groupe
+                 * déplié pioche simplement dans le plan sans plafond.
+                 */
+                const laneInputs = events.map((e) => {
+                  const p = zonedParts(new Date(e.due));
+                  return {
+                    id: e.id,
+                    startMin: p.hour * 60 + p.minute - HOUR_START * 60,
+                    durationMin: e.durationMinutes ?? 60,
+                  };
+                });
+                const capped = layoutDayLanes(laneInputs, MAX_LANES);
+                const uncapped = layoutDayLanes(laneInputs, Infinity);
+                const uncappedById = new Map(uncapped.map((p) => [p.id, p]));
+                const placementById = new Map(
+                  capped.map((p) => [
+                    p.id,
+                    expandedClusters.has(`${key}#${p.cluster}`) ? uncappedById.get(p.id) ?? p : p,
+                  ]),
+                );
+
+                // Sommet et débordement de chaque groupe, pour poser le « +N ».
+                const clusterTop = new Map<number, number>();
+                const clusterOverflow = new Map<number, number>();
+                for (const p of capped) {
+                  const input = laneInputs.find((i) => i.id === p.id);
+                  if (!input) continue;
+                  const top = Math.max(0, Math.round((input.startMin / 60) * HOUR_PX));
+                  clusterTop.set(p.cluster, Math.min(clusterTop.get(p.cluster) ?? Infinity, top));
+                  if (p.overflow > 0) clusterOverflow.set(p.cluster, p.overflow);
+                }
+
                 return (
                   <div key={key} className="relative flex-1" style={{ borderLeft: "1px solid rgba(16,16,16,.06)", background: isToday ? "rgba(251,226,174,.16)" : weekdayOf(d) === 0 || weekdayOf(d) === 6 ? "rgba(16,16,16,.015)" : "transparent", height: HOURS.length * HOUR_PX }}>
                     {HOURS.map((h) => (
                       <div key={h} className="absolute" style={{ left: 0, right: 0, height: 1, background: "rgba(16,16,16,.05)", top: (h - HOUR_START) * HOUR_PX }} />
                     ))}
                     {events.map((e) => {
+                      const placement = placementById.get(e.id);
+                      if (placement?.hidden) return null;
+                      const lane = placement?.lane ?? 0;
+                      const lanes = Math.max(1, placement?.lanes ?? 1);
                       const due = new Date(e.due);
                       const mins = zonedParts(due).hour * 60 + zonedParts(due).minute - HOUR_START * 60;
                       const durationMin = e.durationMinutes ?? 60;
                       const project = e.projectId ? projectMap.get(e.projectId) : undefined;
                       const skin = project ? skinFor(project) : { bg: C.bg, fg: C.inkMuted };
                       const done = e.briefItemId ? !!itemById.get(e.briefItemId)?.doneAt : false;
+                      // Les 8px retirés sont les marges 4px de chaque bord de la
+                      // colonne ; la gouttière n'est pas retirée de la dernière
+                      // voie, sinon le bloc de droite serait plus étroit.
+                      const track = `((100% - 8px) / ${lanes})`;
+                      const narrow = lanes > 1;
+                      // À trois voies un bloc fait ~40px : la ligne d'heure y
+                      // mange la moitié de la hauteur pour redire ce que la
+                      // position verticale dit déjà. On la rend au titre.
+                      const tight = lanes >= 3;
                       return (
                         <button
                           key={e.id}
                           onClick={() => onSelect(e.briefItemId ?? e.id)}
                           className="absolute flex flex-col gap-0.5 overflow-hidden text-left"
                           style={{
-                            left: 4, right: 4, padding: "7px 9px", border: "none",
+                            left: `calc(4px + ${track} * ${lane})`,
+                            width: `calc(${track} - ${lane === lanes - 1 ? 0 : LANE_GAP}px)`,
+                            padding: narrow ? "5px 6px" : "7px 9px",
+                            border: "none",
                             borderLeft: `3px solid ${done ? C.inkFaint : skin.fg}`,
                             borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
                             top: Math.max(0, Math.round((mins / 60) * HOUR_PX)),
@@ -233,9 +309,49 @@ export function DesktopCalendar({
                             background: done ? C.bg : skin.bg, color: done ? C.inkFaint : skin.fg,
                             boxShadow: (e.briefItemId ?? e.id) === selectedId ? "0 6px 20px rgba(16,16,16,.18)" : "none",
                           }}
+                          title={`${timeFmt.format(due)} — ${e.title}`}
                         >
-                          <span className="tnum font-mono" style={{ fontSize: 9, letterSpacing: "0.05em", opacity: 0.75 }}>{timeFmt.format(due)}</span>
-                          <span className="text-[12px] font-bold tracking-[-0.01em]" style={{ lineHeight: 1.25, textDecoration: done ? "line-through" : "none" }}>{e.title}</span>
+                          {!tight && (
+                            <span className="tnum font-mono" style={{ fontSize: 9, letterSpacing: "0.05em", opacity: 0.75 }}>{timeFmt.format(due)}</span>
+                          )}
+                          <span
+                            className="text-[12px] font-bold tracking-[-0.01em]"
+                            style={{ lineHeight: 1.25, textDecoration: done ? "line-through" : "none", overflowWrap: "anywhere" }}
+                          >
+                            {e.title}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {/* « +N autres » — déplie le groupe, ne se contente pas de compter */}
+                    {[...clusterOverflow.entries()].map(([cluster, overflow]) => {
+                      const clusterKey = `${key}#${cluster}`;
+                      const open = expandedClusters.has(clusterKey);
+                      return (
+                        <button
+                          key={clusterKey}
+                          onClick={() => toggleCluster(clusterKey)}
+                          className="absolute flex items-center justify-center"
+                          aria-label={open ? `Replier le créneau chargé du ${metaDayFmt.format(atNoonUtc(d))}` : `Afficher ${overflow} événement${overflow > 1 ? "s" : ""} de plus le ${metaDayFmt.format(atNoonUtc(d))}`}
+                          style={{
+                            top: (clusterTop.get(cluster) ?? 0) + 2,
+                            right: 4,
+                            height: 16,
+                            padding: "0 6px",
+                            zIndex: 3,
+                            background: C.surface,
+                            color: C.inkMuted,
+                            border: "1px solid rgba(16,16,16,.08)",
+                            borderRadius: 99,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            fontSize: 10,
+                            fontWeight: 700,
+                            boxShadow: "0 2px 6px rgba(16,16,16,.08)",
+                          }}
+                        >
+                          {open ? "−" : `+${overflow}`}
                         </button>
                       );
                     })}
