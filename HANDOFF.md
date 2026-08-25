@@ -11,228 +11,127 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-25 (soir) · Cinq chantiers front-end, tous recettés
+# Passation — 2026-08-26 (matin) · Cinq chantiers poussés, déployés ; refonte Calendrier + Fiche par Claude Design
 
 | | |
 |---|---|
-| **Agent** | **Claude Code** — *je passe la main à Hermes Agent* (passation précédente : Hermes Agent, 25/08 matin) |
-| **Branche** | **`chantiers-frontend-2026-08-25`**, créée depuis `feat/ui-redesign-claude` à `5b42116`. ⚠️ **Ce n'est pas la branche de prod.** |
-| **Commits** | `c3ebd53`, `5e07462`, `dcad9ce`, `62ad6a6`, `e696f4f` — **locaux, non poussés** |
-| **Base** | `5b42116` (tête d'`origin/feat/ui-redesign-claude`) |
+| **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 25/08 soir) |
+| **Branches** | `feat/ui-redesign-claude` = **prod, à jour = `d97f47d`** ; `chantiers-frontend-2026-08-25` (fusionnée en ff, à jour = `d97f47d`) |
+| **Commits** | `d97f47d` = HEAD local + origin + **prod déployée** (8 commits d'avance sur l'ancienne prod `f3c2b70`) |
+| **Base de la passation précédente** | `5b42116` (Claude Code, 25/08 soir) |
 
 ## Goal — l'objectif
 
-Corriger les cinq points remontés par Aramis depuis les captures d'écran de
-l'app : l'onde de capture figée, le glisser-déposer du Kanban, le chevauchement
-du calendrier, la densité de la fiche tâche, l'illisibilité du graphe. Un
-chantier = un commit, avec recette dans un vrai navigateur avant de passer au
-suivant.
-
-Le plan d'attaque d'Aramis est dans
-[`docs/handoffs/2026-08-25-workflow-frontend-gstack.md`](docs/handoffs/2026-08-25-workflow-frontend-gstack.md).
+Les cinq chantiers front-end de Claude Code (onde de capture, DnD Kanban,
+chevauchement calendrier, fiche tâche, graphe) ont été **poussés et déployés
+en prod** (accord explicite d'Aramis le 26/08 : « ok push … et déploie »).
+La suite : Aramis a vu la preview et tranche deux **refontes Claude Design**
+(calendrier desktop + fiche tâche desktop) — le terrain est prêt pour Claude
+Design / le prochain agent.
 
 ## Current state — ce qui a été fait
 
-**Les cinq chantiers sont livrés et recettés.** Dans tous les cas la cause racine
-était structurelle, jamais cosmétique — et quatre des cinq étaient des **pannes
-silencieuses** : rien ne levait d'erreur.
+### 1. Les 5 chantiers + la décision — poussés et DÉPLOYÉS (26/08)
 
-### 1. `c3ebd53` — L'onde de capture ne suivait pas la voix
+- Branche `chantiers-frontend-2026-08-25` (7 commits : `c3ebd53`, `5e07462`,
+  `dcad9ce`, `62ad6a6`, `e696f4f`, `6840e21` handoff, + `d97f47d` décision)
+  poussée, puis **fast-forward dans `feat/ui-redesign-claude`** et push.
+- **Prod déployée** via bundle+scp+ff (`/docker/brief` = `d97f47d`) +
+  `docker compose --env-file .env.production up -d --build` — vérifiée par
+  `GET /` 200 et API 401 sans PIN (26/08).
+- Récap des 5 chantiers (causes racines + recettes mesurées : dans la
+  passation précédente, archive `docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md`).
 
-Deux défauts empilés. **L'onde n'a jamais été branchée au micro, sur aucun
-navigateur** : `useRecorder` calcule `levels` à chaque frame via l'analyser,
-`BriefApp.tsx:740` passait `seconds` et rien d'autre, et `CaptureSheet` montait
-`<WaveformActive />` sans prop. Ce qui bougeait ailleurs était une keyframe
-décorative, pas la voix.
+### 2. Valids avant/après déploiement (26/08, Hermes)
 
-Le **gel spécifique à Chrome/Windows** vient de `globals.css:234` : le reset
-`prefers-reduced-motion` pose `animation-iteration-count: 1` sur `*`, et Chrome
-rapporte `reduce` dès que Windows a « Effets d'animation » désactivé. Sondé sur
-la machine d'Aramis : `SPI_GETCLIENTAREAANIMATION = False`. La keyframe `wave`
-tournait 0,01 ms puis s'arrêtait. Sur Mac le réglage est off par défaut, d'où
-l'illusion que ça marchait.
+- `npm run build` **réussi** (le portail jamais franchi : `next dev` ne
+  tournait plus ; port 3000 = bridge WhatsApp). 26 routes compilées, warnings
+  « Dynamic filesystem access » pré-existants sur `store.ts` (pas des erreurs).
+- **Rendu mobile de la capture recetté** en Chromium 390×844 (seul chantier
+  touchant du code partagé mobile : `CaptureSheet.tsx`, `BriefApp.tsx`,
+  `Waveform.tsx`) : idle conforme au design system, listening → waveform
+  pilotée par l'état React (micro stub → niveaux → `scaleY` varient), 0 erreur
+  console.
+- Preview publique HTTPS (localtunnel) servie à Aramis pour relecture sur
+  téléphone + PC — c'est elle qui a déclenché les décisions de redesign.
 
-Le correctif pilote la hauteur en `transform: scaleY` depuis l'état React : plus
-d'animation CSS, donc plus rien que le reset puisse figer. `src/lib/waveform.ts`
-interpole les 4 bandes de fréquences sur les 20 barres.
+### 3. Bug de déploiement attrapé au passage (26/08)
 
-### 2. `5e07462` — Les cartes « Non placées » ne se glissaient pas
+`npm run build` et `next start` étaient **interdits** ici tant qu'un dev
+tournait… et le port 3000 de ce conteneur est **pris par le bridge WhatsApp**
+(Express) — `next start` échouait en EADDRINUSE. Build seule, `next start` sur
+3001 (courte recette), puis serveur standalone sur 3002 (isolé de la prod).
 
-`DesktopKanban.tsx` rendait les `DraggablePill` **ligne 508**, alors que
-`<DndContext>` ne s'ouvrait que **ligne 545**. Leurs hooks `useDraggable`
-tournaient hors contexte : activateurs liés à un contexte sans capteur, geste
-jamais activé, **aucune erreur levée**. Les cartes déjà en colonne, rendues à
-l'intérieur, fonctionnaient — d'où un board à moitié vivant.
+## Decisions — choix critiques (journal complet dans `DECISIONS.md`)
 
-Le `DndContext` englobe désormais les deux blocs. `touch-action: none` ajouté sur
-la pilule (la barre défile horizontalement).
-
-**C'était le seul geste du Kanban que personne n'avait jamais vérifié à
-l'exécution** (`TODOS.md` § Dette connue). Il l'est maintenant, par le geste.
-
-### 3. `dcad9ce` — Le calendrier empilait les événements
-
-Chaque bloc était posé en `left: 4, right: 4`, donc pleine largeur, donc
-recouvert par le suivant. Or `DESIGN.md` §7 règle 2 le dit noir sur blanc :
-« Les blocs qui se chevauchent se partagent la largeur du jour (voies), ils ne se
-recouvrent jamais. » **C'était un écart de conformité, pas une question de design
-ouverte** — donc aucune variante générée : `AGENTS.md` interdit de re-débattre une
-décision inscrite.
-
-`src/lib/calendarLanes.ts` porte l'algorithme (tri, groupes d'événements qui se
-croisent, première voie libérée). Voies visibles plafonnées à 3 — au-delà, une
-colonne de jour donne des bandes de 30px illisibles — et le surplus se replie
-derrière un « +N » qui **déplie le groupe au clic** (règle d'Aramis du 22/08 : un
-bouton mort, on le branche).
-
-### 4. `62ad6a6` — La fiche tâche était plate et dense
-
-Le titre arrivait en cinquième position. Nouvel ordre : bandeau de blocage (c'est
-une alerte), chips, **étiquettes**, **titre**, description, audio, sous-tâches,
-chaîne de dépendances **en dernier** (c'est de la navigation vers d'autres
-tâches). L'espacement n'est plus un `12px` uniforme.
-
-Le « popup mal intégré » n'était pas un popup : le panneau de 320px était
-**enfant flex d'une rangée horizontale**, il étirait la ligne. Il vit maintenant
-sur sa propre ligne. La création passe de trois gestes à un : un champ unique
-filtre les étiquettes existantes **et** nomme la nouvelle, Entrée valide, et le
-libellé du bouton dit lequel des deux va se produire.
-
-Deux bugs de lisibilité corrigés au passage : les pastilles posaient de l'encre
-`#101010` sur des fonds saturés (`#FF3B30`, `#007AFF`) — `tagTextOn()` choisit par
-luminance ; et la sidebar affichait `item.tags.join(", ")`, soit des identifiants
-bruts (`tag-mt917nrp`) dès qu'une étiquette venait de l'app.
-
-### 5. `e696f4f` — Le graphe empilait 42 tâches en colonne
-
-`layoutGraph` plaçait chaque nœud à la colonne de sa **profondeur**, et une tâche
-sans dépendance a une profondeur de 0 : **toutes les tâches isolées atterrissaient
-en colonne 0**. Sur un jeu réel où une poignée seulement sont liées, ça donne une
-colonne de plusieurs milliers de pixels avec les chaînes noyées dedans.
-
-Chaque composante connexe est maintenant disposée pour elle-même (colonnes par
-profondeur **locale**, tri par barycentre) et les composantes s'empilent en
-bandes ; les tâches vraiment isolées vont en grille compacte sous les chaînes.
-
-**Tirage de lien** ajouté : une ancre sur le bord droit de chaque nœud, on tire de
-A vers B pour dire « A d'abord, puis B ». `wouldCreateCycle()` **refuse** un lien
-qui refermerait une boucle, avec un message — A → B → A laisserait les deux tâches
-bloquées pour toujours, chacune attendant l'autre, sans que rien dans l'interface
-puisse l'expliquer.
-
-Le style des arêtes était **du code mort** : il choisissait plein ou pointillé sur
-`from.doneAt`, mais `graphTasks()` exclut les tâches terminées, donc `doneAt` était
-toujours nul et le trait plein ne pouvait jamais s'afficher. La légende annonçait
-une distinction inexistante. Les arêtes encodent désormais le statut de la source
-(« à faire maintenant » / « plus loin dans la chaîne »).
-
-`DesktopShell` : le `onAddDependency` inline est devenu `handleAddDependency`
-nommé, partagé par la fiche et le graphe, avec garde anti-doublon.
-
-## Decisions — choix critiques
-
-- **Aucune variante de design générée pour le calendrier.** `DESIGN.md` §7.2
-  prescrivait déjà les voies : générer des variantes aurait re-débattu une
-  décision inscrite. Pour la fiche et le graphe, où la latitude était réelle, la
-  direction vient de `DESIGN.md` + `frontend-design`, et j'ai tranché seul comme
-  Aramis l'a demandé (il était absent).
-- **Un contrat de test a été changé volontairement.** `graph.test.ts` exigeait que
-  deux tâches isolées partagent une colonne — c'était la description fidèle du
-  bug. Remplacé par la nouvelle règle, plus un cas à 42 tâches qui interdit le
-  retour de la colonne unique.
-- **Les arêtes ne portent plus la couleur du projet.** `DESIGN.md` : une teinte
-  désigne, elle ne décore jamais ; le liseré du nœud porte déjà le projet.
-- **Le « +N autres » du calendrier déplie**, il ne compte pas. Aucun contrôle mort.
-- **Palette d'étiquettes laissée saturée**, seul le contraste a été corrigé : la
-  ramener au système à 3 destinations est un arbitrage produit pour Aramis.
+- **Calendrier desktop + fiche tâche → refonte complète par Claude Design
+  (26/08, Aramis après la preview)**. Ne plus rafistoler ces deux écrans en
+  code ; attendre le livrable `.dc.html` puis porter. Inscrit en tête de
+  `DECISIONS.md` (2026-08-26) et dans `TODOS.md` (P1).
+- Rappel : « une teinte désigne, elle ne décore jamais » — la palette
+  d'étiquettes saturée reste un arbitrage produit ouvert (`TODOS.md`, P2).
 
 ## Changed — fichiers et composants
 
 | Fichier | Nature |
 |---|---|
-| `src/lib/waveform.ts` | **NEW** — interpolation des niveaux sur les barres (+ `waveform.test.ts`, 6 tests) |
-| `src/lib/calendarLanes.ts` | **NEW** — répartition en voies (+ `calendarLanes.test.ts`, 14 tests) |
-| `src/lib/graph.ts` | `layoutGraph` refondu ; **NEW** `connectedComponents`, `wouldCreateCycle` |
-| `src/lib/graph.test.ts` | 27 → **44 tests** ; un contrat changé (voir Decisions) |
-| `src/components/Waveform.tsx` | `WaveformActive` accepte `levels`, pilotée en `scaleY` |
-| `src/components/CaptureSheet.tsx` | prop `levels` transmise jusqu'à `ListeningStage` |
-| `src/components/BriefApp.tsx` | `levels={recorder.levels}` — la ligne qui manquait |
-| `src/components/desktop/DesktopKanban.tsx` | `DndContext` hissé au-dessus des deux blocs |
-| `src/components/desktop/DesktopCalendar.tsx` | voies, plafond à 3, chip « +N » dépliable |
-| `src/components/desktop/DesktopTaskDetail.tsx` | ordre refondu, `TagComposer`, `tagTextOn`, noms d'étiquettes en sidebar |
-| `src/components/desktop/DependencyGraph.tsx` | ancres, tirage de lien, refus de boucle, arêtes par statut, légende |
-| `src/components/desktop/DesktopShell.tsx` | `handleAddDependency` partagé, `onAddDependency` passé au graphe |
+| `DECISIONS.md` | +entrée 2026-08-26 (calendrier + fiche → Claude Design) |
+| `TODOS.md` | sections mises à jour (P1) + fiche tâche ajoutée |
+| `docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md` | **NEW** — archive de la passation précédente |
+| `HANDOFF.md` | cette passation |
 
-`package-lock.json` et `AGENTS.md` **intacts** (vérifié : `git diff --stat` vide).
+(Les fichiers des 5 chantiers — `src/lib/waveform.ts`, `calendarLanes.ts`,
+modifs `graph.ts`/`Desktop*`/`CaptureSheet`… — sont détaillés dans l'archive
+ci-dessus ; `package-lock.json` et `AGENTS.md` intacts vérifié.)
 
 ## Validations
 
 ### ✅ Passants
 
-| Commande | Résultat |
+| Commande / geste | Résultat |
 |---|---|
-| `npx tsc --noEmit` | **0 erreur** |
-| `npx eslint .` | **0 erreur** (30 warnings d'imports morts, antérieurs) |
-| `npx vitest run` | **325 passed, 1 skipped** (285 au début de la session) |
+| `npx eslint .` | 0 erreur (état de la branche, 25/08) |
+| `npx tsc --noEmit` | propre (25/08) |
+| `npx vitest run` | 325 passed, 1 skipped (25/08) |
+| `npm run build` | **réussi** (26/08, exit 0) |
+| Recette mobile capture (Chromium 390×844) | idle + listening conformes, 0 erreur console |
+| Preview publique (localtunnel) | accessible, jeux de données de démo isolés |
+| Prod | `GET /` 200, API 401 sans PIN (les) |
 
-**Recette dans un vrai Chromium** (Playwright, assertions mesurées et non
-visuelles — géométrie des rectangles, coordonnées, contenu du disque) :
+### ⚠️ Non lancés / À vérifier
 
-| Chantier | Preuve |
-|---|---|
-| Waveform | `prefers-reduced-motion: reduce` **actif dans la page**, 20 barres en `scaleY`, **18/20 bougent** (amplitude 0,65). Témoin de contrôle : les 5 barres animées en CSS de `WaveformIdle`, même page même instant, **0 qui bougent** |
-| Kanban | **3 cartes** déplacées au geste sur 3 passages : `PATCH /api/items/…`, `columnId = col-doing` sur disque, sortie de la barre confirmée dans le DOM |
-| Calendrier | 3 blocs côte à côte à 15h (`40/40/43px` contre `130px` seul), **0 paire qui se recouvre** ; déplié → 4 blocs `29/29/29/32px`, **0 recouvrement** |
-| Fiche | Étiquette `y=270` **au-dessus** du titre `y=354` ; chaîne descendue à `y=937` ; panneau `x=210 w=756` (bouton `w=91`) donc sur sa ligne ; filtre `pho` → `["photo"]` ; Entrée crée + attache + persiste |
-| Graphe | 37 tâches actives : **7 abscisses distinctes, 8 ordonnées, 0 recouvrement** (le modèle précédent donnait 1 et 37). Lien tiré → `dependsOn` écrit sur disque. Sens inverse → **refusé**, `dependsOn` inchangé avant/après |
-
-Console navigateur : **0 erreur** sur les cinq recettes.
-
-### ❌ Échoués
-
-Aucun. Quatre faux négatifs sont venus de **mes scripts de recette**, jamais des
-correctifs : sélecteurs trop larges, élément de sidebar confondu avec celui de la
-colonne principale, et un passage sur un bundle pas encore recompilé par
-`next dev`. Corrigés puis rejoués.
-
-### ⚠️ Non lancés / À vérifier — **c'est là qu'il faut regarder d'abord**
-
-1. **`npm run build` — jamais lancé.** `AGENTS.md` l'interdit tant qu'un
-   `next dev` tourne, et il en tournait un pendant toute la session. **Un
-   `next dev` peut encore tourner sur le port 3000** : l'arrêter avant. C'est le
-   seul portail non franchi.
-2. **Le rendu mobile.** Seul le desktop a été parcouru. Les chantiers 3/4/5 ne
-   touchent que des composants `desktop/`, mais le **chantier 1 modifie
-   `CaptureSheet.tsx` et `BriefApp.tsx`, qui servent le mobile.**
-3. **Le tirage de lien au doigt.** Les ancres écoutent `mousedown` : sur écran
-   tactile le geste n'est pas branché. Le graphe est desktop, mais c'est à savoir.
-4. **La synchro CalDAV** — pas de `.env.local` de production en local, test
+1. **Le tirage de lien au doigt (graphe)** — ancres `mousedown` : non branché
+   sur tactile. Le graphe reste desktop, mais à savoir.
+2. **Le « +N » du calendrier au-delà de 4 voies** — testé à 4 événements
+   simultanés, pas à 10 (le calendrier va de toute façon être redessiné).
+3. **La synchro CalDAV** — pas de `.env.local` de production en local, test
    d'intégration toujours skipped.
-5. **Le « +N » du calendrier au-delà de 4 voies** — testé à 4 événements
-   simultanés, pas à 10.
+4. **Démo preview locale** — `data/` du repo contient un `items.json`
+   d'ÉCHANTILLON au format ancien (`dueAt`/`completedAt`, 3 items) ; pas
+   touché, mais à ne pas confondre avec les vraies données.
 
 ## Blockers
 
-**Aucun blocage technique.** Trois points d'attention :
+**Aucun blocage technique.** Points d'attention :
 
-- **Rien n'est poussé.** Les 5 commits sont locaux sur
-  `chantiers-frontend-2026-08-25`. Aramis relit avant tout push, tout merge et
-  tout déploiement — consigne explicite, `/ship` interdit.
-- **La prod est maintenant 8 commits en retard** (le VPS sert `3e619a0`).
-- **`npm install` sous Windows abîme `package-lock.json`.** Avant tout commit
-  depuis Windows : `git diff --stat package-lock.json` doit être vide.
+- **`npm install` sous Windows abîme `package-lock.json`** (supprime les champs
+  `libc`) — avant tout commit depuis Windows, `git diff --stat package-lock.json`
+  doit être vide.
+- **Le remote prod (/docker/brief) est HTTPS sans credentials** : se déployer
+  par bundle+scp+ff (pas de push depuis le VPS). Voir `docs/coordination.md`.
+- **Ne pas lancer `npm run dev` sur ce conteneur** (AGENTS.md) : le port 3000
+  appartient au bridge WhatsApp ; `.next` vit dans `/opt/data/Projets/brief`
+  (copie Hermes), PAS dans `/docker/brief`.
 
 ## Next — la prochaine action
 
-1. **Arrêter le `next dev` s'il tourne, puis lancer `npm run build`.** Le seul
-   portail non franchi.
-2. **Vérifier le rendu mobile de l'écran de capture** — le seul endroit où un
-   chantier de cette session touche du code partagé avec le mobile.
-3. **Faire relire les 5 commits à Aramis** avant push/merge. Le diff est lisible
-   commit par commit : chaque message porte la cause racine et les mesures de
-   recette.
-4. **Trancher les deux arbitrages produit** consignés dans `TODOS.md` : le filtre
-   projet de la ligne « Non placées », et la palette d'étiquettes.
+1. **Aramis fournit les livrables Claude Design** pour le calendrier desktop et
+   la fiche tâche → les porter selon le workflow éprouvé (analyser le `.dc.html`
+   avec gstack, PUIS coder).
+2. Trancher les deux arbitrages produit ouverts dans `TODOS.md` (filtre projet
+   de « Non placées », palette d'étiquettes).
+3. Quand les vrais statuts de tâche arriveront : ne toucher que `graphStatus()`
+   dans `src/lib/graph.ts` (décision 24/08).
 
 ---
 
@@ -240,7 +139,8 @@ colonne principale, et un passage sur un bundle pas encore recompilé par
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-25 (soir)** | **Cinq chantiers front-end : waveform, DnD Kanban, calendrier, fiche, graphe** | **Claude Code** | *(cette passation)* |
+| **2026-08-26 (matin)** | **Cinq chantiers poussés et déployés ; refonte Calendrier + Fiche par Claude Design** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-25 (soir) | Cinq chantiers front-end : waveform, DnD Kanban, calendrier, fiche, graphe | Claude Code | [fiche](docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md) |
 | 2026-08-25 (matin) | État du repo + défi Kanban/dépendances/Graphe pour Claude Code | Hermes Agent | [fiche](docs/handoffs/2026-08-25-hermes-etat-repo-mission-bugs.md) |
 | 2026-08-24 (après-midi) | Vue Graphe et recette de l'existant | Claude Code | [fiche](docs/handoffs/2026-08-24-graphe-recette-claude-code.md) |
 | 2026-08-24 (matin) | Kanban, tags, dépendances, fiche tâche, donut fix | Hermes Agent | [fiche](docs/handoffs/2026-08-24-kanban-tags-dependances-fiche.md) |
