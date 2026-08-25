@@ -249,7 +249,21 @@ raison nouvelle.
   trois. C'était le défaut le plus visible, pas le seul : la vue **mois** et le
   panneau latéral n'ont pas été touchés, et rien n'a été vérifié au-delà de 4
   événements simultanés sur un créneau.
-- **Effort :** L · **Priorité :** P2, à reprendre quand Aramis le demande
+- **Mise à jour 2026-08-26 :** Aramis a vu la preview et tranche : le calendrier
+  doit être **entièrement revu par Claude Design** (nouveau livrable `.dc.html`),
+  puis porté en code. **Ne pas continuer à « rafistoler » l'écran actuel** — les
+  correctifs restants attendent la refonte. Décision inscrite dans
+  `DECISIONS.md` (2026-08-26). **Effort :** L · **Priorité :** P1 (décision actée)
+
+### Fiche tâche desktop — refonte Claude Design (décision 2026-08-26)
+- **Quoi :** la fiche tâche (`DesktopTaskDetail.tsx`) a été livrée et recettée
+  (25/08, commit `62ad6a6`), mais Aramis a vu la preview et **veut une refonte
+  complète par Claude Design**, comme le calendrier. **Ne pas retoucher le
+  design en code tant que le livrable Claude Design n'est pas arrivé.**
+- **Décision :** `DECISIONS.md` (2026-08-26). **Effort :** M · **Priorité :** P1
+- **Rappel de l'existant à conserver** : bandeau de blocage, étiquettes avant le
+  titre, noms d'étiquettes (pas les IDs bruts), chaîne AVANT/ICI/APRÈS en bas,
+  sidebar label/valeur, `tagTextOn()` par luminance.
 
 ### Deux arbitrages produit ouverts, trouvés le 2026-08-25 (soir)
 

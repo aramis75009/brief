@@ -14,9 +14,35 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-26 · Calendrier desktop et fiche tâche : refonte complète par Claude Design
+
+**Décision.** Le **Calendrier desktop** (`DesktopCalendar.tsx`) et la **fiche
+tâche desktop** (`DesktopTaskDetail.tsx`) seront **entièrement redessinés par
+Claude Design** (nouveau livrable `.dc.html`), puis portés en code. D'ici là,
+**ne pas refiner ces deux écrans dans le code** : les correctifs de fonction
+(voies du calendrier, contraste des étiquettes, chaîne de dépendances) restent,
+mais aucun autre investissement visuel.
+
+**Pourquoi.** Aramis a vu les deux écrans dans la preview du 25/08 au soir
+(soirée du 26/08 matin, Paris) : le calendrier a un affichage qu'il ne juge pas
+à la hauteur (patched, pas conçu) et la fiche tâche ne lui convient pas non
+plus. La leçon du 19/08 s'applique : quand un écran pose question, le chemin
+éprouvé est de passer par Claude Design (spec de rendu `.dc.html`), puis de
+porter à l'identique — pas de rafistoler en code.
+
+**Comment.** Aramis fournira le livrable Claude Design (le calendrier et la
+fiche). Les deux écrans se porteront ensuite selon le workflow validé :
+analyser le `.dc.html` avec gstack (`$B text` + `$B screenshot` +
+`vision_analyze`), PUIS coder. La section « Fiche tâche » de TODOS.md rappelle
+l'existant à conserver.
+
+**Statut :** 🔶 acté, à implémenter (livrable Claude Design à venir).
+
+---
+
 ## 2026-08-24 (après-midi) · Deux statuts de tâche, pas quatre
 
-**Décision.** Une tâche n'a que **deux statuts : à faire et fait** — c'est-à-dire
+**Décision.** Une tâche n'a que **deux statuts : à faire et fait**
 le seul champ `doneAt`. Aucun état « en cours » n'est stocké ni dérivé.
 
 La vue Graphe en tire **trois** statuts d'affichage, et pas un de plus :
