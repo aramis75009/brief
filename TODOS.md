@@ -380,7 +380,8 @@ raison nouvelle.
   supprimées ; carte placée en colonne et persistée ; filtres ; « Non placées »),
   mais le glisser-déposer `@dnd-kit` ne se simule pas fidèlement en automatisation.
   **À tester à la main**, c'est le seul geste du Kanban dont personne ne sait
-  s'il marche.
+  s'il marche. C'est la première chose à vérifier à la reprise de la main par
+  Claude Code (passation 25/08).
 - **`DesktopTaskDetail.tsx` portait 3 erreurs eslint** — **corrigées le 24/08
   soir par Hermes** (apostrophes + `preserve-manual-memoization`). Le lint
   global est désormais **0 erreur** (30 warnings d'imports morts, antérieurs,
