@@ -142,6 +142,18 @@ export function DesktopShell({
     } catch { /* silencieux */ }
   }, [onSaveItem]);
 
+  /**
+   * Un seul chemin d'écriture pour « A dépend de B », partagé par la fiche
+   * tâche et par le tirage de lien de la vue Graphe. Deux copies du même
+   * `dependsOn` finiraient par diverger sur un détail (doublon, garde-fou).
+   */
+  const handleAddDependency = useCallback(async (itemId: string, depId: string) => {
+    const it = items.find((i) => i.id === itemId);
+    if (!it) return;
+    if ((it.dependsOn ?? []).includes(depId)) return;
+    await onSaveItem(itemId, { dependsOn: [...(it.dependsOn ?? []), depId] });
+  }, [items, onSaveItem]);
+
   const handleToggleSub = useCallback(async (itemId: string, subId: string) => {
     const item = items.find((it) => it.id === itemId);
     if (!item?.subtasks) return;
@@ -258,6 +270,7 @@ export function DesktopShell({
               projects={projects}
               tags={tags}
               onOpenTask={openTask}
+              onAddDependency={handleAddDependency}
             />
           )}
 
@@ -294,12 +307,7 @@ export function DesktopShell({
                 const newTags = (it.tags ?? []).filter((t) => t !== tagId);
                 await onSaveItem(itemId, { tags: newTags });
               }}
-              onAddDependency={async (itemId, depId) => {
-                const it = items.find((i) => i.id === itemId);
-                if (!it) return;
-                const newDeps = [...(it.dependsOn ?? []), depId];
-                await onSaveItem(itemId, { dependsOn: newDeps });
-              }}
+              onAddDependency={handleAddDependency}
               onRemoveDependency={async (itemId, depId) => {
                 const it = items.find((i) => i.id === itemId);
                 if (!it) return;

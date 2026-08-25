@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   COMPACT,
   boundingBox,
+  connectedComponents,
   depths,
+  wouldCreateCycle,
   graphEdges,
   graphStatus,
   graphTasks,
@@ -192,11 +194,79 @@ describe("layoutGraph", () => {
     expect(pos.get("c")!.x - pos.get("b")!.x).toBe(step);
   });
 
-  it("empile les tâches d'une même colonne sans les superposer", () => {
+  /**
+   * ⚠️ Contrat CHANGÉ le 2026-08-25, volontairement.
+   *
+   * L'ancien test exigeait que deux tâches isolées partagent la même colonne
+   * (même x, un cran de plus en y). C'était la description fidèle du bug : une
+   * tâche sans dépendance a une profondeur de 0, donc les 40 tâches isolées d'un
+   * jeu réel s'empilaient toutes dans la colonne 0. Les isolées vont maintenant
+   * en grille — ce test dit la nouvelle règle.
+   */
+  it("met les tâches isolées côte à côte, pas en colonne", () => {
     const list = [item({ id: "a" }), item({ id: "b" })];
     const pos = layoutGraph(list);
-    expect(pos.get("a")!.x).toBe(pos.get("b")!.x);
-    expect(Math.abs(pos.get("a")!.y - pos.get("b")!.y)).toBe(COMPACT.H + COMPACT.VGAP);
+    expect(pos.get("a")!.y).toBe(pos.get("b")!.y);
+    expect(Math.abs(pos.get("a")!.x - pos.get("b")!.x)).toBe(COMPACT.W + COMPACT.GAP);
+  });
+
+  it("ne fait jamais une seule colonne d'un paquet de tâches isolées", () => {
+    const list = Array.from({ length: 42 }, (_, i) => item({ id: `t${i}` }));
+    const pos = layoutGraph(list);
+    const xs = new Set([...pos.values()].map((p) => p.x));
+    const ys = new Set([...pos.values()].map((p) => p.y));
+    // C'est le cœur du bug : avant, xs.size valait 1 et ys.size 42.
+    expect(xs.size).toBeGreaterThan(4);
+    expect(ys.size).toBeLessThan(10);
+  });
+
+  it("ne superpose jamais deux nœuds", () => {
+    const list = [
+      ...CHAIN,
+      item({ id: "d", dependsOn: ["a"] }),
+      item({ id: "e", dependsOn: ["d"] }),
+      ...Array.from({ length: 17 }, (_, i) => item({ id: `libre${i}` })),
+    ];
+    const pos = layoutGraph(list);
+    const points = [...pos.entries()];
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        const [, a] = points[i];
+        const [, b] = points[j];
+        const chevauche =
+          Math.abs(a.x - b.x) < COMPACT.W && Math.abs(a.y - b.y) < COMPACT.H;
+        expect(chevauche).toBe(false);
+      }
+    }
+  });
+
+  it("donne sa propre bande à chaque chaîne", () => {
+    const list = [
+      item({ id: "a1" }),
+      item({ id: "a2", dependsOn: ["a1"] }),
+      item({ id: "b1" }),
+      item({ id: "b2", dependsOn: ["b1"] }),
+    ];
+    const pos = layoutGraph(list);
+    // Les deux chaînes démarrent à la même abscisse (colonne 0 locale)…
+    expect(pos.get("a1")!.x).toBe(pos.get("b1")!.x);
+    // …mais pas à la même hauteur : deux bandes distinctes.
+    expect(pos.get("a1")!.y).not.toBe(pos.get("b1")!.y);
+  });
+
+  it("place les chaînes au-dessus de la grille des isolées", () => {
+    const list = [...CHAIN, item({ id: "seule" })];
+    const pos = layoutGraph(list);
+    expect(pos.get("seule")!.y).toBeGreaterThan(pos.get("a")!.y);
+  });
+
+  it("est déterministe sur un même jeu, quel que soit l'ordre d'entrée", () => {
+    const list = [...CHAIN, item({ id: "x" }), item({ id: "y" })];
+    const a = layoutGraph(list);
+    const b = layoutGraph([...list].reverse());
+    for (const id of ["a", "b", "c", "x", "y"]) {
+      expect(a.get(id)).toEqual(b.get(id));
+    }
   });
 
   it("la position épinglée par l'utilisateur gagne sur le calcul", () => {
@@ -207,6 +277,85 @@ describe("layoutGraph", () => {
   it("ignore une position épinglée sur un nœud devenu invisible", () => {
     const pos = layoutGraph(CHAIN, COMPACT, { fantome: { x: 1, y: 1 } });
     expect(pos.has("fantome")).toBe(false);
+  });
+});
+
+describe("connectedComponents", () => {
+  it("regroupe une chaîne entière dans une seule composante", () => {
+    const comps = connectedComponents(CHAIN);
+    expect(comps).toHaveLength(1);
+    expect(comps[0].map((t) => t.id).sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("relie deux tâches qui partagent un prédécesseur", () => {
+    // b et c dépendent tous deux de a : une seule composante, en Y.
+    const comps = connectedComponents([
+      item({ id: "a" }),
+      item({ id: "b", dependsOn: ["a"] }),
+      item({ id: "c", dependsOn: ["a"] }),
+    ]);
+    expect(comps).toHaveLength(1);
+  });
+
+  it("sépare des tâches sans lien", () => {
+    const comps = connectedComponents([item({ id: "a" }), item({ id: "b" })]);
+    expect(comps).toHaveLength(2);
+  });
+
+  it("ignore un dependsOn qui sort de la liste", () => {
+    const comps = connectedComponents([item({ id: "a", dependsOn: ["absent"] }), item({ id: "b" })]);
+    expect(comps).toHaveLength(2);
+  });
+
+  it("range les grosses composantes d'abord", () => {
+    const comps = connectedComponents([item({ id: "seule" }), ...CHAIN]);
+    expect(comps[0]).toHaveLength(3);
+    expect(comps[1]).toHaveLength(1);
+  });
+
+  it("ne boucle pas sur un cycle", () => {
+    const comps = connectedComponents([
+      item({ id: "a", dependsOn: ["b"] }),
+      item({ id: "b", dependsOn: ["a"] }),
+    ]);
+    expect(comps).toHaveLength(1);
+    expect(comps[0]).toHaveLength(2);
+  });
+});
+
+describe("wouldCreateCycle — le garde-fou du tirage de lien", () => {
+  it("refuse une tâche qui dépendrait d'elle-même", () => {
+    expect(wouldCreateCycle("a", "a", CHAIN)).toBe(true);
+  });
+
+  it("refuse de refermer une chaîne existante", () => {
+    // a → b → c. Faire dépendre `a` de `c` boucle.
+    expect(wouldCreateCycle("a", "c", CHAIN)).toBe(true);
+  });
+
+  it("refuse aussi le rebouclage d'un seul cran", () => {
+    expect(wouldCreateCycle("a", "b", CHAIN)).toBe(true);
+  });
+
+  it("accepte un lien qui va dans le sens du courant", () => {
+    // Faire dépendre `c` de `a` : redondant mais pas cyclique.
+    expect(wouldCreateCycle("c", "a", CHAIN)).toBe(false);
+  });
+
+  it("accepte un lien vers une tâche sans rapport", () => {
+    const list = [...CHAIN, item({ id: "libre" })];
+    expect(wouldCreateCycle("libre", "c", list)).toBe(false);
+    expect(wouldCreateCycle("a", "libre", list)).toBe(false);
+  });
+
+  it("ne boucle pas si un cycle existe déjà dans les données", () => {
+    const cyclique = [
+      item({ id: "a", dependsOn: ["b"] }),
+      item({ id: "b", dependsOn: ["a"] }),
+      item({ id: "c" }),
+    ];
+    expect(wouldCreateCycle("c", "a", cyclique)).toBe(false);
+    expect(wouldCreateCycle("a", "b", cyclique)).toBe(true);
   });
 });
 

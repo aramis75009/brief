@@ -32,6 +32,7 @@ import {
   layoutGraph,
   unlocks,
   visibleTasks,
+  wouldCreateCycle,
   type GraphMetrics,
   type GraphStatus,
   type Point,
@@ -119,11 +120,22 @@ type Drag =
   | { type: "pan"; sx: number; sy: number; px: number; py: number; moved: boolean }
   | { type: "node"; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
 
+/**
+ * Tirage de lien en cours.
+ *
+ * `fromId` est la tâche À FAIRE D'ABORD (l'ancre d'où part le geste), `overId`
+ * celle qui en dépendra. Le sens compte : c'est `overId.dependsOn` qui reçoit
+ * `fromId`, comme une flèche qu'on lit « d'abord ceci, ensuite cela ».
+ * `x`/`y` sont en coordonnées du monde, pas de l'écran.
+ */
+type LinkDrag = { fromId: string; x: number; y: number; overId: string | null };
+
 export function DependencyGraph({
   items,
   projects,
   tags,
   onOpenTask,
+  onAddDependency,
   density = "compact",
   showGrid = true,
   curve = 0.5,
@@ -133,6 +145,11 @@ export function DependencyGraph({
   tags: Tag[];
   /** Ouvre la vraie fiche tâche (double-clic sur un nœud, ou « Ouvrir la fiche »). */
   onOpenTask: (id: string) => void;
+  /**
+   * Crée « `itemId` dépend de `depId` ». Absent, les ancres de tirage ne
+   * s'affichent pas : pas de poignée qui ne mène à rien.
+   */
+  onAddDependency?: (itemId: string, depId: string) => void;
   density?: "compact" | "confortable";
   showGrid?: boolean;
   /** Cambrure des arêtes, 0.2 (raide) → 0.9 (ample). */
@@ -147,6 +164,10 @@ export function DependencyGraph({
   const [grabbing, setGrabbing] = useState(false);
   /** Incrémenté pour demander un recadrage — un booléen ne redéclencherait pas deux fois. */
   const [fitToken, setFitToken] = useState(0);
+  /** Lien en cours de tirage depuis l'ancre d'un nœud. `null` = aucun. */
+  const [link, setLink] = useState<LinkDrag | null>(null);
+  /** Motif d'un refus de lien, affiché puis effacé — jamais un échec muet. */
+  const [linkRefusal, setLinkRefusal] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -172,12 +193,18 @@ export function DependencyGraph({
   const listRef = useRef(list);
   const metricsRef = useRef(metrics);
   const selectedRef = useRef(selectedId);
+  const panRef = useRef(pan);
+  const linkRef = useRef<LinkDrag | null>(null);
+  const allTasksRef = useRef(allTasks);
   useEffect(() => {
     zoomRef.current = zoom;
     posRef.current = pos;
     listRef.current = list;
     metricsRef.current = metrics;
     selectedRef.current = selectedId;
+    panRef.current = pan;
+    linkRef.current = link;
+    allTasksRef.current = allTasks;
   });
 
   const projectOf = useCallback(
@@ -270,6 +297,74 @@ export function DependencyGraph({
       window.removeEventListener("mouseup", onUp);
     };
   }, []);
+
+  /* --- Tirage de lien : créer une dépendance à la souris --- */
+
+  /** Écran → monde : l'inverse exact de la transformation appliquée au calque. */
+  const toWorld = useCallback((clientX: number, clientY: number): Point => {
+    const el = canvasRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    const z = zoomRef.current;
+    const p = panRef.current;
+    return { x: (clientX - r.left - p.x) / z, y: (clientY - r.top - p.y) / z };
+  }, []);
+
+  const startLink = useCallback(
+    (fromId: string, e: React.MouseEvent) => {
+      // Sans stopPropagation, le nœud partirait en déplacement sous l'ancre.
+      e.stopPropagation();
+      e.preventDefault();
+      setLinkRefusal(null);
+      const w = toWorld(e.clientX, e.clientY);
+      setLink({ fromId, x: w.x, y: w.y, overId: null });
+    },
+    [toWorld],
+  );
+
+  /* Abonné une seule fois par tirage : `linking` est un booléen, pas l'objet —
+     sinon chaque mouvement de souris réabonnerait les écouteurs. */
+  const linking = link !== null;
+  useEffect(() => {
+    if (!linking) return;
+    const onMove = (e: MouseEvent) => {
+      const w = toWorld(e.clientX, e.clientY);
+      const el = (e.target as HTMLElement | null)?.closest?.("[data-node-id]") as HTMLElement | null;
+      const hovered = el?.dataset.nodeId ?? null;
+      setLink((l) => (l ? { ...l, x: w.x, y: w.y, overId: hovered && hovered !== l.fromId ? hovered : null } : l));
+    };
+    const onUp = () => {
+      const l = linkRef.current;
+      setLink(null);
+      if (!l || !l.overId || !onAddDependency) return;
+      const dependentId = l.overId;
+      const dependencyId = l.fromId;
+      const all = allTasksRef.current;
+      const dependent = all.find((t) => t.id === dependentId);
+      if ((dependent?.dependsOn ?? []).includes(dependencyId)) {
+        setLinkRefusal("Ce lien existe déjà.");
+        return;
+      }
+      if (wouldCreateCycle(dependentId, dependencyId, all)) {
+        setLinkRefusal("Refusé : les deux tâches s'attendraient l'une l'autre, et aucune ne serait jamais prête.");
+        return;
+      }
+      onAddDependency(dependentId, dependencyId);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [linking, toWorld, onAddDependency]);
+
+  /* Le refus s'efface de lui-même : un message d'erreur qui reste devient du décor. */
+  useEffect(() => {
+    if (!linkRefusal) return;
+    const id = setTimeout(() => setLinkRefusal(null), 5000);
+    return () => clearTimeout(id);
+  }, [linkRefusal]);
 
   /* La molette doit pouvoir annuler le défilement de la page : `passive: false`
      est impossible à obtenir via onWheel de React, d'où l'écoute manuelle. */
@@ -492,15 +587,36 @@ export function DependencyGraph({
               // Poignées de Bézier horizontales : les arêtes partent et arrivent à plat.
               const dx = Math.max(70, Math.abs(x2 - x1) * curve);
               const touches = !!selectedId && (from.id === selectedId || to.id === selectedId);
-              const color = colorOf(from.projectId);
-              const width = touches ? 2.6 : 1.8;
+              /*
+                Le trait dit l'état de la DÉPENDANCE, plus la couleur du projet
+                (refonte 2026-08-25). Deux raisons :
+
+                - La couleur de projet sur une arête décorait : DESIGN.md dit
+                  qu'une teinte désigne. Le liseré du nœud porte déjà le projet.
+                - L'ancien code testait `from.doneAt` pour choisir plein ou
+                  pointillé, mais `graphTasks()` exclut les tâches terminées :
+                  `from.doneAt` était donc TOUJOURS nul et le trait plein ne
+                  pouvait jamais s'afficher. La légende annonçait une
+                  distinction qui n'existait pas.
+
+                Ce qui distingue vraiment deux arêtes entre tâches actives,
+                c'est le statut de la source : « prête » = c'est le front, on
+                peut s'y mettre maintenant ; « bloquée » = la chaîne continue
+                derrière, ce lien attendra son tour.
+              */
+              const fromStatus = graphStatus(from, byId);
+              const front = fromStatus === "ready";
+              const color = fromStatus === "done" ? C.inkFaint : C.ink;
+              const width = touches ? 2.6 : front ? 2 : 1.5;
+              const baseOpacity = front ? 0.9 : 0.4;
               return (
-                <g key={`${from.id}->${to.id}`} opacity={selectedId ? (touches ? 1 : 0.14) : 0.85}>
+                <g key={`${from.id}->${to.id}`} opacity={selectedId ? (touches ? 1 : 0.14) : baseOpacity}>
                   <path
                     d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
                     fill="none"
-                    // Trait plein = dépendance levée ; pointillé = elle bloque encore.
-                    strokeDasharray={from.doneAt ? "0" : "5 5"}
+                    // Plein = la source est prête, le lien est actionnable ;
+                    // pointillé = la source attend encore quelqu'un.
+                    strokeDasharray={front ? "0" : "5 5"}
                     strokeLinecap="round"
                     style={{ stroke: color, strokeWidth: width }}
                   />
@@ -514,6 +630,27 @@ export function DependencyGraph({
                 </g>
               );
             })}
+
+            {/* Le lien en cours de tirage — il suit le curseur jusqu'au relâchement. */}
+            {link && (() => {
+              const a = pos.get(link.fromId);
+              if (!a) return null;
+              const x1 = a.x + metrics.W;
+              const y1 = a.y + metrics.H / 2;
+              const dx = Math.max(70, Math.abs(link.x - x1) * curve);
+              return (
+                <g>
+                  <path
+                    d={`M${x1},${y1} C${x1 + dx},${y1} ${link.x - dx},${link.y} ${link.x},${link.y}`}
+                    fill="none"
+                    strokeDasharray="6 4"
+                    strokeLinecap="round"
+                    style={{ stroke: C.ink, strokeWidth: 2.4, opacity: link.overId ? 1 : 0.5 }}
+                  />
+                  <circle cx={link.x} cy={link.y} r={link.overId ? 5 : 3} style={{ fill: C.ink, opacity: link.overId ? 1 : 0.5 }} />
+                </g>
+              );
+            })()}
           </svg>
 
           {list.map((t) => {
@@ -529,6 +666,7 @@ export function DependencyGraph({
               <div
                 key={t.id}
                 data-node="1"
+                data-node-id={t.id}
                 onMouseDown={(e) => onNodeDown(t.id, e)}
                 onDoubleClick={() => onOpenTask(t.id)}
                 title={t.title}
@@ -540,10 +678,16 @@ export function DependencyGraph({
                   padding: "9px 11px",
                   gap: 7,
                   background: t.doneAt ? "#FBFBFA" : C.surface,
-                  border: `1.5px solid ${selectedId === t.id ? C.ink : colorOf(t.projectId)}`,
+                  // Cible de dépôt pendant un tirage : l'encre annonce « ici ».
+                  border: `1.5px solid ${link?.overId === t.id ? C.ink : selectedId === t.id ? C.ink : colorOf(t.projectId)}`,
                   borderRadius: 14,
-                  boxShadow: selectedId === t.id ? "0 6px 20px rgba(16,16,16,.16)" : "0 2px 8px rgba(16,16,16,.04)",
-                  opacity: dim ? 0.34 : 1,
+                  boxShadow:
+                    link?.overId === t.id
+                      ? "0 0 0 3px rgba(16,16,16,.14)"
+                      : selectedId === t.id
+                        ? "0 6px 20px rgba(16,16,16,.16)"
+                        : "0 2px 8px rgba(16,16,16,.04)",
+                  opacity: dim && link?.overId !== t.id ? 0.34 : 1,
                   cursor: "grab",
                   transition: "opacity .18s, box-shadow .18s",
                 }}
@@ -552,6 +696,35 @@ export function DependencyGraph({
                   className="absolute"
                   style={{ top: 9, right: 10, width: 8, height: 8, borderRadius: 99, background: STATUS[st].color }}
                 />
+
+                {/*
+                  Ancre de tirage, sur le bord droit — le côté « ce qui vient
+                  après ». On tire de A vers B pour dire « A d'abord, puis B ».
+                  Toujours visible, comme les ports de React Flow : une poignée
+                  qui n'apparaît qu'au survol ne s'apprend pas.
+                */}
+                {onAddDependency && (
+                  <span
+                    role="button"
+                    aria-label={`Tirer un lien de dépendance depuis « ${t.title} »`}
+                    onMouseDown={(e) => startLink(t.id, e)}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    className="absolute"
+                    style={{
+                      right: -7,
+                      top: metrics.H / 2 - 7,
+                      width: 14,
+                      height: 14,
+                      borderRadius: 99,
+                      background: C.ink,
+                      border: "2.5px solid var(--color-surface)",
+                      cursor: "crosshair",
+                      opacity: link?.fromId === t.id ? 1 : 0.42,
+                      transition: "opacity .15s, transform .15s",
+                      transform: link?.fromId === t.id ? "scale(1.25)" : "none",
+                    }}
+                  />
+                )}
 
                 <div className="flex flex-wrap gap-1 overflow-hidden" style={{ height: 8 }}>
                   {(t.tags ?? []).slice(0, 4).map((tagId) => {
@@ -662,15 +835,66 @@ export function DependencyGraph({
             </span>
           ))}
           <span style={{ width: 1, height: 14, background: "rgba(16,16,16,.08)" }} />
+          {/*
+            La légende disait « levée » / « active ». « Levée » ne pouvait jamais
+            s'afficher : une dépendance levée est une tâche terminée, et le
+            graphe n'en montre aucune. Elle décrit maintenant ce que le trait
+            distingue réellement.
+          */}
           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: C.ink }}>
-            <span style={{ width: 18, height: 0, borderTop: "1.8px solid #8A8A84" }} />
-            levée
+            <span style={{ width: 18, height: 0, borderTop: "2px solid var(--color-ink)" }} />
+            à faire maintenant
           </span>
           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: C.ink }}>
-            <span style={{ width: 18, height: 0, borderTop: "1.8px dashed #8A8A84" }} />
-            active
+            <span style={{ width: 18, height: 0, borderTop: "1.5px dashed var(--color-ink)", opacity: 0.45 }} />
+            plus loin dans la chaîne
           </span>
         </div>
+
+        {/* --- Refus de lien — un geste impossible se dit, il ne s'ignore pas --- */}
+        {linkRefusal && (
+          <div
+            role="status"
+            className="absolute flex items-center"
+            style={{
+              left: "50%",
+              transform: "translateX(-50%)",
+              bottom: 16,
+              gap: 10,
+              maxWidth: 460,
+              padding: "10px 16px",
+              background: C.surface,
+              border: `1px solid rgba(226,58,46,.25)`,
+              borderRadius: 99,
+              boxShadow: "0 6px 20px rgba(16,16,16,.1)",
+              zIndex: 20,
+            }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: 99, background: C.danger, flex: "none" }} />
+            <span className="text-[12px] font-semibold" style={{ color: C.ink }}>{linkRefusal}</span>
+          </div>
+        )}
+
+        {/* Aide au geste, pendant le tirage seulement. */}
+        {link && (
+          <div
+            className="absolute"
+            style={{
+              left: "50%",
+              transform: "translateX(-50%)",
+              top: 16,
+              padding: "8px 14px",
+              background: C.ink,
+              borderRadius: 99,
+              zIndex: 20,
+              pointerEvents: "none",
+            }}
+          >
+            <span className="text-[12px] font-semibold" style={{ color: "#fff" }}>
+              {link.overId ? "Relâche pour créer la dépendance" : "Amène le lien sur la tâche qui doit suivre"}
+            </span>
+          </div>
+        )}
 
         {/* --- Commandes de zoom --- */}
         <div
