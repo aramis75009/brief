@@ -28,6 +28,7 @@ export function CaptureSheet({
   open,
   stage,
   seconds,
+  levels,
   transcript,
   drafts,
   projects,
@@ -44,6 +45,12 @@ export function CaptureSheet({
   open: boolean;
   stage: CaptureStage;
   seconds: number;
+  /**
+   * Niveaux audio mesurés (`useRecorder.levels`, 0→1). Sans eux la waveform
+   * retombe sur son animation décorative et ne représente plus la voix — c'est
+   * le bug du 2026-08-25.
+   */
+  levels?: number[];
   transcript: string;
   drafts: DraftItem[];
   projects: Project[];
@@ -107,6 +114,7 @@ export function CaptureSheet({
         {stage === "listening" && (
           <ListeningStage
             seconds={seconds}
+            levels={levels}
             onStop={onStopListen}
           />
         )}
@@ -201,7 +209,15 @@ function IdleStage({
 }
 
 /* --- Stage 2: Listening --- */
-function ListeningStage({ seconds, onStop }: { seconds: number; onStop: () => void }) {
+function ListeningStage({
+  seconds,
+  levels,
+  onStop,
+}: {
+  seconds: number;
+  levels?: number[];
+  onStop: () => void;
+}) {
   return (
     <div className="flex flex-col items-center gap-5 pb-1.5 pt-2.5" style={{ animation: "fade .2s both" }}>
       {/* Status */}
@@ -215,7 +231,7 @@ function ListeningStage({ seconds, onStop }: { seconds: number; onStop: () => vo
       </div>
 
       {/* Waveform */}
-      <WaveformActive />
+      <WaveformActive levels={levels} />
 
       {/* Stop button */}
       <button

@@ -1,5 +1,7 @@
 "use client";
 
+import { levelForBar } from "@/lib/waveform";
+
 /**
  * Waveform — trois variantes du design system.
  *
@@ -17,18 +19,51 @@ const ACTIVE_DELAYS = [
   "-2.25s", "-2.4s", "-2.55s", "-2.7s", "-2.85s",
 ];
 
-export function WaveformActive({ bars = ACTIVE_BARS }: { bars?: number[] }) {
+/**
+ * `levels` : niveaux mesurés par `useRecorder` (0→1, plancher 0.35), un par
+ * bande de fréquences. Fourni pendant un enregistrement, absent en maquette.
+ *
+ * Deux modes, et la distinction est le correctif du 2026-08-25 :
+ *
+ * - **Niveaux fournis** : la hauteur suit la voix via `transform: scaleY`,
+ *   piloté par l'état React à chaque frame. Aucune animation CSS, donc rien que
+ *   le reset `prefers-reduced-motion` de `globals.css` puisse figer — c'est lui
+ *   qui immobilisait les barres sur Chrome/Windows quand « Effets d'animation »
+ *   est désactivé dans les réglages système (`animation-iteration-count: 1`).
+ * - **Niveaux absents** : keyframe décorative d'origine, pour les aperçus du
+ *   design system. Elle ne prétend plus représenter le micro.
+ */
+export function WaveformActive({
+  bars = ACTIVE_BARS,
+  levels,
+}: {
+  bars?: number[];
+  levels?: number[];
+}) {
+  const measured = levels && levels.length > 0 ? levels : null;
+
   return (
     <div className="flex h-[88px] w-full items-center justify-center gap-1">
       {bars.map((h, i) => (
         <span
           key={i}
           className="w-[5px] rounded-full bg-ink"
-          style={{
-            height: h,
-            animation: "wave .95s ease-in-out infinite",
-            animationDelay: ACTIVE_DELAYS[i % ACTIVE_DELAYS.length],
-          }}
+          style={
+            measured
+              ? {
+                  height: h,
+                  transformOrigin: "center",
+                  transform: `scaleY(${levelForBar(measured, i, bars.length)})`,
+                  // Lissage seulement : si le reset reduced-motion l'annule, le
+                  // mouvement reste, puisqu'il vient de l'état, pas du CSS.
+                  transition: "transform 90ms linear",
+                }
+              : {
+                  height: h,
+                  animation: "wave .95s ease-in-out infinite",
+                  animationDelay: ACTIVE_DELAYS[i % ACTIVE_DELAYS.length],
+                }
+          }
         />
       ))}
     </div>

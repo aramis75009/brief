@@ -738,6 +738,7 @@ export function BriefApp() {
               open={captureOpen}
               stage={captureStage}
               seconds={recorder.seconds}
+              levels={recorder.levels}
               transcript={transcript}
               drafts={drafts}
               projects={projects}
