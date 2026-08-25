@@ -101,6 +101,9 @@ function DraggablePill({
         cursor: "grab",
         flex: "none",
         opacity: isDragging ? 0.4 : 1,
+        // La barre « Non placées » défile horizontalement : sans ça, un geste
+        // tactile ferait défiler la liste au lieu de saisir la pilule.
+        touchAction: "none",
       }}
     >
       {skin && (
@@ -504,6 +507,22 @@ export function DesktopKanban({
         </div>
       </div>
 
+      {/*
+        Le DndContext englobe AUSSI la barre « Non placées ». Avant le
+        2026-08-25 il ne s'ouvrait qu'au-dessus des colonnes, donc les
+        DraggablePill se montaient hors contexte : leurs hooks useDraggable
+        étaient liés à un contexte sans capteur, le geste n'activait rien, et
+        aucune erreur n'était levée. Le drop « ne faisait rien ».
+
+        L'indentation des enfants est laissée telle quelle : réindenter les 140
+        lignes rendrait le changement de structure invisible dans le diff.
+      */}
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+
       {/* Section non placées — barre horizontale */}
       {showUnplaced && allUnplaced.length > 0 && (
         <div
@@ -542,11 +561,6 @@ export function DesktopKanban({
 
       {/* Colonnes + ajout */}
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto" style={{ paddingBottom: 6 }}>
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
           {/* Colonnes du board */}
           {columns.map((col) => {
             const colItems = visibleItems.filter((it) => it.columnId === col.id && !it.doneAt);
@@ -654,8 +668,8 @@ export function DesktopKanban({
               </div>
             ) : null}
           </DragOverlay>
-        </DndContext>
       </div>
+      </DndContext>
     </div>
   );
 }
