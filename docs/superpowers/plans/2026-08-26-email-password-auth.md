@@ -194,6 +194,14 @@ describe("0001_authorized_users.sql", () => {
     expect(SQL).toMatch(/enable row level security/);
     expect(SQL).toMatch(/\(select auth\.uid\(\)\)/);
   });
+
+  it("grants both select and update to the authenticated role", () => {
+    // Task 5's login route does .select(...).maybeSingle() AND
+    // .update({ last_login_at }) on this table — a select-only policy would
+    // make the update silently affect zero rows under RLS.
+    expect(SQL).toMatch(/for select/);
+    expect(SQL).toMatch(/for update/);
+  });
 });
 ```
 
@@ -223,6 +231,16 @@ create policy "read own row"
   for select
   to authenticated
   using (user_id = (select auth.uid()));
+
+-- POST /api/auth/login (Task 5) met à jour last_login_at après connexion —
+-- sans cette policy, l'update est silencieusement bloqué par RLS (0 ligne
+-- affectée, aucune erreur renvoyée par PostgREST).
+create policy "update own row"
+  on public.authorized_users
+  for update
+  to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 ```
 
 - [ ] **Step 4: Run test, verify it passes**
@@ -1482,11 +1500,21 @@ git commit -m "feat: wire AuthGate into BriefApp, drop client-side PIN state"
 
 ---
 
-### Task 13: Update remaining `pin.ts` importers, delete `pin.ts`
+### Task 13: Update remaining `pin.ts` importers, delete `pin.ts` and `PinGate.tsx`
 
 **Files:**
 - Modify: `src/components/TaskDetailScreen.tsx`, `src/components/AgendaScreen.tsx`, `src/components/desktop/DesktopCalendar.tsx`, `src/components/desktop/DesktopTaskDetail.tsx`
-- Delete: `src/lib/pin.ts`, `src/lib/pin.test.ts`
+- Delete: `src/lib/pin.ts`, `src/lib/pin.test.ts`, `src/components/PinGate.tsx`
+
+**Note:** `PinGate.tsx` itself imports `{ setPin, verifyPin }` from `@/lib/pin`.
+Task 12 already removed its only caller (`BriefApp.tsx` now renders
+`AuthGate`), but the file itself is still on disk and still compiled by
+`tsc` (TypeScript type-checks every file `tsconfig.json` includes,
+whether or not anything imports it) — left in place, it would break this
+task's own Step 4 the moment `pin.ts` is deleted, with a dangling import.
+Confirmed by `grep -rln "PinGate" src` before writing this plan: only
+`PinGate.tsx` and `BriefApp.tsx` reference it, so deleting the file here is
+safe.
 
 - [ ] **Step 1: Repoint the four remaining importers**
 
@@ -1498,16 +1526,16 @@ sed -i '' 's/import { UnauthorizedError } from "@\/lib\/pin";/import { Unauthori
   src/components/AgendaScreen.tsx src/components/desktop/DesktopCalendar.tsx
 ```
 
-- [ ] **Step 2: Delete `pin.ts` and its test**
+- [ ] **Step 2: Delete `pin.ts`, its test, and the now-orphaned `PinGate.tsx`**
 
 ```bash
-rm src/lib/pin.ts src/lib/pin.test.ts
+rm src/lib/pin.ts src/lib/pin.test.ts src/components/PinGate.tsx
 ```
 
-- [ ] **Step 3: Verify nothing else references it**
+- [ ] **Step 3: Verify nothing else references either**
 
 ```bash
-grep -rln "@/lib/pin\|from \"./pin\"" src
+grep -rln "@/lib/pin\|from \"./pin\"\|PinGate" src
 ```
 
 Expected: no output.
