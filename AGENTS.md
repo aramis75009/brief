@@ -74,17 +74,17 @@ qu'ils sont écrits.
 
 ### Sécurité
 
-**Toute route sous `/api/` commence par la garde PIN.** Sans exception :
+**Toute route sous `/api/` commence par la garde de session.** Sans exception :
 
 ```ts
-const denied = requirePin(req);
+const denied = await requireSession();
 if (denied) return denied;
 ```
 
 L'URL de déploiement est publique ; `src/lib/guard.ts` est la seule barrière.
-L'écran PIN et la mémorisation locale (localStorage) ne sont que de l'UX, ils ne
-protègent rien — depuis le 2026-08-17, le code est saisi une fois par appareil
-puis mémorisé (`DECISIONS.md`).
+Authentification par email + mot de passe (Supabase Auth) depuis le 2026-08-26
+— voir `docs/superpowers/specs/2026-08-26-email-password-auth-design.md` et
+`DECISIONS.md`. Le PIN partagé unique (`BRIEF_PIN`) est retiré.
 
 `/api/cron/reminders` et `/api/capture` portent un **jeton machine**, pas le
 PIN : un secret déposé dans une crontab ou un raccourci iOS ne doit pas ouvrir

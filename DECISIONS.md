@@ -14,6 +14,31 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-26 · Le PIN partagé devient une auth email + mot de passe (Supabase)
+
+**Décision.** Le PIN unique (`BRIEF_PIN`, `src/lib/guard.ts`) est remplacé par
+une identité par utilisateur : email + mot de passe, via Supabase Auth. Une
+table Postgres `authorized_users` sert de liste blanche (aucune inscription
+libre — les comptes sont créés à la main par Aramis). Les routes machine
+(cron, capture, digest) gardent leurs jetons dédiés, inchangés.
+
+**Pourquoi.** Deux raisons d'Aramis (26/08) : sécurité (le PIN est un secret
+en clair côté client, sans notion d'identité) et préparation au
+multi-utilisateur (un second utilisateur viendra). Design complet et maquette
+validée avant implémentation — voir
+`docs/superpowers/specs/2026-08-26-email-password-auth-design.md` et
+`https://claude.ai/code/artifact/5655973d-ef06-4ed1-8585-90c6af776456`.
+
+**Comment.** `requireSession()` (nouveau, remplace `requirePin()`) vérifie
+localement un JWT Supabase (pas d'appel réseau par requête) ; `src/proxy.ts`
+(Next 16 a renommé `middleware.ts` en `proxy.ts`) rafraîchit la session sur
+chaque requête. `POST /api/auth/login|logout|forgot-password`,
+`GET /api/auth/session`. `src/lib/pin.ts` supprimé.
+
+**Statut.** 🔶 en cours d'implémentation (`docs/superpowers/plans/2026-08-26-email-password-auth.md`).
+
+---
+
 ## 2026-08-26 · Calendrier desktop et fiche tâche : refonte complète par Claude Design
 
 **Décision.** Le **Calendrier desktop** (`DesktopCalendar.tsx`) et la **fiche
