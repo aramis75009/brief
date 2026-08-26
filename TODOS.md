@@ -89,10 +89,11 @@ sont résolus et inlinés (session 401, pas de 500).
   `/api/agenda` (migrée) avec l'ancien header PIN → 401. `digest` marche
   toujours (jeton machine). À trancher : jeton machine dédié en lecture pour
   `/api/agenda`, ou retirer la sous-commande.
-- **Le flux « Mot de passe oublié » est un cul-de-sac.** `resetPasswordForEmail`
-  est appelé sans `redirectTo`, et il n'existe **aucun écran** dans l'app pour
-  saisir un nouveau mot de passe après le clic sur le lien reçu par email. Le
-  bouton est décoratif tant que ça n'est pas construit.
+- **✅ Le flux « Mot de passe oublié » est COMPLET depuis le 26/08 soir
+  (commit `a13af27`, déployé)** — `redirectTo` vers `/auth/reset-password`,
+  échange du code dans `src/proxy.ts`, page de saisie du nouveau mot de
+  passe, route `POST /api/auth/reset-password` (`updateUser`). 6 tests
+  ajoutés (351 au total).
 - **Aucune purge de l'état client à la déconnexion** (`BriefApp.tsx`) : les
   items du compte précédent restent brièvement affichés après une nouvelle
   connexion sur le même onglet, et la file hors-ligne (`src/lib/queue.ts`,

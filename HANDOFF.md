@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 26/08 après-midi) |
 | **Branche** | `feat/email-password-auth` = **prod depuis le 26/08 soir** (fast-forward depuis `feat/ui-redesign-claude`) |
-| **Commits** | `c13217c` = HEAD local + origin + **prod déployée et vérifiée** |
+| **Commits** | `a13af27` = HEAD local + origin + **prod déployée et vérifiée** (dont `80361c7` passation, `c13217c` base auth) |
 
 ## Goal — l'objectif
 
@@ -213,9 +213,11 @@ archive de la passation précédente.
    `.next/types` n'a pas été régénéré récemment (dépend d'un `next dev`/`build`
    récent, pas du code de cette migration — confirmé disparaître/réapparaître
    selon l'état de `.next`). Pas bloquant, pré-existant.
-3. **Flux « mot de passe oublié » incomplet** — `resetPasswordForEmail` sans
-   `redirectTo`, aucun écran de saisie du nouveau mot de passe. Bouton
-   décoratif dans `AuthGate.tsx`. Voir `TODOS.md`.
+3. **Flux « mot de passe oublié » — ✅ COMPLET depuis le 26/08 soir (commit
+   `a13af27`, déployé)** : `redirectTo` vers `/auth/reset-password`, échange
+   du code dans `src/proxy.ts`, page de saisie du nouveau mot de passe,
+   route `POST /api/auth/reset-password` (`updateUser`). 6 tests ajoutés
+   (351 au total).
 4. **`scripts/brief-agents.sh agenda`** cassé (PIN header vers une route
    migrée) — `digest` fonctionne toujours. Voir `TODOS.md`.
 5. **Aucune purge de l'état client à la déconnexion** (`BriefApp.tsx`) — sans
@@ -251,12 +253,15 @@ d'attention :
    le mot de passe choisi via l'email d'invitation Supabase, pour confirmer
    le flux de bout en bout (connexion → app déverrouillée → capture →
    rappels). C'est la seule étape qui ne pouvait pas être faite par Hermes.
+   **Si le mot de passe n'a jamais été choisi** (lien d'invitation non
+   utilisé) : « Mot de passe oublié ? » sur l'écran de connexion envoie un
+   lien de réinitialisation → `/auth/reset-password` permet de choisir le
+   mot de passe (flux complet depuis le 26/08 soir, commit `a13af27`).
 2. **Puis traiter les points différés de `TODOS.md` § P0 bis** (script
-   `brief-agents.sh agenda` cassé, flux « mot de passe oublié » incomplet,
-   purge de l'état client à la déconnexion, doc README/coordination/
-   agent-calendar-access encore périmée — le point le plus gênant : le
-   tableau des variables d'env de `README.md` omet les deux clés Supabase et
-   liste encore `BRIEF_PIN`).
+   `brief-agents.sh agenda` cassé, purge de l'état client à la déconnexion,
+   doc README/coordination/agent-calendar-access encore périmée — le point
+   le plus gênant : le tableau des variables d'env de `README.md` omet les
+   deux clés Supabase et liste encore `BRIEF_PIN`).
 3. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
    en attente du livrable `.dc.html` (décision du matin 26/08).
 
