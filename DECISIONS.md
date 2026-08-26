@@ -35,20 +35,22 @@ validée avant implémentation — voir
 `https://claude.ai/code/artifact/5655973d-ef06-4ed1-8585-90c6af776456`.
 
 **Comment.** `requireSession()` (nouveau, remplace `requirePin()`) vérifie
-localement un JWT Supabase — **sans appel réseau par requête seulement une
-fois la clé de signature du projet passée en asymétrique** (dashboard
-Supabase, Authentication → JWT Keys) ; tant que le projet signe en HS256
-(réglage par défaut), `getClaims()` retombe sur un aller-retour réseau vers
-Supabase à chaque appel. `src/proxy.ts` (Next 16 a renommé `middleware.ts` en
-`proxy.ts`) rafraîchit la session sur chaque requête. `POST
-/api/auth/login|logout|forgot-password`, `GET /api/auth/session`.
-`src/lib/pin.ts` supprimé.
+localement un JWT Supabase — sans appel réseau par requête, à condition que
+la clé de signature du projet soit asymétrique (ECC). **Vérifié sur le
+projet réel (26/08) : c'est déjà le cas nativement** — les projets Supabase
+créés récemment provisionnent une clé ECC (P-256) par défaut, l'ancienne
+clé HS256 n'apparaît qu'en clé « précédente », gardée seulement pour
+vérifier les jetons déjà émis. Aucune migration à faire. `src/proxy.ts`
+(Next 16 a renommé `middleware.ts` en `proxy.ts`) rafraîchit la session sur
+chaque requête. `POST /api/auth/login|logout|forgot-password`,
+`GET /api/auth/session`. `src/lib/pin.ts` supprimé.
 
 **Statut.** ✅ Implémenté, revue de branche complète effectuée (correctifs de
-déploiement inclus — voir `docs/superpowers/plans/2026-08-26-email-password-auth.md`).
-Reste à faire par Aramis, hors du code : provisionnement du projet Supabase
-(compte, clé de signature asymétrique, Site URL), voir la checklist manuelle
-du plan.
+déploiement inclus). ✅ Provisionnement Supabase terminé le 26/08 (projet,
+migration SQL, compte Aramis, clé JWT déjà asymétrique, Site URL/Redirect
+URLs). **Reste uniquement le déploiement** : poser les deux variables
+d'environnement dans `.env.production` sur le VPS et redéployer — voir
+`TODOS.md` § P0 bis et `docs/superpowers/plans/2026-08-26-email-password-auth.md`.
 
 ---
 

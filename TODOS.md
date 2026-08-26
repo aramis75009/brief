@@ -40,16 +40,30 @@ Voir `docs/superpowers/specs/2026-08-26-email-password-auth-design.md`,
 plan, section Task 2 Step 6) :
 1. ✅ **Fait le 2026-08-26** — projet Supabase créé (`brief`,
    `https://nqakaefcwdpotnatcdvb.supabase.co`, Frankfurt/eu-central-1).
-   Reste à activer email+mot de passe seul dans Authentication → Providers.
-2. 🔶 En cours — appliquer `supabase/migrations/0001_authorized_users.sql`,
-   créer le compte d'Aramis, l'insérer dans `authorized_users`.
-3. Migrer la clé de signature JWT vers de l'asymétrique (Authentication →
-   JWT Keys) — sans ça, `requireSession()` fait un aller-retour réseau vers
-   Supabase à **chaque** appel API au lieu de vérifier localement.
-4. Régler le Site URL / Redirect URLs Supabase sur le vrai domaine Brief.
-5. Poser `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-   dans `.env.production` sur le VPS, vérifier que
-   `docker compose --env-file .env.production config` les résout (pas vides).
+   Providers vérifié : Email seul déjà actif par défaut, tout le reste
+   désactivé — rien à changer.
+2. ✅ **Fait le 2026-08-26** — `supabase/migrations/0001_authorized_users.sql`
+   appliquée (table + les deux policies RLS). Compte d'Aramis créé par
+   invitation email (`aramis.begnene@gmail.com`, UUID
+   `90f86119-b834-4f8a-9410-219940373653`), inséré dans `authorized_users`
+   (vérifié : `select * from authorized_users` → 1 ligne).
+3. ✅ **Déjà en l'état voulu** — la clé de signature JWT de ce projet est
+   nativement en ECC (P-256) asymétrique (vérifié dans Project Settings →
+   JWT Keys : `CURRENT KEY` = ECC P-256, l'ancienne clé HS256 n'apparaît
+   qu'en "Previously used keys", conservée seulement pour vérifier les
+   jetons déjà émis jusqu'à expiration). Rien à migrer — l'entrée
+   `DECISIONS.md` sur le sujet supposait à tort que HS256 était le défaut
+   sur les nouveaux projets ; à corriger.
+4. ✅ **Fait le 2026-08-26** — Site URL réglé sur
+   `https://brief.srv1899780.hstgr.cloud`, Redirect URL
+   `https://brief.srv1899780.hstgr.cloud/**` ajoutée (vérifié après
+   rechargement de la page, valeurs persistées côté serveur).
+5. 🔶 **Reste à faire — nécessite un accord explicite avant d'y toucher**
+   (ça touche la prod) : poser `NEXT_PUBLIC_SUPABASE_URL` /
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` dans `.env.production` sur le VPS
+   (`NEXT_PUBLIC_SUPABASE_URL=https://nqakaefcwdpotnatcdvb.supabase.co`),
+   vérifier que `docker compose --env-file .env.production config` les
+   résout (pas vides), puis déployer.
 6. Après déploiement : `curl -i https://<domaine>/api/auth/session` → `401`
    attendu. Un `500` = variable absente au build (le piège déjà documenté
    pour la clé VAPID). Vérifier aussi `docker inspect --format
