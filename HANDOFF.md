@@ -11,127 +11,191 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-26 (matin) · Cinq chantiers poussés, déployés ; refonte Calendrier + Fiche par Claude Design
+# Passation — 2026-08-26 (après-midi) · PIN → Supabase Auth (email + mot de passe), fusionné, PAS déployé
 
 | | |
 |---|---|
-| **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 25/08 soir) |
-| **Branches** | `feat/ui-redesign-claude` = **prod, à jour = `d97f47d`** ; `chantiers-frontend-2026-08-25` (fusionnée en ff, à jour = `d97f47d`) |
-| **Commits** | `d97f47d` = HEAD local + origin + **prod déployée** (8 commits d'avance sur l'ancienne prod `f3c2b70`) |
-| **Base de la passation précédente** | `5b42116` (Claude Code, 25/08 soir) |
+| **Agent** | Claude Code (Sonnet 5) |
+| **Branche** | `feat/email-password-auth` (fusion de `feat/email-password-auth-sdd`, supprimée après fusion) |
+| **Commits** | `c803c96` = HEAD local (merge). Base de la branche : `d2d9316` (tip de `feat/ui-redesign-claude` au démarrage de la session). |
 
 ## Goal — l'objectif
 
-Les cinq chantiers front-end de Claude Code (onde de capture, DnD Kanban,
-chevauchement calendrier, fiche tâche, graphe) ont été **poussés et déployés
-en prod** (accord explicite d'Aramis le 26/08 : « ok push … et déploie »).
-La suite : Aramis a vu la preview et tranche deux **refontes Claude Design**
-(calendrier desktop + fiche tâche desktop) — le terrain est prêt pour Claude
-Design / le prochain agent.
+Remplacer le PIN partagé unique (`BRIEF_PIN`) par une authentification par
+utilisateur (email + mot de passe, Supabase Auth), à la demande d'Aramis
+(sécurité + préparation au multi-utilisateur). Brainstorming → spec → plan
+d'implémentation en 14 tâches → exécution par subagents (Subagent-Driven
+Development) → revue de branche complète → correctifs → fusion locale.
 
 ## Current state — ce qui a été fait
 
-### 1. Les 5 chantiers + la décision — poussés et DÉPLOYÉS (26/08)
+### 1. Design et implémentation — complets, fusionnés
 
-- Branche `chantiers-frontend-2026-08-25` (7 commits : `c3ebd53`, `5e07462`,
-  `dcad9ce`, `62ad6a6`, `e696f4f`, `6840e21` handoff, + `d97f47d` décision)
-  poussée, puis **fast-forward dans `feat/ui-redesign-claude`** et push.
-- **Prod déployée** via bundle+scp+ff (`/docker/brief` = `d97f47d`) +
-  `docker compose --env-file .env.production up -d --build` — vérifiée par
-  `GET /` 200 et API 401 sans PIN (26/08).
-- Récap des 5 chantiers (causes racines + recettes mesurées : dans la
-  passation précédente, archive `docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md`).
+- **Spec** : `docs/superpowers/specs/2026-08-26-email-password-auth-design.md`.
+- **Plan** : `docs/superpowers/plans/2026-08-26-email-password-auth.md` (14
+  tâches, corrigé en cours de route — voir Decisions).
+- **Maquette approuvée par Aramis** (écran de connexion, logo animé) :
+  `https://claude.ai/code/artifact/5655973d-ef06-4ed1-8585-90c6af776456`.
+- Les 14 tâches sont passées par un cycle complet implémenteur → relecteur,
+  avec boucles de correction quand nécessaire (détail exhaustif dans le
+  ledger SDD, supprimé avec le worktree — l'historique git fait foi
+  maintenant, `git log --oneline d2d9316..c803c96`).
+- **Revue de branche complète** (Opus) a trouvé 3 défauts critiques de
+  **déploiement**, invisibles à l'échelle d'une seule tâche — tous corrigés
+  et revérifiés (voir Decisions). Verdict final : **Ready to merge — Yes.**
+- **Fusion locale faite** : `feat/email-password-auth-sdd` → `feat/email-password-auth`
+  (un conflit dans `DECISIONS.md`, résolu en gardant la version la plus
+  complète). Worktree nettoyé, branche technique supprimée.
 
-### 2. Valids avant/après déploiement (26/08, Hermes)
+### 2. Ce que ça change concrètement
 
-- `npm run build` **réussi** (le portail jamais franchi : `next dev` ne
-  tournait plus ; port 3000 = bridge WhatsApp). 26 routes compilées, warnings
-  « Dynamic filesystem access » pré-existants sur `store.ts` (pas des erreurs).
-- **Rendu mobile de la capture recetté** en Chromium 390×844 (seul chantier
-  touchant du code partagé mobile : `CaptureSheet.tsx`, `BriefApp.tsx`,
-  `Waveform.tsx`) : idle conforme au design system, listening → waveform
-  pilotée par l'état React (micro stub → niveaux → `scaleY` varient), 0 erreur
-  console.
-- Preview publique HTTPS (localtunnel) servie à Aramis pour relecture sur
-  téléphone + PC — c'est elle qui a déclenché les décisions de redesign.
+| | Avant | Après |
+|---|---|---|
+| Garde `/api/*` | `requirePin(req)` (PIN partagé, header `x-brief-pin`) | `await requireSession()` (JWT Supabase, cookie httpOnly) |
+| Écran de connexion | `PinGate.tsx` (supprimé) | `AuthGate.tsx` (email + mot de passe) |
+| Session | localStorage + cookie JS, PIN en clair | Cookie httpOnly, rafraîchi par `src/proxy.ts` (Next 16 : `middleware.ts` → `proxy.ts`, renommage pris en compte) |
+| Autorisation | N'importe qui avec le PIN | Table `authorized_users` (Postgres/Supabase), liste blanche à l'entrée |
+| Routes machine (cron/capture/digest) | Jeton machine dédié | **Inchangé** |
 
-### 3. Bug de déploiement attrapé au passage (26/08)
+### 3. ⚠️ NON DÉPLOYABLE EN L'ÉTAT — provisionnement Supabase en cours
 
-`npm run build` et `next start` étaient **interdits** ici tant qu'un dev
-tournait… et le port 3000 de ce conteneur est **pris par le bridge WhatsApp**
-(Express) — `next start` échouait en EADDRINUSE. Build seule, `next start` sur
-3001 (courte recette), puis serveur standalone sur 3002 (isolé de la prod).
+**Aramis a créé le projet Supabase pendant cette session** (`brief`,
+`https://nqakaefcwdpotnatcdvb.supabase.co`, Frankfurt/eu-central-1, healthy).
+**Reste à faire avant tout déploiement** — checklist complète dans `TODOS.md`
+(section « P0 bis ») et dans le plan (Task 2, Step 6) :
 
-## Decisions — choix critiques (journal complet dans `DECISIONS.md`)
+1. ✅ Fait — créer le projet Supabase.
+2. 🔶 En cours — activer email+mot de passe seul (Providers), appliquer
+   `supabase/migrations/0001_authorized_users.sql`, créer le compte
+   d'Aramis, l'insérer dans `authorized_users`.
+3. Migrer la clé de signature JWT vers de l'asymétrique (sinon
+   `requireSession()` fait un aller-retour réseau à chaque appel API).
+4. Site URL / Redirect URLs Supabase → domaine réel de Brief.
+5. `.env.production` sur le VPS : poser les deux clés Supabase, vérifier
+   que `docker compose --env-file .env.production config` les résout.
+6. Après déploiement : `curl -i https://<domaine>/api/auth/session` → 401
+   attendu (un 500 = variable absente au build). Vérifier que le conteneur
+   `cron` démarre (le healthcheck ciblait une route supprimée — corrigé,
+   jamais testé avec un Docker réel dans cette session, seulement relu).
 
-- **Calendrier desktop + fiche tâche → refonte complète par Claude Design
-  (26/08, Aramis après la preview)**. Ne plus rafistoler ces deux écrans en
-  code ; attendre le livrable `.dc.html` puis porter. Inscrit en tête de
-  `DECISIONS.md` (2026-08-26) et dans `TODOS.md` (P1).
-- Rappel : « une teinte désigne, elle ne décore jamais » — la palette
-  d'étiquettes saturée reste un arbitrage produit ouvert (`TODOS.md`, P2).
+**Sans les étapes 1-2, Aramis ne peut plus se connecter à sa propre app** —
+le PIN est retiré, rien ne le remplace tant que le compte Supabase n'existe
+pas.
+
+## Decisions — choix critiques ou irréversibles
+
+- **Email + mot de passe, pas email + code OTP.** Le brainstorming initial
+  était parti sur un code à usage unique envoyé par email ; Aramis a corrigé
+  en cours de route (« email plus mdp »). Design et maquette refaits en
+  conséquence — voir la conversation, pas archivée séparément.
+- **`authorized_users` = liste blanche à l'entrée, pas un verrou en continu.**
+  Retirer une ligne bloque les futures connexions mais ne révoque **pas**
+  une session déjà ouverte (le cookie httpOnly continue d'être rafraîchi par
+  `src/proxy.ts` jusqu'à expiration naturelle). Pour couper l'accès
+  immédiatement, désactiver/supprimer dans `auth.users` côté Supabase.
+  Nuance ajoutée à `DECISIONS.md` après que la revue finale l'ait signalée.
+- **`requireSession()` ne vérifie PAS `authorized_users` à chaque requête**,
+  seulement au login (`/api/auth/login`). Sans inscription libre dans
+  Brief, `auth.users` EST déjà la liste blanche ; `authorized_users` sert
+  surtout de métadonnées (nom, dernière connexion) + défense en profondeur
+  au moment de la connexion, pas un contrôle permanent — ce qui garde
+  `requireSession()` sans appel réseau par requête (une fois la clé JWT
+  passée en asymétrique).
+- **Deux défauts de plan trouvés au pré-scan SDD, corrigés avant tout
+  dispatch** : la policy RLS de `authorized_users` ne couvrait que `select`
+  alors que le login fait aussi un `update` (RLS aurait bloqué silencieusement,
+  0 ligne, aucune erreur) → policy `update` ajoutée. `PinGate.tsx` n'était
+  jamais explicitement supprimé dans le plan initial alors qu'il devenait
+  orphelin → ajouté à la tâche de nettoyage final.
+- **Pas de bouton de déconnexion pendant longtemps — revenu dessus.** Le plan
+  supposait à tort qu'un bouton « Verrouiller » existait déjà (faux, vérifié
+  par grep). Première décision : ne pas en ajouter (hors périmètre). La
+  revue de branche finale a renversé cette décision à raison : contrairement
+  à l'ancien PIN (effaçable par l'utilisateur), le nouveau cookie httpOnly
+  ne peut être terminé par **aucune** action utilisateur sans un bouton.
+  Ajouté : `AccountSheet.tsx` a maintenant une ligne « Se déconnecter ».
+- **3 défauts critiques trouvés uniquement à la revue de branche complète**
+  (invisibles à l'échelle d'une tâche) — tous corrigés dans une seule vague
+  de correctifs, revérifiée :
+  1. `/api/capture` appelait `/api/parse` en HTTP interne avec l'ancien
+     header PIN (route désormais protégée par session) → 401 → capture
+     cassée en silence. Corrigé par extraction de la logique de
+     structuration dans `src/lib/parse.ts`, appelée directement (plus
+     d'appel HTTP interne du tout).
+  2. `Dockerfile` : `HEALTHCHECK` visait `POST /api/session` (supprimée) →
+     conteneur jamais sain → `cron` (rappels Web Push) ne démarre jamais.
+     Corrigé : `GET /api/auth/session`.
+  3. `NEXT_PUBLIC_SUPABASE_URL`/`..._PUBLISHABLE_KEY` jamais câblées dans
+     `Dockerfile`/`docker-compose.yml` (piège déjà documenté pour la clé
+     VAPID, oublié pour Supabase) → site entièrement injoignable au
+     déploiement. Corrigé, calqué sur le motif VAPID existant.
+- **Une branche technique (`feat/email-password-auth-sdd`) a servi de
+  worktree** parce que `feat/email-password-auth` était déjà extraite dans
+  la copie principale (git interdit une même branche dans deux worktrees).
+  Fusionnée puis supprimée à la fin — ne pas la chercher, elle n'existe
+  plus.
 
 ## Changed — fichiers et composants
 
-| Fichier | Nature |
-|---|---|
-| `DECISIONS.md` | +entrée 2026-08-26 (calendrier + fiche → Claude Design) |
-| `TODOS.md` | sections mises à jour (P1) + fiche tâche ajoutée |
-| `docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md` | **NEW** — archive de la passation précédente |
-| `HANDOFF.md` | cette passation |
+Diff complet : `git diff d2d9316..c803c96 --stat` (~50 fichiers). Nouveaux :
+`src/lib/supabase/server.ts` (pas de `client.ts` — jamais nécessaire, tout
+passe par les routes `/api/auth/*` côté serveur), `src/lib/parse.ts`, `src/proxy.ts`,
+`src/app/api/auth/{login,logout,session,forgot-password}/`,
+`src/components/AuthGate.tsx`, `supabase/migrations/0001_authorized_users.sql`.
+Supprimés : `src/lib/pin.ts`, `src/components/PinGate.tsx`,
+`src/app/api/session/route.ts`. Modifiés : les 17 autres routes `/api/*`
+(garde), `Dockerfile`/`docker-compose.yml` (healthcheck + build args),
+`src/components/{BriefApp,AccountSheet}.tsx`, `AGENTS.md` (invariant
+sécurité), `DECISIONS.md`, `eslint.config.mjs` (`argsIgnorePattern`).
 
-(Les fichiers des 5 chantiers — `src/lib/waveform.ts`, `calendarLanes.ts`,
-modifs `graph.ts`/`Desktop*`/`CaptureSheet`… — sont détaillés dans l'archive
-ci-dessus ; `package-lock.json` et `AGENTS.md` intacts vérifié.)
+## Validations — passants / échoués / non lancés
 
-## Validations
+### ✅ Passants (résultat merge, main checkout, vérifié après fusion)
 
-### ✅ Passants
+```
+npx vitest run     → 27 files, 345 passed | 1 skipped
+npx eslint src      → 0 errors, 29 warnings (baseline pré-existante, confirmée
+                       identique avant/après toute la migration)
+npx tsc --noEmit    → propre une fois le .next périmé de la copie principale
+                       supprimé (voir Non lancés)
+```
 
-| Commande / geste | Résultat |
-|---|---|
-| `npx eslint .` | 0 erreur (état de la branche, 25/08) |
-| `npx tsc --noEmit` | propre (25/08) |
-| `npx vitest run` | 325 passed, 1 skipped (25/08) |
-| `npm run build` | **réussi** (26/08, exit 0) |
-| Recette mobile capture (Chromium 390×844) | idle + listening conformes, 0 erreur console |
-| Preview publique (localtunnel) | accessible, jeux de données de démo isolés |
-| Prod | `GET /` 200, API 401 sans PIN (les) |
+### ⚠️ Non lancés / à vérifier
 
-### ⚠️ Non lancés / À vérifier
-
-1. **Le tirage de lien au doigt (graphe)** — ancres `mousedown` : non branché
-   sur tactile. Le graphe reste desktop, mais à savoir.
-2. **Le « +N » du calendrier au-delà de 4 voies** — testé à 4 événements
-   simultanés, pas à 10 (le calendrier va de toute façon être redessiné).
-3. **La synchro CalDAV** — pas de `.env.local` de production en local, test
-   d'intégration toujours skipped.
-4. **Démo preview locale** — `data/` du repo contient un `items.json`
-   d'ÉCHANTILLON au format ancien (`dueAt`/`completedAt`, 3 items) ; pas
-   touché, mais à ne pas confondre avec les vraies données.
+1. **Aucun déploiement Docker réel dans cette session** — le healthcheck et
+   les `build.args` Supabase ont été corrigés et relus attentivement, jamais
+   exercés (`docker build`/`docker compose up`, Docker absent de cette
+   machine). Checklist de vérification post-déploiement dans `TODOS.md`.
+2. **`src/app/layout.tsx:60` — `LayoutProps` introuvable** en `tsc` si le
+   `.next/types` n'a pas été régénéré récemment (dépend d'un `next dev`/`build`
+   récent, pas du code de cette migration — confirmé disparaître/réapparaître
+   selon l'état de `.next`, jamais lié à un changement de code de cette
+   branche). Pas bloquant, déjà documenté comme pré-existant par plusieurs
+   relectures pendant la session.
+3. **Flux « mot de passe oublié » incomplet** — `resetPasswordForEmail` sans
+   `redirectTo`, aucun écran de saisie du nouveau mot de passe. Le bouton
+   existe dans `AuthGate.tsx` mais ne mène nulle part tant que ça n'est pas
+   construit. Voir `TODOS.md`.
+4. **`scripts/brief-agents.sh agenda`** cassé (PIN header vers une route
+   migrée) — `digest` fonctionne toujours. Voir `TODOS.md`.
 
 ## Blockers
 
-**Aucun blocage technique.** Points d'attention :
-
-- **`npm install` sous Windows abîme `package-lock.json`** (supprime les champs
-  `libc`) — avant tout commit depuis Windows, `git diff --stat package-lock.json`
-  doit être vide.
-- **Le remote prod (/docker/brief) est HTTPS sans credentials** : se déployer
-  par bundle+scp+ff (pas de push depuis le VPS). Voir `docs/coordination.md`.
-- **Ne pas lancer `npm run dev` sur ce conteneur** (AGENTS.md) : le port 3000
-  appartient au bridge WhatsApp ; `.next` vit dans `/opt/data/Projets/brief`
-  (copie Hermes), PAS dans `/docker/brief`.
+**Aucun blocage technique côté code.** Le blocage est le provisionnement
+Supabase (en cours avec Aramis au moment de cette passation — voir Current
+state §3) : sans lui, un déploiement casserait l'accès d'Aramis à sa propre
+app.
 
 ## Next — la prochaine action
 
-1. **Aramis fournit les livrables Claude Design** pour le calendrier desktop et
-   la fiche tâche → les porter selon le workflow éprouvé (analyser le `.dc.html`
-   avec gstack, PUIS coder).
-2. Trancher les deux arbitrages produit ouverts dans `TODOS.md` (filtre projet
-   de « Non placées », palette d'étiquettes).
-3. Quand les vrais statuts de tâche arriveront : ne toucher que `graphStatus()`
-   dans `src/lib/graph.ts` (décision 24/08).
+1. **Terminer le provisionnement Supabase avec Aramis** (Providers email
+   seul, migration SQL, compte + `authorized_users`, clé JWT asymétrique,
+   Site URL) — checklist exacte dans `TODOS.md` § P0 bis.
+2. Poser les deux variables d'env sur le VPS (`.env.production`), déployer,
+   suivre la checklist de vérification post-déploiement (`TODOS.md`).
+3. Une fois en prod et vérifié : traiter les points différés de `TODOS.md`
+   § P0 bis (script agenda, mot de passe oublié, doc README/coordination
+   encore périmée) avant qu'un agent ne bute dessus.
 
 ---
 
@@ -139,7 +203,8 @@ ci-dessus ; `package-lock.json` et `AGENTS.md` intacts vérifié.)
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-26 (matin)** | **Cinq chantiers poussés et déployés ; refonte Calendrier + Fiche par Claude Design** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-26 (après-midi)** | **PIN → Supabase Auth (email + mot de passe), fusionné, pas déployé** | **Claude Code** | *(cette passation)* |
+| 2026-08-26 (matin) | Cinq chantiers poussés et déployés ; refonte Calendrier + Fiche par Claude Design | Hermes Agent | [fiche](docs/handoffs/2026-08-26-matin-chantiers-deployes-hermes.md) |
 | 2026-08-25 (soir) | Cinq chantiers front-end : waveform, DnD Kanban, calendrier, fiche, graphe | Claude Code | [fiche](docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md) |
 | 2026-08-25 (matin) | État du repo + défi Kanban/dépendances/Graphe pour Claude Code | Hermes Agent | [fiche](docs/handoffs/2026-08-25-hermes-etat-repo-mission-bugs.md) |
 | 2026-08-24 (après-midi) | Vue Graphe et recette de l'existant | Claude Code | [fiche](docs/handoffs/2026-08-24-graphe-recette-claude-code.md) |

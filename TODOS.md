@@ -27,6 +27,70 @@ Voir la section « Décisions à trancher » plus bas.
 
 ---
 
+## P0 bis — Auth email + mot de passe : code fusionné, PAS déployable en l'état (2026-08-26)
+
+**Quoi :** le PIN partagé (`BRIEF_PIN`) est entièrement remplacé par une auth
+Supabase (email + mot de passe) — 14 tâches + 1 vague de correctifs, revue de
+branche complète, fusionné dans `feat/email-password-auth` (commit `c803c96`).
+Voir `docs/superpowers/specs/2026-08-26-email-password-auth-design.md`,
+`docs/superpowers/plans/2026-08-26-email-password-auth.md` et l'entrée
+`DECISIONS.md` du 2026-08-26.
+
+**⚠️ Ne PAS déployer sans avoir fait, dans l'ordre** (checklist complète :
+plan, section Task 2 Step 6) :
+1. ✅ **Fait le 2026-08-26** — projet Supabase créé (`brief`,
+   `https://nqakaefcwdpotnatcdvb.supabase.co`, Frankfurt/eu-central-1).
+   Reste à activer email+mot de passe seul dans Authentication → Providers.
+2. 🔶 En cours — appliquer `supabase/migrations/0001_authorized_users.sql`,
+   créer le compte d'Aramis, l'insérer dans `authorized_users`.
+3. Migrer la clé de signature JWT vers de l'asymétrique (Authentication →
+   JWT Keys) — sans ça, `requireSession()` fait un aller-retour réseau vers
+   Supabase à **chaque** appel API au lieu de vérifier localement.
+4. Régler le Site URL / Redirect URLs Supabase sur le vrai domaine Brief.
+5. Poser `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   dans `.env.production` sur le VPS, vérifier que
+   `docker compose --env-file .env.production config` les résout (pas vides).
+6. Après déploiement : `curl -i https://<domaine>/api/auth/session` → `401`
+   attendu. Un `500` = variable absente au build (le piège déjà documenté
+   pour la clé VAPID). Vérifier aussi `docker inspect --format
+   '{{.State.Health.Status}}' <conteneur app>` → `healthy`, sans quoi le
+   conteneur `cron` (rappels Web Push) ne démarre jamais.
+
+**Sans le point 1-2, Aramis ne peut plus se connecter à sa propre app** — le
+PIN a été retiré, rien ne le remplace tant que le compte n'existe pas.
+
+**Corrigé pendant la revue finale, à vérifier une fois en vrai (jamais testé
+avec un Docker réel dans cette session, seulement relu) :** le `HEALTHCHECK`
+du `Dockerfile` et les `build.args` de `docker-compose.yml` pour les deux
+variables Supabase.
+
+**Différé volontairement, pas dans cette branche :**
+- **`scripts/brief-agents.sh agenda AAAA-MM-JJ` est cassé** — appelle
+  `/api/agenda` (migrée) avec l'ancien header PIN → 401. `digest` marche
+  toujours (jeton machine). À trancher : jeton machine dédié en lecture pour
+  `/api/agenda`, ou retirer la sous-commande.
+- **Le flux « Mot de passe oublié » est un cul-de-sac.** `resetPasswordForEmail`
+  est appelé sans `redirectTo`, et il n'existe **aucun écran** dans l'app pour
+  saisir un nouveau mot de passe après le clic sur le lien reçu par email. Le
+  bouton est décoratif tant que ça n'est pas construit.
+- **Aucune purge de l'état client à la déconnexion** (`BriefApp.tsx`) : les
+  items du compte précédent restent brièvement affichés après une nouvelle
+  connexion sur le même onglet, et la file hors-ligne (`src/lib/queue.ts`,
+  localStorage) survit à la déconnexion. Sans impact tant qu'un seul compte
+  existe ; à traiter avant l'arrivée d'un second utilisateur.
+- **Documentation encore périmée** (mentionne le PIN) : `README.md` (tableau
+  des variables d'env — liste `BRIEF_PIN`, **omet les deux clés Supabase**,
+  ce qui est le point le plus gênant puisque c'est la référence de
+  déploiement), `docs/coordination.md` (smoke-test curl), et
+  `docs/agent-calendar-access.md` (« BRIEF_PIN = clé maîtresse »).
+- `src/proxy.ts` : `createServerClient(...)` lui-même reste hors du
+  `try/catch` ajouté en revue finale — une URL Supabase présente mais mal
+  formée (pas juste absente) plante encore tout le site. Correctif d'une
+  ligne, non urgent (le smoke-test du point 6 ci-dessus l'attraperait au
+  déploiement).
+
+---
+
 ## P0 — ✅ Entièrement soldé le 2026-08-13
 
 **Les trois blocages sont levés le même jour** : l'app est en ligne en HTTPS, elle
