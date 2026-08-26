@@ -10,8 +10,10 @@
 # fichier nommé `.env`. Sans le drapeau, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` arrive
 # vide au build, se retrouve inlinée à `undefined` dans le bundle, et
 # l'abonnement aux notifications échoue côté navigateur sans que le serveur
-# n'en voie rien. Les `:?` plus bas font échouer Compose au lieu de laisser
-# passer ce silence.
+# n'en voie rien. Depuis l'authentification par compte, les deux clés Supabase
+# tombent dans le même piège en pire : absentes au build, c'est `src/proxy.ts`
+# — donc TOUTE requête, écran de connexion compris — qui casse. Les `:?` plus
+# bas font échouer Compose au lieu de laisser passer ce silence.
 #
 # Le cron des rappels tourne dans un conteneur séparé plutôt que dans l'app :
 # un planificateur en mémoire disparaîtrait à chaque redémarrage du serveur, et
@@ -28,6 +30,8 @@ services:
       args:
         NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:?absente — lancer avec --env-file .env.production}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Brief}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?absente — lancer avec --env-file .env.production}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?absente — lancer avec --env-file .env.production}
     restart: unless-stopped
     env_file: .env.production
     environment:

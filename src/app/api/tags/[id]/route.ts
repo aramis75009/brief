@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readTags, writeTags } from "@/lib/store";
 import { TAG_COLORS } from "@/lib/types";
 import type { TagColor } from "@/lib/types";
@@ -15,7 +15,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;
@@ -47,7 +47,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;

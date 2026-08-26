@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { parseSubscription, removeSubscription, saveSubscription } from "@/lib/push-store";
 
 /**
@@ -9,7 +9,7 @@ import { parseSubscription, removeSubscription, saveSubscription } from "@/lib/p
  */
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: unknown;
@@ -45,7 +45,7 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 export async function DELETE(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: unknown;

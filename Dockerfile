@@ -23,6 +23,14 @@ ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ARG NEXT_PUBLIC_APP_NAME=Brief
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+# Même piège, en pire : ces deux-là sont lues par `src/proxy.ts`, qui s'exécute
+# sur PRESQUE TOUTES les requêtes. Absentes au build, elles sont inlinées à
+# undefined jusque dans le bundle serveur (`output: standalone`) et c'est le
+# site entier — écran de connexion compris — qui tombe, pas une seule route.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 RUN npm run build
 
 FROM node:24-alpine AS runtime
@@ -44,17 +52,19 @@ USER brief
 EXPOSE 3000
 VOLUME ["/app/data"]
 
-# Sonde de vie : /api/session sans PIN doit répondre 401. Un 401 prouve d'un
-# coup que le serveur répond, que le garde fonctionne, et que BRIEF_PIN est bien
-# chargé — sans PIN, `requirePin` renvoie 503 et la sonde échoue à raison.
-# Un 200 signalerait une porte ouverte.
+# Sonde de vie : GET /api/auth/session sans cookie doit répondre 401. Un 401
+# prouve d'un coup que le serveur répond, que la garde de session fonctionne et
+# que les variables Supabase sont bien chargées — sans elles,
+# `getSupabaseServerClient()` lève et la route rend 500, donc la sonde échoue à
+# raison. Un 200 signalerait une porte ouverte.
 #
 # ⚠️ Deux pièges déjà payés ici :
-#   - la route n'expose que POST ; un GET renvoie 405, jamais 401 ;
+#   - la MÉTHODE compte : la route n'expose que GET, un POST renvoie 405 et
+#     jamais 401 (c'était l'inverse du temps de l'ancienne route PIN) ;
 #   - le wget d'Alpine est celui de busybox, qui ignore les options GNU comme
 #     `--server-response`. On passe donc par `node`, déjà présent dans l'image,
 #     qui donne le code de statut exact sans dépendance ni ambiguïté.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/session',{method:'POST'}).then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/auth/session').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]

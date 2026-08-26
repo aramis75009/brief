@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -17,7 +17,7 @@ function extFor(mimeType: string): string {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let form: FormData;

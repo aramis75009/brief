@@ -1,6 +1,6 @@
 import { makeBucketOf, midnightAt } from "@/lib/buckets";
 import { TIMEZONE } from "@/lib/due";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readItems, readProjects } from "@/lib/store";
 import { zonedParts } from "@/lib/zoned";
 
@@ -49,8 +49,8 @@ function weekdayLabel(d: Date, isToday: boolean): string {
     .replace(/\.$/, "");
 }
 
-export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+export async function GET(_req: Request): Promise<Response> {
+  const denied = await requireSession();
   if (denied) return denied;
 
   const [items, projects] = await Promise.all([readItems(), readProjects()]);

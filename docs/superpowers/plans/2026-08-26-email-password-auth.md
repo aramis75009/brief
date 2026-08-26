@@ -194,6 +194,14 @@ describe("0001_authorized_users.sql", () => {
     expect(SQL).toMatch(/enable row level security/);
     expect(SQL).toMatch(/\(select auth\.uid\(\)\)/);
   });
+
+  it("grants both select and update to the authenticated role", () => {
+    // Task 5's login route does .select(...).maybeSingle() AND
+    // .update({ last_login_at }) on this table — a select-only policy would
+    // make the update silently affect zero rows under RLS.
+    expect(SQL).toMatch(/for select/);
+    expect(SQL).toMatch(/for update/);
+  });
 });
 ```
 
@@ -223,6 +231,16 @@ create policy "read own row"
   for select
   to authenticated
   using (user_id = (select auth.uid()));
+
+-- POST /api/auth/login (Task 5) met à jour last_login_at après connexion —
+-- sans cette policy, l'update est silencieusement bloqué par RLS (0 ligne
+-- affectée, aucune erreur renvoyée par PostgREST).
+create policy "update own row"
+  on public.authorized_users
+  for update
+  to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 ```
 
 - [ ] **Step 4: Run test, verify it passes**
@@ -247,6 +265,10 @@ This step needs a live Supabase project and cannot be done by the coding agent. 
 4. Authentication → Users → Add user: create Aramis's own account (email + password).
 5. SQL Editor: `insert into authorized_users (user_id) values ('<the uuid shown for that user>');`
 6. Verify: `select * from authorized_users;` returns exactly one row.
+7. **Authentication → JWT Keys: migrate to an asymmetric signing key (ECC P-256).** Left on the default HS256 (symmetric) key, `requireSession()`'s `getClaims()` silently falls back to a network round-trip to Supabase on every single API call — the "no network call per request" property this design relies on (see `DECISIONS.md`) only holds after this migration.
+8. **Authentication → URL Configuration: set Site URL to Brief's real deployed domain**, and add it to Redirect URLs. Required for `resetPasswordForEmail`'s email link to point somewhere real — see `TODOS.md` for the still-missing reset-password screen this links to (the "Mot de passe oublié" flow is not fully wired end-to-end yet).
+9. Set `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.production` on the VPS, and confirm `docker-compose.yml`'s `build.args` picks them up (added in the final-review fix wave — verify `docker compose config` shows both resolved, not empty).
+10. Post-deploy smoke test: `curl -i https://<domaine>/api/auth/session` → expect `401`, not `500` (a 500 here means a build-time env var was missing) and not a connection failure (means the site is down).
 
 ---
 
@@ -1482,11 +1504,21 @@ git commit -m "feat: wire AuthGate into BriefApp, drop client-side PIN state"
 
 ---
 
-### Task 13: Update remaining `pin.ts` importers, delete `pin.ts`
+### Task 13: Update remaining `pin.ts` importers, delete `pin.ts` and `PinGate.tsx`
 
 **Files:**
 - Modify: `src/components/TaskDetailScreen.tsx`, `src/components/AgendaScreen.tsx`, `src/components/desktop/DesktopCalendar.tsx`, `src/components/desktop/DesktopTaskDetail.tsx`
-- Delete: `src/lib/pin.ts`, `src/lib/pin.test.ts`
+- Delete: `src/lib/pin.ts`, `src/lib/pin.test.ts`, `src/components/PinGate.tsx`
+
+**Note:** `PinGate.tsx` itself imports `{ setPin, verifyPin }` from `@/lib/pin`.
+Task 12 already removed its only caller (`BriefApp.tsx` now renders
+`AuthGate`), but the file itself is still on disk and still compiled by
+`tsc` (TypeScript type-checks every file `tsconfig.json` includes,
+whether or not anything imports it) — left in place, it would break this
+task's own Step 4 the moment `pin.ts` is deleted, with a dangling import.
+Confirmed by `grep -rln "PinGate" src` before writing this plan: only
+`PinGate.tsx` and `BriefApp.tsx` reference it, so deleting the file here is
+safe.
 
 - [ ] **Step 1: Repoint the four remaining importers**
 
@@ -1498,16 +1530,16 @@ sed -i '' 's/import { UnauthorizedError } from "@\/lib\/pin";/import { Unauthori
   src/components/AgendaScreen.tsx src/components/desktop/DesktopCalendar.tsx
 ```
 
-- [ ] **Step 2: Delete `pin.ts` and its test**
+- [ ] **Step 2: Delete `pin.ts`, its test, and the now-orphaned `PinGate.tsx`**
 
 ```bash
-rm src/lib/pin.ts src/lib/pin.test.ts
+rm src/lib/pin.ts src/lib/pin.test.ts src/components/PinGate.tsx
 ```
 
-- [ ] **Step 3: Verify nothing else references it**
+- [ ] **Step 3: Verify nothing else references either**
 
 ```bash
-grep -rln "@/lib/pin\|from \"./pin\"" src
+grep -rln "@/lib/pin\|from \"./pin\"\|PinGate" src
 ```
 
 Expected: no output.

@@ -1,6 +1,5 @@
 "use client";
 
-import { PIN_HEADER, UnauthorizedError, clearPin, getPin } from "./pin";
 import type { AgendaItem } from "./agenda";
 import type { DraftItem, Item, KanbanBoard, Overview, Project, SaveResult, Tag } from "./types";
 
@@ -10,6 +9,21 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** 401 : session absente ou expirée — l'appelant doit réafficher AuthGate. */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Session expirée");
+    this.name = "UnauthorizedError";
+  }
+}
+
+/** fetch vers /api/* — les cookies de session suivent automatiquement (same-origin). */
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401) throw new UnauthorizedError();
+  return res;
 }
 
 const TIMEOUTS = {
@@ -24,9 +38,7 @@ const TIMEOUTS = {
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
-  const pin = getPin();
   const headers = new Headers(init.headers);
-  if (pin) headers.set(PIN_HEADER, pin);
   // Ne PAS forcer Content-Type sur FormData : le navigateur doit set
   // multipart/form-data avec son boundary. Forcer application/json casse l'upload.
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type"))
@@ -43,7 +55,6 @@ async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): 
   }
 
   if (res.status === 401) {
-    clearPin();
     throw new UnauthorizedError();
   }
 
@@ -251,9 +262,6 @@ export function transcribeAudio(
     xhr.open("POST", "/api/transcribe");
     xhr.timeout = TIMEOUTS.transcribe;
 
-    const pin = getPin();
-    if (pin) xhr.setRequestHeader(PIN_HEADER, pin);
-
     xhr.upload.onload = () => onUploaded();
 
     xhr.onload = () => {
@@ -264,7 +272,6 @@ export function transcribeAudio(
         /* réponse illisible : traitée ci-dessous */
       }
       if (xhr.status === 401) {
-        clearPin();
         reject(new UnauthorizedError());
         return;
       }

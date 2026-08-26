@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { nextSkin, uniqueProjectId } from "@/lib/projects";
 import { readItems, readProjects, writeProjects } from "@/lib/store";
 import type { Project } from "@/lib/types";
@@ -13,15 +13,15 @@ import type { Project } from "@/lib/types";
 
 const MAX_NAME = 40;
 
-export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+export async function GET(_req: Request): Promise<Response> {
+  const denied = await requireSession();
   if (denied) return denied;
 
   return Response.json(await readProjects());
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { name?: unknown };
@@ -67,7 +67,7 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 export async function DELETE(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { id?: unknown };

@@ -1,6 +1,6 @@
 import { buildDayAgenda } from "@/lib/agenda";
 import { readAgendaSnapshot } from "@/lib/caldav";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readItems } from "@/lib/store";
 import { shiftDays, zonedParts, zonedTime, type CalendarDate } from "@/lib/zoned";
 
@@ -30,7 +30,7 @@ function parseDateParam(raw: string | null): CalendarDate | null {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const url = new URL(req.url);

@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readBoard, writeBoard } from "@/lib/store";
 import type { KanbanColumn } from "@/lib/types";
 
@@ -8,14 +8,14 @@ import type { KanbanColumn } from "@/lib/types";
  * réordonne et supprime ses colonnes.
  */
 
-export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+export async function GET(_req: Request): Promise<Response> {
+  const denied = await requireSession();
   if (denied) return denied;
   return Response.json(await readBoard());
 }
 
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { action?: unknown; column?: unknown; id?: unknown; name?: unknown; order?: unknown };

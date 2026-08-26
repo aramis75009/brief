@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readItems, readProjects } from "@/lib/store";
 import { zonedParts } from "@/lib/zoned";
 import { TIMEZONE } from "@/lib/due";
@@ -94,7 +94,7 @@ function buildSystemPrompt(items: Item[], projects: Project[], now: Date): strin
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { messages?: unknown };

@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readTags, writeTags } from "@/lib/store";
 import { TAG_COLORS } from "@/lib/types";
 import type { Tag, TagColor } from "@/lib/types";
@@ -12,14 +12,14 @@ function isTagColor(v: unknown): v is TagColor {
   return typeof v === "string" && (TAG_COLORS as readonly string[]).includes(v);
 }
 
-export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+export async function GET(_req: Request): Promise<Response> {
+  const denied = await requireSession();
   if (denied) return denied;
   return Response.json(await readTags());
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { name?: unknown; color?: unknown };

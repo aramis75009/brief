@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
@@ -15,7 +15,7 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;

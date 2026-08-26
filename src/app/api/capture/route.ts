@@ -1,4 +1,5 @@
 import { requireMachineToken } from "@/lib/cron-auth";
+import { structureText } from "@/lib/parse";
 import { fallbackProjectId } from "@/lib/projects";
 import { readProjects, saveItems } from "@/lib/store";
 import type { Item } from "@/lib/types";
@@ -19,15 +20,13 @@ export const maxDuration = 60;
  *      corps JSON : { "text": <résultat de la dictée> }
  *   3. Réglages → Bouton Action → Raccourci
  *
- * Jeton dédié, pas le PIN de l'app : un secret déposé dans un raccourci iOS est
- * en clair sur le téléphone. Le perdre doit coûter la révocation d'un jeton,
- * pas le changement du code d'accès.
+ * Jeton dédié, pas la session de l'app : un secret déposé dans un raccourci iOS
+ * est en clair sur le téléphone. Le perdre doit coûter la révocation d'un jeton,
+ * pas le changement du mot de passe d'un compte.
  *
  * `structure: false` court-circuite le LLM et crée un item brut dans l'Inbox —
  * utile quand on veut juste ne pas oublier, sans attendre l'appel réseau.
  */
-
-const PARSE_TIMEOUT_MS = 45_000;
 
 export async function POST(req: Request): Promise<Response> {
   const denied = requireMachineToken(req, "BRIEF_CAPTURE_TOKEN");
@@ -68,51 +67,30 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ saved: 1, items: [item] });
   }
 
-  // Chemin normal : on réutilise /api/parse plutôt que de dupliquer le prompt.
-  // Une seule définition de la structuration, donc une seule à faire évoluer.
-  const origin = new URL(req.url).origin;
-  const pin = process.env.BRIEF_PIN;
-  if (!pin) {
-    return Response.json({ error: "BRIEF_PIN absent côté serveur." }, { status: 503 });
+  // Chemin normal : on appelle la structuration EN DIRECT (`src/lib/parse.ts`),
+  // la même que `/api/parse`. Une seule définition du prompt, donc une seule à
+  // faire évoluer — et surtout aucun aller-retour HTTP vers soi-même : depuis
+  // que l'authentification est une session par cookie, un appel
+  // serveur-vers-serveur n'a aucune identité à présenter et se ferait refuser.
+  const result = await structureText(text, projects);
+  if ("error" in result) {
+    return Response.json({ error: result.error }, { status: result.status });
   }
 
-  let drafts: unknown;
-  try {
-    const res = await fetch(`${origin}/api/parse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-brief-pin": pin },
-      body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(PARSE_TIMEOUT_MS),
-    });
-    const data = (await res.json()) as { items?: unknown; error?: string };
-    if (!res.ok) {
-      return Response.json(
-        { error: data.error ?? `La structuration a répondu ${res.status}.` },
-        { status: 502 },
-      );
-    }
-    drafts = data.items;
-  } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : "Structuration injoignable." },
-      { status: 502 },
-    );
-  }
-
-  const rows = Array.isArray(drafts) ? (drafts as Record<string, unknown>[]) : [];
+  const rows = result.items;
   if (!rows.length) {
     return Response.json({ error: "Aucun item extrait de la note." }, { status: 422 });
   }
 
   const items: Item[] = rows.map((r) => ({
-    id: String(r.id),
-    kind: r.kind === "event" ? "event" : "task",
-    title: String(r.title),
-    projectId: String(r.projectId ?? fallback),
-    due: typeof r.due === "string" ? r.due : null,
-    allDay: r.allDay === true,
-    priority: (r.priority as Item["priority"]) ?? 4,
-    rrule: typeof r.rrule === "string" ? r.rrule : null,
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    projectId: r.projectId || fallback,
+    due: r.due,
+    allDay: r.allDay,
+    priority: r.priority,
+    rrule: r.rrule,
     createdAt: now,
     remindedAt: null,
     doneAt: null,

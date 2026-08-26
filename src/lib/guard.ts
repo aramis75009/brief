@@ -1,40 +1,25 @@
 import "server-only";
+import { getSupabaseServerClient } from "./supabase/server";
 
 /**
  * Garde d'accès SERVEUR pour toutes les routes /api/*.
  *
- * L'URL de déploiement est publique : sans ce contrôle, n'importe qui peut
- * appeler /api/transcribe et consommer la clé Groq. Toute nouvelle route sous
- * /api/ DOIT commencer par `const denied = requirePin(req); if (denied) return denied;`
+ * Remplace requirePin() (PIN partagé unique) : vérifie une session Supabase
+ * Auth. getClaims() valide le JWT localement (clé publique du projet, ES256)
+ * — pas d'appel réseau à Supabase à chaque requête ; le rafraîchissement du
+ * jeton, quand il est nécessaire, est géré par src/proxy.ts avant que la
+ * route ne s'exécute.
+ *
+ * Toute nouvelle route sous /api/ DOIT commencer par :
+ *   const denied = await requireSession();
+ *   if (denied) return denied;
  */
+export async function requireSession(): Promise<Response | null> {
+  const supabase = await getSupabaseServerClient();
+  const { data, error } = await supabase.auth.getClaims();
 
-const PIN_HEADER = "x-brief-pin";
-
-/** Comparaison à temps constant — évite de fuiter le PIN caractère par caractère. */
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-/**
- * Renvoie une Response 401 si la requête n'est pas autorisée, `null` si elle l'est.
- */
-export function requirePin(req: Request): Response | null {
-  const expected = process.env.BRIEF_PIN;
-
-  // Pas de PIN configuré côté serveur = pas d'ouverture silencieuse.
-  if (!expected) {
-    return Response.json(
-      { error: "BRIEF_PIN n'est pas configuré côté serveur." },
-      { status: 503 },
-    );
-  }
-
-  const provided = req.headers.get(PIN_HEADER);
-  if (!provided || !safeEqual(provided, expected)) {
-    return Response.json({ error: "PIN invalide." }, { status: 401 });
+  if (error || !data?.claims) {
+    return Response.json({ error: "Session invalide ou expirée." }, { status: 401 });
   }
 
   return null;
