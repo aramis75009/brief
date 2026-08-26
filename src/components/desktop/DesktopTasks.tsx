@@ -1,16 +1,30 @@
 "use client";
 
 /**
- * Écran Tâches desktop — n'existe pas sur mobile. Liste groupée par projet,
- * filtrable, plus un ajout rapide sans passer par la voix (DESIGN.md : le
- * clavier reste la porte de secours).
+ * Écran Tâches & RDV desktop — n'existe pas sur mobile. Liste groupée par
+ * projet, filtrable (état + type : Tâches / RDV / les deux), plus un ajout
+ * rapide sans passer par la voix (DESIGN.md : le clavier reste la porte de
+ * secours).
+ *
+ * Depuis le 26/08 (soir) : les RENDEZ-VOUS étaient zappés par le desktop —
+ * cet écran ne montrait que les tâches. Il montre désormais les deux par
+ * défaut, avec un filtre par type pour ne regarder que les tâches ou que
+ * les RDV.
  */
 
 import { useMemo, useState } from "react";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { formatDue } from "@/lib/due";
 import { CheckIcon } from "../icons";
-import { TASK_FILTERS, filterTasks, groupByProject, type TaskFilterKey } from "@/lib/desktopDashboard";
+import {
+  TASK_FILTERS,
+  TASK_KIND_FILTERS,
+  filterAgendaItems,
+  filterTasks,
+  groupByProject,
+  type TaskFilterKey,
+  type TaskKindFilter,
+} from "@/lib/desktopDashboard";
 import type { Item, Project } from "@/lib/types";
 
 const C = {
@@ -19,6 +33,7 @@ const C = {
   ink: "var(--color-ink)",
   inkMuted: "var(--color-ink-muted)",
   inkFaint: "var(--color-ink-faint)",
+  meet700: "var(--color-meet-700)",
 } as const;
 
 function dot(project: Project) {
@@ -34,6 +49,7 @@ export function DesktopTasks({
   onOpenTask,
   onPostpone,
   onQuickAdd,
+  initialKind = "all",
 }: {
   items: Item[];
   projects: Project[];
@@ -41,17 +57,28 @@ export function DesktopTasks({
   onOpenTask: (id: string) => void;
   onPostpone: (id: string) => void;
   onQuickAdd: (title: string, projectId: string) => void;
+  /** Filtre de type initial — piloté par le dashboard (clics sur Tâches / RDV / Tout). */
+  initialKind?: TaskKindFilter;
 }) {
   const now = useMemo(() => new Date(), []);
+  const [kind, setKind] = useState<TaskKindFilter>(initialKind);
   const [filter, setFilter] = useState<TaskFilterKey>("all");
   const [quickText, setQuickText] = useState("");
   const [quickProjectId, setQuickProjectId] = useState(projects[0]?.id ?? "");
 
-  const filtered = useMemo(() => filterTasks(items, filter, now), [items, filter, now]);
+  // Les filtres d'état ne s'appliquent qu'aux TÂCHES (les RDV n'ont pas de
+  // « En retard » / « Faites » au sens de la coche de tâche) : sur « RDV »,
+  // l'état passe à « Tout » et la liste montre tous les RDV actifs.
+  const kindFiltered = useMemo(() => filterAgendaItems(items, kind), [items, kind]);
+  const effectiveFilter = kind === "event" ? "all" : filter;
+  const filtered = useMemo(
+    () => filterTasks(kindFiltered, effectiveFilter, now),
+    [kindFiltered, effectiveFilter, now],
+  );
   const groups = useMemo(() => groupByProject(filtered, projects), [filtered, projects]);
   const filterCounts = useMemo(
-    () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterTasks(items, f.key, now).length])),
-    [items, now],
+    () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterTasks(kindFiltered, f.key, now).length])),
+    [kindFiltered, now],
   );
 
   const quickProject = projects.find((p) => p.id === quickProjectId) ?? projects[0];
@@ -60,19 +87,33 @@ export function DesktopTasks({
     <div className="grid h-full gap-3" style={{ gridTemplateColumns: "1fr 320px", animation: "fade .3s both" }}>
       <div className="flex h-full min-h-0 flex-col gap-3" style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)", overflow: "hidden" }}>
         <div className="flex flex-none items-center gap-3">
-          <span className="font-extrabold tracking-[-0.03em]" style={{ fontSize: 20 }}>Tâches</span>
+          <span className="font-extrabold tracking-[-0.03em]" style={{ fontSize: 20 }}>Tâches &amp; RDV</span>
           <div className="ml-auto flex gap-[3px]" style={{ padding: 4, background: C.bg, borderRadius: 99 }}>
-            {TASK_FILTERS.map((f) => (
+            {TASK_KIND_FILTERS.map((f) => (
               <button
                 key={f.key}
-                onClick={() => setFilter(f.key)}
+                onClick={() => setKind(f.key)}
                 className="flex items-center gap-1.5"
-                style={{ padding: "8px 15px", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, background: filter === f.key ? C.ink : "transparent", color: filter === f.key ? "#fff" : C.inkMuted }}
+                style={{ padding: "8px 15px", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, background: kind === f.key ? C.ink : "transparent", color: kind === f.key ? "#fff" : C.inkMuted }}
               >
                 <span>{f.label}</span>
-                <span className="tnum" style={{ opacity: 0.6 }}>{filterCounts[f.key] ?? 0}</span>
               </button>
             ))}
+            {kind !== "event" && (
+              <span style={{ width: 1, height: 18, alignSelf: "center", background: "rgba(16,16,16,.08)" }} />
+            )}
+            {kind !== "event" &&
+              TASK_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  className="flex items-center gap-1.5"
+                  style={{ padding: "8px 15px", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, background: filter === f.key ? C.ink : "transparent", color: filter === f.key ? "#fff" : C.inkMuted }}
+                >
+                  <span>{f.label}</span>
+                  <span className="tnum" style={{ opacity: 0.6 }}>{filterCounts[f.key] ?? 0}</span>
+                </button>
+              ))}
           </div>
         </div>
 
@@ -92,7 +133,8 @@ export function DesktopTasks({
                 <span className="h-px flex-1" style={{ background: "rgba(16,16,16,.06)" }} />
               </div>
               {rows.map((it) => {
-                const late = filter === "overdue";
+                const late = effectiveFilter === "overdue";
+                const isEvent = it.kind === "event";
                 return (
                   <div key={it.id} className="flex items-center gap-3" style={{ padding: "12px 14px", background: C.bg, borderRadius: 18 }}>
                     <button
@@ -105,7 +147,11 @@ export function DesktopTasks({
                     </button>
                     <button onClick={() => onOpenTask(it.id)} className="flex min-w-0 flex-1 flex-col gap-1 text-left" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
                       <span className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: it.doneAt ? C.inkFaint : C.ink, textDecoration: it.doneAt ? "line-through" : "none" }}>{it.title}</span>
-                      <span className="text-[11px] font-semibold" style={{ color: late ? "var(--color-danger)" : C.inkMuted }}>{formatDue(it.due, it.allDay)}</span>
+                      <span className="flex items-center gap-1.75">
+                        <span className="text-[11px] font-semibold" style={{ color: isEvent ? C.meet700 : late ? "var(--color-danger)" : C.inkMuted }}>
+                          {isEvent ? "RDV" : ""}{isEvent && it.due ? " · " : ""}{formatDue(it.due, it.allDay)}
+                        </span>
+                      </span>
                     </button>
                     <button
                       onClick={() => onPostpone(it.id)}

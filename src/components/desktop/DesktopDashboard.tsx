@@ -18,7 +18,12 @@ import { MicIcon, StarIcon, CheckIcon } from "../icons";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { compareByDue } from "@/lib/due";
 import { TIMEZONE } from "@/lib/zoned";
-import { overdueItems, weekProgressByProject } from "@/lib/desktopDashboard";
+import {
+  overdueItems,
+  weekOpenCounts,
+  weekProgressByProject,
+  type TaskKindFilter,
+} from "@/lib/desktopDashboard";
 import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Overview, Project } from "@/lib/types";
 
@@ -66,6 +71,7 @@ export function DesktopDashboard({
   onOpenCapture,
   onOpenChat,
   onGoTasks,
+  onGoTasksKind,
 }: {
   items: Item[];
   ideaItems: Item[];
@@ -78,6 +84,8 @@ export function DesktopDashboard({
   onOpenCapture: () => void;
   onOpenChat: () => void;
   onGoTasks: () => void;
+  /** Ouvre l'onglet Tâches & RDV pré-filtré (Tout / Tâches / RDV) — les CTA du hero. */
+  onGoTasksKind: (kind: TaskKindFilter) => void;
 }) {
   const now = useMemo(() => new Date(), []);
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
@@ -132,12 +140,15 @@ export function DesktopDashboard({
   const overdue = useMemo(() => overdueItems(items, now).slice(0, 3), [items, now]);
   const progressRows = useMemo(() => weekProgressByProject(items, projects, now, 8), [items, projects, now]);
 
-  const weekTasks = overview?.horizon.reduce((n, d) => n + (d.total - d.events), 0) ?? 0;
-  const weekEvents = overview?.horizon.reduce((n, d) => n + d.events, 0) ?? 0;
+  const weekCounts = useMemo(() => weekOpenCounts(items, now), [items, now]);
+  const weekOpenTotal = weekCounts.tasks + weekCounts.events;
+  // Les barres de progression ci-dessous comptent aussi les items terminés de
+  // la semaine — le total « cette semaine » du hero garde les mêmes bornes
+  // (lundi→dimanche) mais compte l'ouverture, comme le donut « Aujourd'hui ».
   const chargeDefs = [
-    { label: "Tâches", count: weekTasks, bg: C.task100, fg: C.task700 },
-    { label: "RDV", count: weekEvents, bg: "var(--color-meet-100)", fg: C.meet700 },
-    { label: "Idées", count: ideaItems.length, bg: "var(--color-idea-100)", fg: "var(--color-idea-700)" },
+    { label: "Tâches", count: weekCounts.tasks, bg: C.task100, fg: C.task700, kind: "task" as const },
+    { label: "RDV", count: weekCounts.events, bg: "var(--color-meet-100)", fg: C.meet700, kind: "event" as const },
+    { label: "Idées", count: ideaItems.length, bg: "var(--color-idea-100)", fg: "var(--color-idea-700)", kind: "idea" as const },
   ];
 
   const activity7d = overview?.activity.reduce((a, b) => a + b, 0) ?? 0;
@@ -180,14 +191,16 @@ export function DesktopDashboard({
           <div className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>Charge de la semaine</div>
           <div className="flex gap-1" style={{ height: 38 }}>
             {chargeDefs.map((s) => (
-              <div
+              <button
                 key={s.label}
+                onClick={() => s.kind === "idea" ? onGoTasksKind("all") : onGoTasksKind(s.kind)}
+                title={`Voir les ${s.label.toLowerCase()} dans l'onglet Tâches & RDV`}
                 className="flex items-center justify-center gap-1.75"
-                style={{ flex: Math.max(1, s.count), borderRadius: 99, background: s.bg, color: s.fg, transformOrigin: "left", animation: "rail .5s cubic-bezier(.4,0,.2,1) both" }}
+                style={{ flex: Math.max(1, s.count), borderRadius: 99, background: s.bg, color: s.fg, transformOrigin: "left", animation: "rail .5s cubic-bezier(.4,0,.2,1) both", border: "none", cursor: "pointer", fontFamily: "inherit" }}
               >
                 <span className="text-[12px] font-bold tracking-[-0.01em]">{s.label}</span>
                 <span className="tnum text-[12px] font-extrabold">{s.count}</span>
-              </div>
+              </button>
             ))}
           </div>
           <div className="flex gap-4.5">
@@ -196,7 +209,7 @@ export function DesktopDashboard({
               <span className="text-[12px] font-semibold" style={{ color: C.inkMuted }}>en retard</span>
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="tnum text-[15px] font-extrabold">{weekTasks + weekEvents}</span>
+              <span className="tnum text-[15px] font-extrabold">{weekOpenTotal}</span>
               <span className="text-[12px] font-semibold" style={{ color: C.inkMuted }}>cette semaine</span>
             </div>
             <div className="flex items-baseline gap-1.5">

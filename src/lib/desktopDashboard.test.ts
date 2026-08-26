@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterAgendaItems,
   filterTasks,
   groupByProject,
   leastUrgentId,
   mondayOf,
   overdueItems,
   priorityBreakdown,
+  weekOpenCounts,
   weekProgressByProject,
 } from "./desktopDashboard";
 import type { Item, Project } from "./types";
@@ -92,6 +94,18 @@ describe("weekProgressByProject", () => {
     ]);
   });
 
+  it("compte aussi les RDV (kind event) dans le total et le fait", () => {
+    const items = [
+      item({ id: "e1", projectId: "frip", kind: "event", due: "2026-08-18T09:00:00+02:00", doneAt: "2026-08-18T10:00:00+02:00" }),
+      item({ id: "e2", projectId: "frip", kind: "event", due: "2026-08-19T09:00:00+02:00" }),
+      item({ id: "t1", projectId: "frip", due: "2026-08-20T09:00:00+02:00" }),
+      // Idée — jamais comptée.
+      item({ id: "i1", projectId: "frip", status: "idea", due: "2026-08-19T09:00:00+02:00" }),
+    ];
+    const out = weekProgressByProject(items, PROJECTS, NOW);
+    expect(out[0]).toEqual({ project: PROJECTS[0], done: 1, total: 3 });
+  });
+
   it("respecte la limite", () => {
     const items = [
       item({ id: "f1", projectId: "frip", due: "2026-08-17T09:00:00+02:00" }),
@@ -99,6 +113,41 @@ describe("weekProgressByProject", () => {
       item({ id: "l1", projectId: "flip", due: "2026-08-19T09:00:00+02:00" }),
     ];
     expect(weekProgressByProject(items, PROJECTS, NOW, 2)).toHaveLength(2);
+  });
+});
+
+describe("weekOpenCounts", () => {
+  it("compte les tâches et RDV ouverts de la semaine lundi→dimanche, hors faits et idées", () => {
+    const items = [
+      item({ id: "t1", due: "2026-08-17T09:00:00+02:00" }),
+      item({ id: "t2", due: "2026-08-19T09:00:00+02:00" }),
+      item({ id: "t-done", due: "2026-08-18T09:00:00+02:00", doneAt: "2026-08-18T10:00:00+02:00" }),
+      item({ id: "e1", kind: "event", due: "2026-08-20T09:00:00+02:00" }),
+      item({ id: "idea", status: "idea", due: "2026-08-19T09:00:00+02:00" }),
+      item({ id: "out", due: "2026-08-24T09:00:00+02:00" }),
+    ];
+    expect(weekOpenCounts(items, NOW)).toEqual({ tasks: 2, events: 1 });
+  });
+});
+
+describe("filterAgendaItems", () => {
+  const items = [
+    item({ id: "t1" }),
+    item({ id: "e1", kind: "event" }),
+    item({ id: "idea", status: "idea" }),
+    item({ id: "archived", status: "archived" }),
+  ];
+
+  it("all garde tâches + RDV, exclut idées et archivés", () => {
+    expect(filterAgendaItems(items, "all").map((i) => i.id)).toEqual(["t1", "e1"]);
+  });
+
+  it("task ne garde que les tâches actives", () => {
+    expect(filterAgendaItems(items, "task").map((i) => i.id)).toEqual(["t1"]);
+  });
+
+  it("event ne garde que les RDV", () => {
+    expect(filterAgendaItems(items, "event").map((i) => i.id)).toEqual(["e1"]);
   });
 });
 

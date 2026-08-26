@@ -19,7 +19,7 @@ import { DesktopTaskDetail } from "./DesktopTaskDetail";
 import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
-import { leastUrgentId } from "@/lib/desktopDashboard";
+import { leastUrgentId, type TaskKindFilter } from "@/lib/desktopDashboard";
 import { graphStatus, graphTasks, indexById } from "@/lib/graph";
 import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag } from "@/lib/api";
 import type { DesktopScreen } from "./types";
@@ -83,6 +83,7 @@ export function DesktopShell({
   onOpenNotifications: () => void;
 }) {
   const [screen, setScreen] = useState<DesktopScreen>("dashboard");
+  const [tasksKind, setTasksKind] = useState<TaskKindFilter>("all");
   const [calendarSelectedId, setCalendarSelectedId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -192,7 +193,9 @@ export function DesktopShell({
 
   const badges: Partial<Record<DesktopScreen, number>> = {
     calendrier: (overview?.horizon ?? []).filter((d) => d.isToday).reduce((n, d) => n + d.events, 0),
-    tâches: activeItems.filter((it) => it.kind === "task" && !it.doneAt).length,
+    // L'onglet Tâches & RDV montre les deux par défaut : le badge compte les
+    // tâches ET les RDV actifs non faits.
+    tâches: activeItems.filter((it) => !it.doneAt).length,
     graphe: blockedCount,
     idées: ideaItems.length,
   };
@@ -225,6 +228,7 @@ export function DesktopShell({
               onOpenCapture={onOpenCapture}
               onOpenChat={onOpenChat}
               onGoTasks={() => setScreen("tâches")}
+              onGoTasksKind={(kind) => { setTasksKind(kind); setScreen("tâches"); }}
             />
           )}
 
@@ -247,6 +251,7 @@ export function DesktopShell({
               onOpenTask={openTask}
               onPostpone={onPostpone}
               onQuickAdd={onQuickAddTask}
+              initialKind={tasksKind}
             />
           )}
 

@@ -34,6 +34,9 @@ export function overdueItems(items: Item[], now: Date): Item[] {
  * Faites/total par projet sur la semaine calendaire en cours (lundi→dimanche,
  * Europe/Paris) — les projets les plus chargés d'abord, `limit` au maximum.
  * Un projet sans item cette semaine n'apparaît pas.
+ *
+ * ⚠️ Inclut les TÂCHES ET les RDV (`kind: "event"`) : la semaine d'Aramis est
+ * faite des deux (sport, pubs, entretiens…). Exclut les idées et les archivés.
  */
 export function weekProgressByProject(
   items: Item[],
@@ -48,8 +51,9 @@ export function weekProgressByProject(
   const weekItems = items.filter((it) => {
     if (!it.due) return false;
     if (it.status === "idea" || it.status === "archived") return false;
-    // Inclure : items actifs (non doneAt), items terminés (doneAt dans la semaine),
-    // et récurrentes cochées (lastCompletedOccurrenceAt dans la semaine)
+    // Inclure : items actifs (non doneAt) — tâches ET RDV —, items terminés
+    // (doneAt dans la semaine), et récurrentes cochées
+    // (lastCompletedOccurrenceAt dans la semaine)
     const d = new Date(it.due);
     return !Number.isNaN(d.getTime()) && d >= start && d < end;
   });
@@ -97,6 +101,22 @@ export const TASK_FILTERS: { key: TaskFilterKey; label: string }[] = [
   { key: "done", label: "Faites" },
 ];
 
+/** Filtre par type pour l'écran Tâches & RDV du desktop. */
+export type TaskKindFilter = "all" | "task" | "event";
+
+export const TASK_KIND_FILTERS: { key: TaskKindFilter; label: string }[] = [
+  { key: "all", label: "Tout" },
+  { key: "task", label: "Tâches" },
+  { key: "event", label: "RDV" },
+];
+
+/** Items actifs filtrés par type (tâches et/ou RDV) — les idées/archivés ne passent jamais. */
+export function filterAgendaItems(items: Item[], kind: TaskKindFilter): Item[] {
+  const active = items.filter((it) => isActive(it));
+  if (kind === "all") return active;
+  return active.filter((it) => it.kind === kind);
+}
+
 /** Tâches (jamais les RDV) filtrées pour l'écran Tâches du desktop. */
 export function filterTasks(items: Item[], filter: TaskFilterKey, now: Date): Item[] {
   const bucketOf = makeBucketOf(now);
@@ -111,6 +131,33 @@ export function filterTasks(items: Item[], filter: TaskFilterKey, now: Date): It
     default:
       return tasks.filter((it) => !it.doneAt);
   }
+}
+
+/** Items de la semaine calendaire (lundi→dimanche, Europe/Paris), actifs (non faits). */
+export function weekOpenItems(items: Item[], now: Date): Item[] {
+  const monday = mondayOf(now);
+  const nextMonday = shiftDays(monday, 7);
+  const start = zonedTime(monday.y, monday.m, monday.d, 0, 0);
+  const end = zonedTime(nextMonday.y, nextMonday.m, nextMonday.d, 0, 0);
+  return items.filter((it) => {
+    if (!it.due) return false;
+    if (it.status === "idea" || it.status === "archived") return false;
+    if (it.doneAt) return false;
+    const d = new Date(it.due);
+    return !Number.isNaN(d.getTime()) && d >= start && d < end;
+  });
+}
+
+/** Compteurs d'items ouverts par type sur la semaine calendaire — les mêmes bornes que `weekProgressByProject`. */
+export function weekOpenCounts(
+  items: Item[],
+  now: Date,
+): { tasks: number; events: number } {
+  const open = weekOpenItems(items, now);
+  return {
+    tasks: open.filter((it) => it.kind === "task").length,
+    events: open.filter((it) => it.kind === "event").length,
+  };
 }
 
 /** Regroupe une liste d'items par projet, dans l'ordre des `projects`. Un projet sans ligne n'apparaît pas. */
