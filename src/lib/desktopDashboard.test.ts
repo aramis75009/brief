@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   filterActiveByState,
   filterAgendaItems,
+  filterRowsByState,
   filterTasks,
   groupByProject,
   leastUrgentId,
   mondayOf,
   overdueItems,
   priorityBreakdown,
+  weekOccurrenceRows,
   weekOpenCounts,
   weekProgressByProject,
 } from "./desktopDashboard";
@@ -199,6 +201,100 @@ describe("filterActiveByState", () => {
 
   it("done garde les faites", () => {
     expect(filterActiveByState(items, "done", NOW).map((i) => i.id)).toEqual(["t-done"]);
+  });
+});
+
+describe("weekOccurrenceRows", () => {
+  it("développe les occurrences de la semaine pour une série récurrente (ven/sam/dim)", () => {
+    // Semaine du 24 au 30 août 2026 (NOW = jeudi 27). Série FR,SA,SU :
+    // occurrences ven 28, sam 29, dim 30 — les trois doivent apparaître.
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({
+        id: "poster20",
+        due: "2026-08-28T16:00:00.000Z",
+        rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=FR,SA,SU",
+        seriesAnchor: "2026-08-21T16:00:00Z",
+      }),
+    ];
+    const rows = weekOccurrenceRows(items, now);
+    expect(rows.map((r) => r.due)).toEqual([
+      "2026-08-28T16:00:00.000Z",
+      "2026-08-29T16:00:00.000Z",
+      "2026-08-30T16:00:00.000Z",
+    ]);
+  });
+
+  it("masque les occurrences ≤ lastCompletedOccurrenceAt (fait jusqu'à maintenant)", () => {
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({
+        id: "poster20",
+        due: "2026-08-28T16:00:00.000Z",
+        rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=FR,SA,SU",
+        seriesAnchor: "2026-08-21T16:00:00Z",
+        lastCompletedOccurrenceAt: "2026-08-23T16:00:00.000Z",
+      }),
+    ];
+    const rows = weekOccurrenceRows(items, now);
+    // 23/08 (dim) cochée → les 3 occurrences de la semaine restent (28, 29, 30).
+    expect(rows).toHaveLength(3);
+  });
+
+  it("une série sans occurrence dans la semaine garde une ligne à son due courant", () => {
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({
+        id: "serie-hors-fenetre",
+        due: "2026-08-31T16:00:00.000Z",
+        // Toutes les 2 semaines le lundi : occurrences 17/08, 31/08 — aucune
+        // dans la fenêtre [24/08, 31/08). La ligne reste à `due` (31/08).
+        rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO",
+        seriesAnchor: "2026-08-17T16:00:00.000Z",
+      }),
+    ];
+    const rows = weekOccurrenceRows(items, now);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].due).toBe("2026-08-31T16:00:00.000Z");
+  });
+
+  it("un item simple (sans rrule) donne une ligne à son due", () => {
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const rows = weekOccurrenceRows([item({ id: "simple", due: "2026-08-28T09:00:00+02:00" })], now);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe("simple");
+  });
+
+  it("exclut les items faits, idées et archivés", () => {
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({ id: "done", due: "2026-08-28T09:00:00+02:00", doneAt: "2026-08-27T10:00:00+02:00" }),
+      item({ id: "idea", due: "2026-08-28T09:00:00+02:00", status: "idea" }),
+      item({ id: "arch", due: "2026-08-28T09:00:00+02:00", status: "archived" }),
+      item({ id: "ok", due: "2026-08-28T09:00:00+02:00" }),
+    ];
+    expect(weekOccurrenceRows(items, now).map((r) => r.key)).toEqual(["ok"]);
+  });
+});
+
+describe("filterRowsByState", () => {
+  const now = new Date("2026-08-27T10:00:00+02:00");
+  const rows = [
+    { item: item({ id: "a", due: "2026-08-27T09:00:00+02:00" }), due: "2026-08-27T09:00:00+02:00", key: "a" },
+    { item: item({ id: "b", due: "2026-08-25T09:00:00+02:00" }), due: "2026-08-25T09:00:00+02:00", key: "b" },
+    { item: item({ id: "c", due: "2026-08-29T16:00:00.000Z" }), due: "2026-08-29T16:00:00.000Z", key: "c" },
+  ];
+
+  it("all garde tout (non fait)", () => {
+    expect(filterRowsByState(rows, "all", now).map((r) => r.key)).toEqual(["a", "b", "c"]);
+  });
+
+  it("today lit l'occurrence, pas le due courant de l'item", () => {
+    expect(filterRowsByState(rows, "today", now).map((r) => r.key)).toEqual(["a"]);
+  });
+
+  it("overdue lit l'occurrence passée", () => {
+    expect(filterRowsByState(rows, "overdue", now).map((r) => r.key)).toEqual(["b"]);
   });
 });
 

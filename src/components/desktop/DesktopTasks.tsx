@@ -10,6 +10,12 @@
  * cet écran ne montrait que les tâches. Il montre désormais les deux par
  * défaut, avec un filtre par type pour ne regarder que les tâches ou que
  * les RDV.
+ *
+ * Depuis le 26/08 (nuit) : une ligne par OCCURRENCE de la semaine, comme le
+ * calendrier — une série récurrente (ex. Poster 20 ven/sam/dim) apparaît
+ * vendredi, samedi ET dimanche, pas seulement à son `due` courant. La coche
+ * transmet l'occurrence précise (`completedAt`) pour que la série avance
+ * correctement.
  */
 
 import { useMemo, useState } from "react";
@@ -19,9 +25,10 @@ import { CheckIcon } from "../icons";
 import {
   TASK_FILTERS,
   TASK_KIND_FILTERS,
-  filterActiveByState,
   filterAgendaItems,
+  filterRowsByState,
   groupByProject,
+  weekOccurrenceRows,
   type TaskFilterKey,
   type TaskKindFilter,
 } from "@/lib/desktopDashboard";
@@ -70,14 +77,24 @@ export function DesktopTasks({
   // « En retard » et « Faites » ont un sens pour les deux (un RDV passé non
   // fait est en retard). Le filtre par type réduit d'abord la liste.
   const kindFiltered = useMemo(() => filterAgendaItems(items, kind), [items, kind]);
-  const filtered = useMemo(
-    () => filterActiveByState(kindFiltered, filter, now),
-    [kindFiltered, filter, now],
-  );
-  const groups = useMemo(() => groupByProject(filtered, projects), [filtered, projects]);
+  // Une ligne par occurrence de la semaine (séries récurrentes développées),
+  // comme le calendrier — pas une ligne par item.
+  const rows = useMemo(() => weekOccurrenceRows(kindFiltered, now), [kindFiltered, now]);
+  const filtered = useMemo(() => filterRowsByState(rows, filter, now), [rows, filter, now]);
+  const groups = useMemo(() => {
+    const byProject = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const list = byProject.get(row.item.projectId) ?? [];
+      list.push(row);
+      byProject.set(row.item.projectId, list);
+    }
+    return projects
+      .map((project) => ({ project, rows: byProject.get(project.id) ?? [] }))
+      .filter((g) => g.rows.length > 0);
+  }, [rows, projects]);
   const filterCounts = useMemo(
-    () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterActiveByState(kindFiltered, f.key, now).length])),
-    [kindFiltered, now],
+    () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterRowsByState(rows, f.key, now).length])),
+    [rows, now],
   );
 
   const quickProject = projects.find((p) => p.id === quickProjectId) ?? projects[0];
@@ -120,23 +137,24 @@ export function DesktopTasks({
           <span className="text-[13px] font-medium" style={{ color: C.inkMuted, padding: "8px 0" }}>Rien ici.</span>
         )}
 
-        {groups.map(({ project, rows }) => {
+        {groups.map(({ project, rows: groupRows }) => {
           const d = dot(project);
           return (
             <div key={project.id} className="flex flex-col gap-2">
               <div className="flex items-center gap-2.25">
                 <span style={{ width: 9, height: 9, borderRadius: d.radius, background: d.bg }} />
                 <span className="text-[15px] font-bold tracking-[-0.02em]">{project.name}</span>
-                <span className="tnum text-[12px] font-bold" style={{ color: C.inkFaint }}>{rows.length}</span>
+                <span className="tnum text-[12px] font-bold" style={{ color: C.inkFaint }}>{groupRows.length}</span>
                 <span className="h-px flex-1" style={{ background: "rgba(16,16,16,.06)" }} />
               </div>
-              {rows.map((it) => {
+              {groupRows.map((row) => {
+                const it = row.item;
                 const late = filter === "overdue";
                 const isEvent = it.kind === "event";
                 return (
-                  <div key={it.id} className="flex items-center gap-3" style={{ padding: "12px 14px", background: C.bg, borderRadius: 18 }}>
+                  <div key={row.key} className="flex items-center gap-3" style={{ padding: "12px 14px", background: C.bg, borderRadius: 18 }}>
                     <button
-                      onClick={() => onToggleDone(it.id)}
+                      onClick={() => onToggleDone(it.id, row.due)}
                       aria-label="Marquer fait"
                       className="flex flex-none items-center justify-center"
                       style={{ width: 26, height: 26, borderRadius: 99, padding: 0, cursor: "pointer", background: it.doneAt ? C.ink : C.surface, border: it.doneAt ? `2px solid ${C.ink}` : "2px solid rgba(16,16,16,.18)" }}
@@ -147,7 +165,7 @@ export function DesktopTasks({
                       <span className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: it.doneAt ? C.inkFaint : C.ink, textDecoration: it.doneAt ? "line-through" : "none" }}>{it.title}</span>
                       <span className="flex items-center gap-1.75">
                         <span className="text-[11px] font-semibold" style={{ color: isEvent ? C.meet700 : late ? "var(--color-danger)" : C.inkMuted }}>
-                          {isEvent ? "RDV" : ""}{isEvent && it.due ? " · " : ""}{formatDue(it.due, it.allDay)}
+                          {isEvent ? "RDV" : ""}{isEvent && row.due ? " · " : ""}{formatDue(row.due, it.allDay)}
                         </span>
                       </span>
                     </button>

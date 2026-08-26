@@ -137,6 +137,68 @@ export function filterAgendaItems(items: Item[], kind: TaskKindFilter): Item[] {
   return active.filter((it) => it.kind === kind);
 }
 
+/** Une ligne de l'onglet Tâches & RDV : un item à UN instant précis (occurrence). */
+export type OccurrenceRow = {
+  item: Item;
+  /** ISO 8601 de CETTE occurrence (post-override) — l'heure affichée ET cochée. */
+  due: string;
+  /** Clé stable pour React — item + occurrence. */
+  key: string;
+};
+
+/**
+ * Lignes de l'onglet Tâches & RDV : une ligne par OCCURRENCE de la semaine
+ * calendaire (lundi→dimanche, Europe/Paris) pour les séries récurrentes, une
+ * ligne par item pour les autres. Même logique que le calendrier
+ * (`buildDayAgenda`) : overrides/exdates appliqués, occurrences ≤
+ * `lastCompletedOccurrenceAt` masquées (« fait jusqu'à maintenant »). Une
+ * série sans occurrence dans la semaine (jour hors fenêtre, série finie)
+ * garde une ligne à son occurrence courante pour rester visible.
+ */
+export function weekOccurrenceRows(items: Item[], now: Date): OccurrenceRow[] {
+  const monday = mondayOf(now);
+  const nextMonday = shiftDays(monday, 7);
+  const start = zonedTime(monday.y, monday.m, monday.d, 0, 0);
+  const end = zonedTime(nextMonday.y, nextMonday.m, nextMonday.d, 0, 0);
+
+  const rows: OccurrenceRow[] = [];
+  for (const it of items) {
+    if (it.status === "idea" || it.status === "archived") continue;
+    if (it.doneAt) continue;
+    if (!it.due) continue;
+    const due = new Date(it.due);
+    if (Number.isNaN(due.getTime())) continue;
+
+    if (!it.rrule) {
+      rows.push({ item: it, due: it.due, key: it.id });
+      continue;
+    }
+
+    const anchor = it.seriesAnchor ? new Date(it.seriesAnchor) : due;
+    if (Number.isNaN(anchor.getTime())) {
+      rows.push({ item: it, due: it.due, key: it.id });
+      continue;
+    }
+    const completedAt = it.lastCompletedOccurrenceAt
+      ? new Date(it.lastCompletedOccurrenceAt).getTime()
+      : null;
+    const occs = occurrencesInRange(anchor, it.rrule, start, end)
+      .map((o) => ({ raw: o, eff: applyOverride(o, it.overrides, it.exdates) }))
+      .filter((x): x is { raw: Date; eff: Date } => x.eff !== null)
+      .filter((x) => completedAt === null || x.eff.getTime() > completedAt)
+      .sort((a, b) => a.eff.getTime() - b.eff.getTime());
+
+    if (occs.length) {
+      for (const { eff } of occs) {
+        rows.push({ item: it, due: eff.toISOString(), key: `${it.id}:${eff.toISOString()}` });
+      }
+    } else {
+      rows.push({ item: it, due: it.due, key: it.id });
+    }
+  }
+  return rows;
+}
+
 /** Tâches (jamais les RDV) filtrées pour l'écran Tâches du desktop. */
 export function filterTasks(items: Item[], filter: TaskFilterKey, now: Date): Item[] {
   const bucketOf = makeBucketOf(now);
@@ -166,6 +228,25 @@ export function filterActiveByState(items: Item[], filter: TaskFilterKey, now: D
       return active.filter((it) => !!it.doneAt);
     default:
       return active.filter((it) => !it.doneAt);
+  }
+}
+
+/**
+ * Filtre d'état sur les LIGNES d'occurrences : « Aujourd'hui » / « En retard »
+ * se lisent sur l'occurrence (`row.due`), jamais sur le `due` courant de
+ * l'item (qui peut pointer la semaine prochaine pour une série déjà avancée).
+ */
+export function filterRowsByState(rows: OccurrenceRow[], filter: TaskFilterKey, now: Date): OccurrenceRow[] {
+  const bucketOf = makeBucketOf(now);
+  switch (filter) {
+    case "today":
+      return rows.filter((r) => !r.item.doneAt && bucketOf(r.due) === "today");
+    case "overdue":
+      return rows.filter((r) => !r.item.doneAt && bucketOf(r.due) === "overdue");
+    case "done":
+      return rows.filter((r) => !!r.item.doneAt);
+    default:
+      return rows.filter((r) => !r.item.doneAt);
   }
 }
 
