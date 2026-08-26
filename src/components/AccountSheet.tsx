@@ -26,6 +26,7 @@ export function AccountSheet({
   onOpenVoice,
   onOpenPrivacy,
   onOpenSubscription,
+  onLogout,
 }: {
   open: boolean;
   calendarSyncAt: number | null;
@@ -33,6 +34,7 @@ export function AccountSheet({
   onOpenVoice?: () => void;
   onOpenPrivacy?: () => void;
   onOpenSubscription?: () => void;
+  onLogout?: () => void;
 }) {
   // Hooks avant le retour anticipé (règle de React) : `open` peut passer à
   // false pendant la fermeture du sheet, l'ordre des hooks ne doit pas changer.
@@ -118,6 +120,13 @@ export function AccountSheet({
             label="Abonnement"
             value="Plus"
             onClick={onOpenSubscription}
+          />
+          {/* La session est un cookie httpOnly rafraîchi à chaque requête par
+              src/proxy.ts : sans cette ligne, rien dans le produit ne permet de
+              la terminer. */}
+          <NavRow
+            label="Se déconnecter"
+            onClick={onLogout}
           />
         </div>
 

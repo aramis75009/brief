@@ -798,6 +798,15 @@ export function BriefApp() {
               onOpenVoice={() => { setAccountOpen(false); setVoiceSettingsOpen(true); }}
               onOpenPrivacy={() => { setAccountOpen(false); setPrivacyOpen(true); }}
               onOpenSubscription={() => { setAccountOpen(false); setSubscriptionOpen(true); }}
+              onLogout={() => {
+                // Le cookie de session est httpOnly : seul le serveur peut
+                // l'effacer. On n'attend pas sa réponse pour rendre l'écran de
+                // connexion — la garde de session refusera de toute façon toute
+                // requête suivante.
+                void fetch("/api/auth/logout", { method: "POST" });
+                setAccountOpen(false);
+                setUnlocked(false);
+              }}
             />
           </div>
         )}

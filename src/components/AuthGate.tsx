@@ -145,7 +145,12 @@ export function AuthGate({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="toi@exemple.com"
-                className="h-13 w-full rounded-full border border-ink/[.08] bg-surface px-5 text-15 font-semibold text-ink outline-none focus:outline-2 focus:outline-ink"
+                // Aucun utilitaire d'outline ici : `outline-none` poserait
+                // `outline-style: none` en permanence et écraserait la règle
+                // globale `*:focus-visible` de globals.css — le champ n'aurait
+                // alors PLUS AUCUN anneau de focus, sur le seul écran qu'un
+                // visiteur non connecté puisse voir.
+                className="h-13 w-full rounded-full border border-ink/[.08] bg-surface px-5 text-15 font-semibold text-ink"
               />
 
               <label htmlFor="auth-password" className="mt-4.5 mb-2 block text-13 font-semibold">
@@ -160,7 +165,10 @@ export function AuthGate({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="h-13 w-full rounded-full border border-ink/[.08] bg-surface px-5 pr-13 text-15 font-semibold text-ink outline-none focus:outline-2 focus:outline-ink"
+                  // Voir le champ email : la règle globale `*:focus-visible`
+                  // fait tout le travail, à condition qu'aucun utilitaire
+                  // d'outline ne vienne la couvrir.
+                  className="h-13 w-full rounded-full border border-ink/[.08] bg-surface px-5 pr-13 text-15 font-semibold text-ink"
                 />
                 <button
                   type="button"
