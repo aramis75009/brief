@@ -48,9 +48,11 @@ chaque requête. `POST /api/auth/login|logout|forgot-password`,
 **Statut.** ✅ Implémenté, revue de branche complète effectuée (correctifs de
 déploiement inclus). ✅ Provisionnement Supabase terminé le 26/08 (projet,
 migration SQL, compte Aramis, clé JWT déjà asymétrique, Site URL/Redirect
-URLs). **Reste uniquement le déploiement** : poser les deux variables
-d'environnement dans `.env.production` sur le VPS et redéployer — voir
-`TODOS.md` § P0 bis et `docs/superpowers/plans/2026-08-26-email-password-auth.md`.
+URLs). ✅ **Déployé en prod le 26/08 soir par Hermes** : les deux variables
+posées dans `.env.production` du VPS, build+up, vérifié (session 401,
+healthcheck healthy, rappels + CalDAV ok). Reste le test de connexion réel
+par Aramis (étape e, un seul compte : `aramis.begnene@gmail.com` + mdp du
+mail d'invitation Supabase).
 
 ---
 

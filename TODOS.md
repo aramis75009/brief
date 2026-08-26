@@ -27,11 +27,14 @@ Voir la section « Décisions à trancher » plus bas.
 
 ---
 
-## P0 bis — Auth email + mot de passe : code fusionné, PAS déployable en l'état (2026-08-26)
+## P0 bis — ✅ DÉPLOYÉ le 2026-08-26 soir (auth email + mot de passe en prod)
 
 **Quoi :** le PIN partagé (`BRIEF_PIN`) est entièrement remplacé par une auth
 Supabase (email + mot de passe) — 14 tâches + 1 vague de correctifs, revue de
-branche complète, fusionné dans `feat/email-password-auth` (commit `c803c96`).
+branche complète, fusionné dans `feat/email-password-auth` (commit `c803c96`),
+**déployé en prod par Hermes le 26/08 soir** (étapes a→e, vérifié : session
+401, healthcheck healthy, login 401, rappels + CalDAV ok). La prod est
+branchée sur `feat/email-password-auth` @ `c13217c`.
 Voir `docs/superpowers/specs/2026-08-26-email-password-auth-design.md`,
 `docs/superpowers/plans/2026-08-26-email-password-auth.md` et l'entrée
 `DECISIONS.md` du 2026-08-26.
@@ -58,25 +61,28 @@ plan, section Task 2 Step 6) :
    `https://brief.srv1899780.hstgr.cloud`, Redirect URL
    `https://brief.srv1899780.hstgr.cloud/**` ajoutée (vérifié après
    rechargement de la page, valeurs persistées côté serveur).
-5. 🔶 **Reste à faire — nécessite un accord explicite avant d'y toucher**
-   (ça touche la prod) : poser `NEXT_PUBLIC_SUPABASE_URL` /
-   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` dans `.env.production` sur le VPS
-   (`NEXT_PUBLIC_SUPABASE_URL=https://nqakaefcwdpotnatcdvb.supabase.co`),
-   vérifier que `docker compose --env-file .env.production config` les
-   résout (pas vides), puis déployer.
-6. Après déploiement : `curl -i https://<domaine>/api/auth/session` → `401`
-   attendu. Un `500` = variable absente au build (le piège déjà documenté
-   pour la clé VAPID). Vérifier aussi `docker inspect --format
-   '{{.State.Health.Status}}' <conteneur app>` → `healthy`, sans quoi le
-   conteneur `cron` (rappels Web Push) ne démarre jamais.
+5. ✅ **Fait le 2026-08-26 soir (Hermes)** — `NEXT_PUBLIC_SUPABASE_URL` /
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` posées dans `.env.production` sur
+   le VPS (clé publishable complète fournie par Aramis), `docker compose
+   --env-file .env.production config` les résout (pas vides), puis déploiement.
+6. ✅ **Fait le 2026-08-26 soir (Hermes)** — `curl -i
+   https://brief.srv1899780.hstgr.cloud/api/auth/session` → **401** (pas de
+   500 → variables présentes au build). `docker inspect --format
+   '{{.State.Health.Status}}' brief-app-1` → **healthy**, et le conteneur
+   `cron` (rappels Web Push) a démarré.
+
+**Checklist de déploiement (points 1-6) : tout fait. Reste l'étape e : Aramis
+se connecte une fois en réel (`aramis.begnene@gmail.com` + mdp du mail
+d'invitation Supabase) pour confirmer le flux de bout en bout.
 
 **Sans le point 1-2, Aramis ne peut plus se connecter à sa propre app** — le
 PIN a été retiré, rien ne le remplace tant que le compte n'existe pas.
+✅ Compte créé et invité le 26/08 — le PIN n'est plus nécessaire.
 
-**Corrigé pendant la revue finale, à vérifier une fois en vrai (jamais testé
-avec un Docker réel dans cette session, seulement relu) :** le `HEALTHCHECK`
-du `Dockerfile` et les `build.args` de `docker-compose.yml` pour les deux
-variables Supabase.
+**Corrigé pendant la revue finale, vérifié en vrai au déploiement du
+26/08 soir (Hermes)** : le `HEALTHCHECK` du `Dockerfile` passe (healthy) et
+les `build.args` de `docker-compose.yml` pour les deux variables Supabase
+sont résolus et inlinés (session 401, pas de 500).
 
 **Différé volontairement, pas dans cette branche :**
 - **`scripts/brief-agents.sh agenda AAAA-MM-JJ` est cassé** — appelle
