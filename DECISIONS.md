@@ -18,9 +18,14 @@ re-débat — c'est le premier réflexe à tuer.
 
 **Décision.** Le PIN unique (`BRIEF_PIN`, `src/lib/guard.ts`) est remplacé par
 une identité par utilisateur : email + mot de passe, via Supabase Auth. Une
-table Postgres `authorized_users` sert de liste blanche (aucune inscription
-libre — les comptes sont créés à la main par Aramis). Les routes machine
-(cron, capture, digest) gardent leurs jetons dédiés, inchangés.
+table Postgres `authorized_users` sert de liste blanche **à l'entrée**
+(aucune inscription libre — les comptes sont créés à la main par Aramis) :
+retirer une ligne bloque les futures connexions, mais ne révoque **pas** une
+session déjà ouverte — celle-ci continue d'être rafraîchie par `src/proxy.ts`
+jusqu'à expiration. Pour couper l'accès d'un utilisateur immédiatement, le
+désactiver ou le supprimer dans `auth.users` côté Supabase, pas seulement
+dans `authorized_users`. Les routes machine (cron, capture, digest) gardent
+leurs jetons dédiés, inchangés.
 
 **Pourquoi.** Deux raisons d'Aramis (26/08) : sécurité (le PIN est un secret
 en clair côté client, sans notion d'identité) et préparation au
@@ -30,12 +35,20 @@ validée avant implémentation — voir
 `https://claude.ai/code/artifact/5655973d-ef06-4ed1-8585-90c6af776456`.
 
 **Comment.** `requireSession()` (nouveau, remplace `requirePin()`) vérifie
-localement un JWT Supabase (pas d'appel réseau par requête) ; `src/proxy.ts`
-(Next 16 a renommé `middleware.ts` en `proxy.ts`) rafraîchit la session sur
-chaque requête. `POST /api/auth/login|logout|forgot-password`,
-`GET /api/auth/session`. `src/lib/pin.ts` supprimé.
+localement un JWT Supabase — **sans appel réseau par requête seulement une
+fois la clé de signature du projet passée en asymétrique** (dashboard
+Supabase, Authentication → JWT Keys) ; tant que le projet signe en HS256
+(réglage par défaut), `getClaims()` retombe sur un aller-retour réseau vers
+Supabase à chaque appel. `src/proxy.ts` (Next 16 a renommé `middleware.ts` en
+`proxy.ts`) rafraîchit la session sur chaque requête. `POST
+/api/auth/login|logout|forgot-password`, `GET /api/auth/session`.
+`src/lib/pin.ts` supprimé.
 
-**Statut.** 🔶 en cours d'implémentation (`docs/superpowers/plans/2026-08-26-email-password-auth.md`).
+**Statut.** ✅ Implémenté, revue de branche complète effectuée (correctifs de
+déploiement inclus — voir `docs/superpowers/plans/2026-08-26-email-password-auth.md`).
+Reste à faire par Aramis, hors du code : provisionnement du projet Supabase
+(compte, clé de signature asymétrique, Site URL), voir la checklist manuelle
+du plan.
 
 ---
 

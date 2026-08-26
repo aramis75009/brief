@@ -265,6 +265,10 @@ This step needs a live Supabase project and cannot be done by the coding agent. 
 4. Authentication → Users → Add user: create Aramis's own account (email + password).
 5. SQL Editor: `insert into authorized_users (user_id) values ('<the uuid shown for that user>');`
 6. Verify: `select * from authorized_users;` returns exactly one row.
+7. **Authentication → JWT Keys: migrate to an asymmetric signing key (ECC P-256).** Left on the default HS256 (symmetric) key, `requireSession()`'s `getClaims()` silently falls back to a network round-trip to Supabase on every single API call — the "no network call per request" property this design relies on (see `DECISIONS.md`) only holds after this migration.
+8. **Authentication → URL Configuration: set Site URL to Brief's real deployed domain**, and add it to Redirect URLs. Required for `resetPasswordForEmail`'s email link to point somewhere real — see `TODOS.md` for the still-missing reset-password screen this links to (the "Mot de passe oublié" flow is not fully wired end-to-end yet).
+9. Set `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.production` on the VPS, and confirm `docker-compose.yml`'s `build.args` picks them up (added in the final-review fix wave — verify `docker compose config` shows both resolved, not empty).
+10. Post-deploy smoke test: `curl -i https://<domaine>/api/auth/session` → expect `401`, not `500` (a 500 here means a build-time env var was missing) and not a connection failure (means the site is down).
 
 ---
 
