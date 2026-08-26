@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 26/08 après-midi) |
 | **Branche** | `feat/email-password-auth` = **prod depuis le 26/08 soir** (fast-forward depuis `feat/ui-redesign-claude`) |
-| **Commits** | `a13af27` = HEAD local + origin + **prod déployée et vérifiée** (dont `80361c7` passation, `c13217c` base auth) |
+| **Commits** | `a620f49` = HEAD local + origin + **prod déployée et vérifiée** (dont `a13af27` flux mdp oublié, `80361c7` passation, `c13217c` base auth) |
 
 ## Goal — l'objectif
 
@@ -31,7 +31,31 @@ différés de `TODOS.md` § P0 bis.
 
 ## Current state — ce qui a été fait
 
-### 0. ✅ Déploiement VPS — effectué et vérifié (Hermes, 26/08 soir)
+### 0. ✅ Desktop : onglet « Tâches & RDV » + avancement semaine fiabilisé (26/08 soir, commit `a620f49`, déployé)
+
+Demande d'Aramis : les RDV étaient zappés par le desktop (l'écran Tâches ne
+montrait que les `kind: "task"` alors que le mobile a des CTA Tâches /
+Rendez-vous / Idées). Corrigé :
+
+- **Onglet « Tâches » → « Tâches & RDV »** (`DesktopHeader` + `DesktopTasks`) :
+  liste les tâches ET les RDV par défaut, avec un **filtre par type**
+  (Tout / Tâches / RDV) à côté des filtres d'état existants. Sur « RDV »,
+  les filtres d'état disparaissent (les RDV n'ont pas de « En retard »).
+  Les lignes RDV portent une pastille « RDV · <date> » en teinte meet.
+- **CTA du hero Dashboard cliquables** (`DesktopDashboard`) : les barres
+  « Tâches / RDV / Idées » ouvrent l'onglet pré-filtré
+  (`onGoTasksKind` → `DesktopShell` state `tasksKind` → `initialKind`).
+- **Avancement de la semaine** : `weekProgressByProject` compte désormais
+  les RDV (`kind: "event"`) en plus des tâches — les barres reflètent la
+  vraie semaine. Le compteur « cette semaine » du hero était calculé sur
+  l'horizon **7 jours glissants** de `/api/overview` → remplacé par
+  `weekOpenCounts` (**lundi→dimanche**, mêmes bornes que les barres).
+  Le donut « Aujourd'hui » n'a pas été touché (il était déjà correct).
+- Nouveaux helpers purs dans `src/lib/desktopDashboard.ts` :
+  `filterAgendaItems` (filtre par type), `weekOpenItems` / `weekOpenCounts`
+  (bornes semaine partagées). Le badge de l'onglet compte tâches + RDV.
+
+### 1. ✅ Déploiement VPS — effectué et vérifié (Hermes, 26/08 soir)
 
 Les étapes a→e de la passation précédente ont été exécutées :
 
@@ -191,6 +215,7 @@ archive de la passation précédente.
 | Commande / geste | Résultat |
 |---|---|
 | `npx vitest run` (Claude Code, merge) | 27 files, **345 passed** \| 1 skipped |
+| `npx vitest run` (Hermes, 26/08 soir) | **356 passed** (flux mdp oublié + desktop Tâches & RDV) |
 | `npx eslint src` | 0 errors, 29 warnings (baseline pré-existante) |
 | `npx tsc --noEmit` | propre |
 | `docker compose --env-file .env.production config` | variables Supabase résolues |
@@ -248,21 +273,21 @@ d'attention :
 
 ## Next — la prochaine action
 
-1. **Aramis : étape e** — se connecter une fois sur
-   `https://brief.srv1899780.hstgr.cloud` avec `aramis.begnene@gmail.com` +
-   le mot de passe choisi via l'email d'invitation Supabase, pour confirmer
-   le flux de bout en bout (connexion → app déverrouillée → capture →
-   rappels). C'est la seule étape qui ne pouvait pas être faite par Hermes.
-   **Si le mot de passe n'a jamais été choisi** (lien d'invitation non
-   utilisé) : « Mot de passe oublié ? » sur l'écran de connexion envoie un
-   lien de réinitialisation → `/auth/reset-password` permet de choisir le
-   mot de passe (flux complet depuis le 26/08 soir, commit `a13af27`).
+1. **Aramis : étape e — ✅ FAIT (26/08 soir)** : connexion en réel validée
+   (« Tout fonctionne, j'ai pu me reconnecter »). Le flux de bout en bout est
+   confirmé — migration auth close. Il a aussi validé le flux « mot de passe
+   oublié » réparé le même soir (choix du mot de passe via
+   `/auth/reset-password`).
 2. **Puis traiter les points différés de `TODOS.md` § P0 bis** (script
    `brief-agents.sh agenda` cassé, purge de l'état client à la déconnexion,
    doc README/coordination/agent-calendar-access encore périmée — le point
    le plus gênant : le tableau des variables d'env de `README.md` omet les
    deux clés Supabase et liste encore `BRIEF_PIN`).
-3. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
+3. **Rétro : le compteur « Charge de la semaine » du hero ne prend plus
+   `overview.horizon`** (7 j glissants) mais `weekOpenCounts` (lundi→dimanche)
+   — si l'incohérence persiste quelque part, vérifier `overview.totals.week`
+   (encore glissant) avant de creuser.
+4. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
    en attente du livrable `.dc.html` (décision du matin 26/08).
 
 ---
