@@ -58,3 +58,7 @@ Thumbs.db
 backups/
 public/preview-*/
 *.tar.gz
+
+# Worktrees git locaux (superpowers:using-git-worktrees, subagent-driven-development)
+.worktrees/
+.superpowers/
