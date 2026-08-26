@@ -1,6 +1,6 @@
 import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { patchItem, readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
@@ -72,7 +72,7 @@ function isAudioOrigin(v: unknown): v is import("@/lib/types").AudioOrigin {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const url = new URL(req.url);
@@ -88,7 +88,7 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { items?: unknown };
@@ -157,7 +157,7 @@ export async function POST(req: Request): Promise<Response> {
  * lecture-modification-écriture concurrente perdrait l'une des deux.
  */
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { id?: unknown; done?: unknown; completedAt?: unknown };

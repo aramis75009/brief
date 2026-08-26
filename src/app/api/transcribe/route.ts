@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,7 +12,7 @@ const PROMPT =
 const MAX_BYTES = 25 * 1024 * 1024;
 
 export async function POST(req: Request) {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let form: FormData;

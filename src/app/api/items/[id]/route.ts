@@ -1,6 +1,6 @@
 import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { deleteItem, patchItem, readItems, readProjects } from "@/lib/store";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
@@ -144,7 +144,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;
@@ -208,7 +208,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;

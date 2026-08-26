@@ -1,6 +1,6 @@
 import { TIMEZONE, resolveDue, toIsoWithOffset } from "@/lib/due";
 import { shiftDays, weekdayOf, zonedParts, zonedTime } from "@/lib/zoned";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { readProjects } from "@/lib/store";
 import type { DraftItem, ItemKind, Priority, Project } from "@/lib/types";
@@ -256,7 +256,7 @@ async function callGroq(text: string, projects: Project[], now: Date, key: strin
 }
 
 export async function POST(req: Request) {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { text?: unknown };
