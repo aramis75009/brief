@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 26/08 après-midi) |
 | **Branche** | `feat/email-password-auth` = **prod depuis le 26/08 soir** (fast-forward depuis `feat/ui-redesign-claude`) |
-| **Commits** | `6c4502b` = HEAD local + origin + **prod déployée et vérifiée** (fix RDV + occurrences ; `a620f49` onglet Tâches & RDV ; `a13af27` flux mdp oublié ; `c13217c` base auth) |
+| **Commits** | `4277879` = HEAD local + origin + **prod déployée et vérifiée** (fix coche récurrentes ; `6c4502b` RDV/occurrences ; `a620f49` onglet Tâches & RDV ; `c13217c` base auth) |
 
 ## Goal — l'objectif
 
@@ -31,7 +31,7 @@ différés de `TODOS.md` § P0 bis.
 
 ## Current state — ce qui a été fait
 
-### 0. ✅ Desktop : onglet « Tâches & RDV » + avancement semaine fiabilisé (26/08 soir, commit `a620f49`, déployé)
+### 0. ✅ Desktop : onglet « Tâches & RDV » + avancement semaine fiabilisé (26/08 soir, commit `a620f49` + `6c4502b`, déployé)
 
 Demande d'Aramis : les RDV étaient zappés par le desktop (l'écran Tâches ne
 montrait que les `kind: "task"` alors que le mobile a des CTA Tâches /
@@ -53,9 +53,9 @@ Rendez-vous / Idées). Corrigé :
   occurrence est faite si `lastCompletedOccurrenceAt` ≥ son heure
   (sémantique « coche = fait jusqu'à maintenant », même logique que
   l'agenda mobile : `occurrencesInRange` + `applyOverride`).
-  **Vérifié sur les données prod réelles : sport = 2/6** (push lun 24 ✓,
-  pull mar 25 ✓ ; courir mer 26 + sam 29, push jeu 27, pull ven 28 non
-  faits) — le chiffre qu'Aramis attendait. Le compteur « cette semaine »
+  **Vérifié sur les données prod réelles : sport = 3/6 le 26/08 soir**
+  (push lun 24 ✓, pull mar 25 ✓, courir mer 26 ✓ — coché par Aramis ;
+  sam 29, jeu 27, ven 28 non faits). Le compteur « cette semaine »
   du hero est passé de l'horizon 7 j glissants à `weekOpenCounts`
   (**lundi→dimanche**, mêmes bornes que les barres). Le donut
   « Aujourd'hui » n'a pas été touché (il était déjà correct).
@@ -63,6 +63,29 @@ Rendez-vous / Idées). Corrigé :
   `filterAgendaItems` (filtre par type), `filterActiveByState` (filtres
   d'état génériques), `weekOpenItems` / `weekOpenCounts` (bornes semaine
   partagées). Le badge de l'onglet compte tâches + RDV.
+
+### 0bis. ✅ Fix coche des récurrentes (26/08 soir, commit `4277879`, déployé)
+
+**Symptôme (Aramis)** : « j'ai coché Poster 10 articles mais elle ne s'enlève
+pas de mes tâches à faire aujourd'hui ». Cause racine prouvée sur les données
+prod de `it_1786829768252_592` : `completionPatch` calculait la prochaine
+occurrence depuis `due` — or le cron des rappels avance `due` après chaque
+envoi → la coche de mardi (rappel sonné, due déjà au mercredi) avançait la
+série à JEUDI, sautant l'occurrence du mercredi ; la coche du mercredi soir
+inférait l'occurrence la plus récente = mardi (déjà cochée) → patch no-op, la
+ligne restait.
+
+**Fix dans `src/lib/completion.ts`** :
+- `inferCompletedOccurrence` renvoie l'occurrence **brute RRULE** (plus
+  jamais `due`), filtre par **jour ≤ aujourd'hui** (une occurrence du jour
+  décalée en soirée par un override est cochée pendant la journée), applique
+  `applyOverride` pour l'occurrence effective ;
+- `rawForCompletedAt` : un `completedAt` effectif (heure affichée,
+  post-override) est ramené à l'occurrence brute via la table `overrides` ;
+- `nextOccurrence` est calculé depuis **l'occurrence cochée**, jamais depuis
+  `due` avancé par le cron.
+2 tests de régression construits sur les données prod exactes de Poster 10
+(avec et sans `completedAt`). 364 tests au total.
 
 ### 1. ✅ Déploiement VPS — effectué et vérifié (Hermes, 26/08 soir)
 
@@ -224,7 +247,7 @@ archive de la passation précédente.
 | Commande / geste | Résultat |
 |---|---|
 | `npx vitest run` (Claude Code, merge) | 27 files, **345 passed** \| 1 skipped |
-| `npx vitest run` (Hermes, 26/08 soir) | **362 passed** (dont vérif prod : sport = 2/6) |
+| `npx vitest run` (Hermes, 26/08 soir) | **364 passed** (dont 2 tests de régression coche récurrentes sur données prod) |
 | `npx eslint src` | 0 errors, 29 warnings (baseline pré-existante) |
 | `npx tsc --noEmit` | propre |
 | `docker compose --env-file .env.production config` | variables Supabase résolues |
@@ -292,12 +315,12 @@ d'attention :
    doc README/coordination/agent-calendar-access encore périmée — le point
    le plus gênant : le tableau des variables d'env de `README.md` omet les
    deux clés Supabase et liste encore `BRIEF_PIN`).
-3. **Avancement semaine — comportement validé sur prod** (sport = 2/6).
-   Attention : les items sport simples déjà faits (`Aller à la salle de
-   sport`, `— séance Pull` du 18/08, caldav-* des 18-19/08) ont des `doneAt`
-   hors de la semaine courante → ils n'apparaissent pas tant que leur date
-   n'est pas dans la fenêtre lundi→dimanche. Si un chiffre paraît encore
-   faux, re-vérifier avec un test jetable `src/lib/prod-check.test.ts`
+3. **Avancement semaine — comportement validé sur prod** (sport = 3/6 le
+   26/08 soir). Attention : les items sport simples déjà faits (`Aller à la
+   salle de sport`, `— séance Pull` du 18/08, caldav-* des 18-19/08) ont des
+   `doneAt` hors de la semaine courante → ils n'apparaissent pas tant que
+   leur date n'est pas dans la fenêtre lundi→dimanche. Si un chiffre paraît
+   encore faux, re-vérifier avec un test jetable `src/lib/prod-check.test.ts`
    (copier `items.json` prod dans `/tmp/items-prod.json`, NOW = jour
    courant, puis supprimer le fichier avant commit).
 4. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
