@@ -92,6 +92,65 @@ describe("completionPatch — tâche récurrente", () => {
     );
   });
 
+  it("régression 2026-08-26 : cocher « Poster 10 » le mercredi ne saute plus l'occurrence du mercredi", () => {
+    // Copie des données PROD de `it_1786829768252_592` (Poster 10 articles) :
+    // le rappel de mardi a avancé `due` à jeudi (27) au lieu de mercredi,
+    // l'occurrence de mercredi (26) a un override à 17:00, et la coche du
+    // mercredi soir doit marquer CETTE occurrence comme faite, pas repartir
+    // de `due`.
+    const poster = item({
+      id: "it_1786829768252_592",
+      kind: "task",
+      title: "Poster 10 articles",
+      projectId: "frip-trend",
+      due: "2026-08-27T16:00:00.000Z", // jeudi — avancé par le cron
+      priority: 2,
+      rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=MO,TU,WE,TH",
+      remindedAt: "2026-08-25T16:00:22.457Z",
+      exdates: ["20260817T160000Z"],
+      caldavSyncedDue: "20260820T160000Z",
+      seriesAnchor: "2026-08-20T16:00:00.000Z",
+      overrides: {
+        "20260820T160000Z": "20260820T170000Z",
+        "20260826T160000Z": "20260826T170000Z",
+      },
+      lastCompletedOccurrenceAt: "2026-08-25T16:00:00.000Z",
+    });
+    // Coche du mercredi 26 à 18:40 Paris, sans occurrence précise (liste desktop).
+    const out = completionPatch(poster, true, new Date("2026-08-26T18:40:00+02:00"));
+    expect(out.kind).toBe("advanced");
+    // L'occurrence du MERCREDI (effective, décalée à 17:00Z) est marquée faite.
+    expect(out.patch.lastCompletedOccurrenceAt).toBe("2026-08-26T17:00:00.000Z");
+    // Et la prochaine occurrence est JEUDI — pas un saut de mercredi.
+    expect(out.patch.due).toBe("2026-08-27T16:00:00.000Z");
+  });
+
+  it("régression 2026-08-26 : même coche avec l'occurrence effective transmise par l'UI", () => {
+    const poster = item({
+      id: "it_1786829768252_592",
+      kind: "task",
+      title: "Poster 10 articles",
+      projectId: "frip-trend",
+      due: "2026-08-27T16:00:00.000Z",
+      priority: 2,
+      rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=MO,TU,WE,TH",
+      remindedAt: "2026-08-25T16:00:22.457Z",
+      exdates: ["20260817T160000Z"],
+      caldavSyncedDue: "20260820T160000Z",
+      seriesAnchor: "2026-08-20T16:00:00.000Z",
+      overrides: {
+        "20260820T160000Z": "20260820T170000Z",
+        "20260826T160000Z": "20260826T170000Z",
+      },
+      lastCompletedOccurrenceAt: "2026-08-25T16:00:00.000Z",
+    });
+    // L'UI transmet l'heure affichée : 17:00Z (l'override du mercredi).
+    const out = completionPatch(poster, true, new Date("2026-08-26T18:40:00+02:00"), "2026-08-26T17:00:00.000Z");
+    expect(out.kind).toBe("advanced");
+    expect(out.patch.lastCompletedOccurrenceAt).toBe("2026-08-26T17:00:00.000Z");
+    expect(out.patch.due).toBe("2026-08-27T16:00:00.000Z");
+  });
+
   it("sans occurrence précise, retombe sur `due` (comportement historique)", () => {
     const out = completionPatch(weekly, true, NOW);
     expect(out.patch.lastCompletedOccurrenceAt).toBe(
