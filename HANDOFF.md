@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 26/08 après-midi) |
 | **Branche** | `feat/email-password-auth` = **prod depuis le 26/08 soir** (fast-forward depuis `feat/ui-redesign-claude`) |
-| **Commits** | `4277879` = HEAD local + origin + **prod déployée et vérifiée** (fix coche récurrentes ; `6c4502b` RDV/occurrences ; `a620f49` onglet Tâches & RDV ; `c13217c` base auth) |
+| **Commits** | `817ca44` = HEAD local + origin + **prod déployée et vérifiée** (fix occurrences semaine onglet Tâches & RDV ; `4277879` fix coche récurrentes ; `6c4502b` RDV/occurrences ; `a620f49` onglet Tâches & RDV ; `c13217c` base auth) |
 
 ## Goal — l'objectif
 
@@ -97,6 +97,39 @@ tâches et non pas des rdv ». Les items `it_1787066667909_reposter15`
 `kind` sur un item existant (que title/due/rrule/exdates/overrides) → la
 correction tient. Le prompt de parse dit déjà « dans le doute, task » : ces
 items venaient d'un classement antérieur, pas du prompt actuel.
+
+### 0quater. ✅ Onglet Tâches & RDV : occurrences de la semaine développées (26/08 nuit, commit `817ca44`, déployé)
+
+**Symptôme (Aramis)** : « les RDV de Frip & Trend ne sont pas présents samedi
+et dimanche ». Diagnostic sur données prod + vrai `buildDayAgenda` (test
+jetable `src/agenda-prod-check.test.ts`, supprimé avant commit) : le serveur
+génère bien les occurrences sam 29 / dim 30 (RRULE `FR,SA,SU` de Poster 20 /
+Reposter 15), mais l'onglet Tâches & RDV n'affichait qu'**une ligne par item**
+à son `due` courant (vendredi) — les occurrences du week-end n'y étaient
+jamais développées. Le calendrier desktop (via `/api/agenda`) les montrait,
+pas l'onglet.
+
+**Fix** :
+- `src/lib/desktopDashboard.ts` : nouveau `weekOccurrenceRows(items, now)` —
+  une ligne par **occurrence de la semaine calendaire** (lundi→dimanche,
+  Europe/Paris) pour les séries récurrentes, même logique que
+  `buildDayAgenda` (overrides/exdates appliqués, occurrences ≤
+  `lastCompletedOccurrenceAt` masquées). Une série sans occurrence dans la
+  fenêtre garde une ligne à son `due` courant. Nouveau `filterRowsByState`
+  (les filtres Aujourd'hui/En retard se lisent sur l'occurrence, pas sur le
+  `due` courant de l'item).
+- `src/components/desktop/DesktopTasks.tsx` : affiche les lignes d'occurrences
+  (clé React `item:occurrence`), la coche transmet `row.due` en
+  `completedAt` → la série avance depuis l'occurrence cochée.
+- `src/components/BriefApp.tsx` : `DesktopShell` recevait `toggleDoneSimple`
+  (qui ignore `completedAt`) → remplacé par `toggleDone` (le transmet).
+- 8 tests ajoutés (dont régression FR,SA,SU → 3 lignes ven/sam/dim).
+  **372 tests au total** (364 + 8), tsc/eslint propres.
+
+**À noter** : les séries Frip & Trend portent `UNTIL=20260831T235959Z`
+(fin août) — elles s'arrêtent le 31/08. Le week-end du 29-30 est couvert ;
+dès septembre, plus aucun créneau poster/reposter. **Question posée à Aramis
+(prolonger en continu ?) — réponse en attente.**
 
 ### 1. ✅ Déploiement VPS — effectué et vérifié (Hermes, 26/08 soir)
 
@@ -259,6 +292,7 @@ archive de la passation précédente.
 |---|---|
 | `npx vitest run` (Claude Code, merge) | 27 files, **345 passed** \| 1 skipped |
 | `npx vitest run` (Hermes, 26/08 soir) | **364 passed** (dont 2 tests de régression coche récurrentes sur données prod) |
+| `npx vitest run` (Hermes, 26/08 nuit) | **372 passed** (364 + 8 tests occurrences semaine onglet Tâches & RDV) |
 | `npx eslint src` | 0 errors, 29 warnings (baseline pré-existante) |
 | `npx tsc --noEmit` | propre |
 | `docker compose --env-file .env.production config` | variables Supabase résolues |
@@ -334,7 +368,11 @@ d'attention :
    encore faux, re-vérifier avec un test jetable `src/lib/prod-check.test.ts`
    (copier `items.json` prod dans `/tmp/items-prod.json`, NOW = jour
    courant, puis supprimer le fichier avant commit).
-4. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
+4. **Question en attente (Aramis)** : les séries Frip & Trend s'arrêtent au
+   31/08 (`UNTIL=20260831T235959Z`). Prolonger en continu (rythme actuel :
+   10 en semaine, 15-20 le week-end) ? Réponse à intégrer (mise à jour des
+   RRULE/UNTIL côté CalDAV + items).
+5. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
    en attente du livrable `.dc.html` (décision du matin 26/08).
 
 ---
