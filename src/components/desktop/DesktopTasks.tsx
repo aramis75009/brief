@@ -19,8 +19,8 @@ import { CheckIcon } from "../icons";
 import {
   TASK_FILTERS,
   TASK_KIND_FILTERS,
+  filterActiveByState,
   filterAgendaItems,
-  filterTasks,
   groupByProject,
   type TaskFilterKey,
   type TaskKindFilter,
@@ -66,18 +66,17 @@ export function DesktopTasks({
   const [quickText, setQuickText] = useState("");
   const [quickProjectId, setQuickProjectId] = useState(projects[0]?.id ?? "");
 
-  // Les filtres d'état ne s'appliquent qu'aux TÂCHES (les RDV n'ont pas de
-  // « En retard » / « Faites » au sens de la coche de tâche) : sur « RDV »,
-  // l'état passe à « Tout » et la liste montre tous les RDV actifs.
+  // Les filtres d'état s'appliquent aux TÂCHES comme aux RDV : « Aujourd'hui »,
+  // « En retard » et « Faites » ont un sens pour les deux (un RDV passé non
+  // fait est en retard). Le filtre par type réduit d'abord la liste.
   const kindFiltered = useMemo(() => filterAgendaItems(items, kind), [items, kind]);
-  const effectiveFilter = kind === "event" ? "all" : filter;
   const filtered = useMemo(
-    () => filterTasks(kindFiltered, effectiveFilter, now),
-    [kindFiltered, effectiveFilter, now],
+    () => filterActiveByState(kindFiltered, filter, now),
+    [kindFiltered, filter, now],
   );
   const groups = useMemo(() => groupByProject(filtered, projects), [filtered, projects]);
   const filterCounts = useMemo(
-    () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterTasks(kindFiltered, f.key, now).length])),
+    () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterActiveByState(kindFiltered, f.key, now).length])),
     [kindFiltered, now],
   );
 
@@ -102,8 +101,7 @@ export function DesktopTasks({
             {kind !== "event" && (
               <span style={{ width: 1, height: 18, alignSelf: "center", background: "rgba(16,16,16,.08)" }} />
             )}
-            {kind !== "event" &&
-              TASK_FILTERS.map((f) => (
+            {TASK_FILTERS.map((f) => (
                 <button
                   key={f.key}
                   onClick={() => setFilter(f.key)}
@@ -133,7 +131,7 @@ export function DesktopTasks({
                 <span className="h-px flex-1" style={{ background: "rgba(16,16,16,.06)" }} />
               </div>
               {rows.map((it) => {
-                const late = effectiveFilter === "overdue";
+                const late = filter === "overdue";
                 const isEvent = it.kind === "event";
                 return (
                   <div key={it.id} className="flex items-center gap-3" style={{ padding: "12px 14px", background: C.bg, borderRadius: 18 }}>

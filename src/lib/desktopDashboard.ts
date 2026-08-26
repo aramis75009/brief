@@ -9,6 +9,8 @@
 
 import { makeBucketOf } from "./buckets";
 import { shiftDays, zonedParts, zonedTime, type CalendarDate } from "./zoned";
+import { occurrencesInRange } from "./rrule";
+import { applyOverride } from "./overrides";
 import type { Item, Priority, Project } from "./types";
 
 function isActive(it: Item): boolean {
@@ -33,10 +35,14 @@ export function overdueItems(items: Item[], now: Date): Item[] {
 /**
  * Faites/total par projet sur la semaine calendaire en cours (lundi→dimanche,
  * Europe/Paris) — les projets les plus chargés d'abord, `limit` au maximum.
- * Un projet sans item cette semaine n'apparaît pas.
+ * Un projet sans rien cette semaine n'apparaît pas.
  *
- * ⚠️ Inclut les TÂCHES ET les RDV (`kind: "event"`) : la semaine d'Aramis est
- * faite des deux (sport, pubs, entretiens…). Exclut les idées et les archivés.
+ * ⚠️ Le total compte les OCCURRENCES, pas les lignes : une série récurrente
+ * (ex. « Aller courir » mer+sam) vaut 2 par semaine, comme le calendrier.
+ * Une occurrence est « faite » quand la dernière coche
+ * (`lastCompletedOccurrenceAt`, post-override) est ≥ à son heure effective —
+ * la sémantique « coche = fait jusqu'à maintenant » des récurrentes.
+ * Inclut les TÂCHES ET les RDV (`kind: "event"`). Exclut idées/archivés.
  */
 export function weekProgressByProject(
   items: Item[],
@@ -48,27 +54,41 @@ export function weekProgressByProject(
   const nextMonday = shiftDays(monday, 7);
   const start = zonedTime(monday.y, monday.m, monday.d, 0, 0);
   const end = zonedTime(nextMonday.y, nextMonday.m, nextMonday.d, 0, 0);
-  const weekItems = items.filter((it) => {
-    if (!it.due) return false;
-    if (it.status === "idea" || it.status === "archived") return false;
-    // Inclure : items actifs (non doneAt) — tâches ET RDV —, items terminés
-    // (doneAt dans la semaine), et récurrentes cochées
-    // (lastCompletedOccurrenceAt dans la semaine)
-    const d = new Date(it.due);
-    return !Number.isNaN(d.getTime()) && d >= start && d < end;
-  });
+
+  /** Les occurrences (ou l'item simple) de la semaine pour un item actif. */
+  const weekSlotsOf = (it: Item): Date[] => {
+    if (!it.due) return [];
+    if (it.status === "idea" || it.status === "archived") return [];
+    const due = new Date(it.due);
+    if (Number.isNaN(due.getTime())) return [];
+    if (!it.rrule) {
+      return due >= start && due < end ? [due] : [];
+    }
+    // Série récurrente : toutes les occurrences de la fenêtre, décalages
+    // (overrides) et suppressions (exdates) appliqués comme dans l'agenda.
+    const anchor = it.seriesAnchor ? new Date(it.seriesAnchor) : due;
+    if (Number.isNaN(anchor.getTime())) return [];
+    return occurrencesInRange(anchor, it.rrule, start, end)
+      .map((occ) => applyOverride(occ, it.overrides, it.exdates))
+      .filter((d): d is Date => d !== null && d >= start && d < end);
+  };
+
+  /** Une occurrence effective est-elle faite ? (coche de récurrente = dernière occurrence cochée) */
+  const isDone = (it: Item, slot: Date): boolean => {
+    if (it.rrule) {
+      if (!it.lastCompletedOccurrenceAt) return false;
+      const last = new Date(it.lastCompletedOccurrenceAt);
+      return !Number.isNaN(last.getTime()) && slot.getTime() <= last.getTime();
+    }
+    return !!it.doneAt;
+  };
+
   return projects
     .map((project) => {
-      const mine = weekItems.filter((it) => it.projectId === project.id);
-      const done = mine.filter((it) => {
-        if (it.doneAt) return true;
-        if (it.lastCompletedOccurrenceAt) {
-          const cd = new Date(it.lastCompletedOccurrenceAt);
-          return !Number.isNaN(cd.getTime()) && cd >= start && cd < end;
-        }
-        return false;
-      }).length;
-      return { project, done, total: mine.length };
+      const mine = items.filter((it) => it.projectId === project.id);
+      const slots = mine.flatMap((it) => weekSlotsOf(it).map((s) => ({ it, s })));
+      const done = slots.filter(({ it, s }) => isDone(it, s)).length;
+      return { project, done, total: slots.length };
     })
     .filter((row) => row.total > 0)
     .sort((a, b) => b.total - a.total)
@@ -130,6 +150,22 @@ export function filterTasks(items: Item[], filter: TaskFilterKey, now: Date): It
       return tasks.filter((it) => !!it.doneAt);
     default:
       return tasks.filter((it) => !it.doneAt);
+  }
+}
+
+/** Items actifs filtrés par état — s'applique aux TÂCHES comme aux RDV (l'écran Tâches & RDV). */
+export function filterActiveByState(items: Item[], filter: TaskFilterKey, now: Date): Item[] {
+  const bucketOf = makeBucketOf(now);
+  const active = items.filter((it) => isActive(it));
+  switch (filter) {
+    case "today":
+      return active.filter((it) => !it.doneAt && bucketOf(it.due) === "today");
+    case "overdue":
+      return active.filter((it) => !it.doneAt && bucketOf(it.due) === "overdue");
+    case "done":
+      return active.filter((it) => !!it.doneAt);
+    default:
+      return active.filter((it) => !it.doneAt);
   }
 }
 

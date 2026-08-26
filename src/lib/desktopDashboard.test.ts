@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterActiveByState,
   filterAgendaItems,
   filterTasks,
   groupByProject,
@@ -106,6 +107,30 @@ describe("weekProgressByProject", () => {
     expect(out[0]).toEqual({ project: PROJECTS[0], done: 1, total: 3 });
   });
 
+  it("compte les OCCURRENCES des séries récurrentes (2/6 pour le sport mer+sam, lun+jeu, mar+ven)", () => {
+    // Semaine du 17 au 23 août 2026 (NOW = jeudi 20). Séries :
+    // - courir : mer + sam → occurrences 19 (mer), 22 (sam) — pas encore cochée
+    // - push : lun + jeu → 17 (lun), 20 (jeu) — lundi fait
+    // - pull : mar + ven → 18 (mar), 21 (ven) — mardi fait
+    // → 2 faits sur 6, comme l'attend Aramis (« sport doit être 2/6 »).
+    const items = [
+      item({ id: "run", projectId: "frip", kind: "event", due: "2026-08-19T09:00:00+02:00", rrule: "FREQ=WEEKLY;BYDAY=WE,SA", seriesAnchor: "2026-08-19T09:00:00+02:00" }),
+      item({ id: "push", projectId: "frip", kind: "event", due: "2026-08-17T09:00:00+02:00", rrule: "FREQ=WEEKLY;BYDAY=MO,TH", seriesAnchor: "2026-08-17T09:00:00+02:00", lastCompletedOccurrenceAt: "2026-08-17T09:00:00+02:00" }),
+      item({ id: "pull", projectId: "frip", kind: "event", due: "2026-08-18T09:00:00+02:00", rrule: "FREQ=WEEKLY;BYDAY=TU,FR", seriesAnchor: "2026-08-18T09:00:00+02:00", lastCompletedOccurrenceAt: "2026-08-18T09:00:00+02:00" }),
+    ];
+    const out = weekProgressByProject(items, PROJECTS, NOW);
+    expect(out[0]).toEqual({ project: PROJECTS[0], done: 2, total: 6 });
+  });
+
+  it("une coche en fin de semaine compte aussi les occurrences précédentes de la série (fait jusqu'à maintenant)", () => {
+    // Coche du samedi → l'occurrence du mercredi de la même semaine est faite aussi.
+    const items = [
+      item({ id: "run", projectId: "frip", kind: "event", due: "2026-08-19T09:00:00+02:00", rrule: "FREQ=WEEKLY;BYDAY=WE,SA", seriesAnchor: "2026-08-19T09:00:00+02:00", lastCompletedOccurrenceAt: "2026-08-22T09:00:00+02:00" }),
+    ];
+    const out = weekProgressByProject(items, PROJECTS, NOW);
+    expect(out[0]).toEqual({ project: PROJECTS[0], done: 2, total: 2 });
+  });
+
   it("respecte la limite", () => {
     const items = [
       item({ id: "f1", projectId: "frip", due: "2026-08-17T09:00:00+02:00" }),
@@ -148,6 +173,32 @@ describe("filterAgendaItems", () => {
 
   it("event ne garde que les RDV", () => {
     expect(filterAgendaItems(items, "event").map((i) => i.id)).toEqual(["e1"]);
+  });
+});
+
+describe("filterActiveByState", () => {
+  const items = [
+    item({ id: "t-today", due: "2026-08-20T09:00:00+02:00" }),
+    item({ id: "e-today", kind: "event", due: "2026-08-20T09:00:00+02:00" }),
+    item({ id: "t-late", due: "2026-08-18T09:00:00+02:00" }),
+    item({ id: "t-done", due: "2026-08-19T09:00:00+02:00", doneAt: "2026-08-19T10:00:00+02:00" }),
+    item({ id: "idea", status: "idea", due: "2026-08-20T09:00:00+02:00" }),
+  ];
+
+  it("all exclut les faites et les idées, garde tâches ET RDV", () => {
+    expect(filterActiveByState(items, "all", NOW).map((i) => i.id)).toEqual(["t-today", "e-today", "t-late"]);
+  });
+
+  it("today garde les tâches et RDV du jour, non faits", () => {
+    expect(filterActiveByState(items, "today", NOW).map((i) => i.id)).toEqual(["t-today", "e-today"]);
+  });
+
+  it("overdue garde les tâches et RDV en retard", () => {
+    expect(filterActiveByState(items, "overdue", NOW).map((i) => i.id)).toEqual(["t-late"]);
+  });
+
+  it("done garde les faites", () => {
+    expect(filterActiveByState(items, "done", NOW).map((i) => i.id)).toEqual(["t-done"]);
   });
 });
 
