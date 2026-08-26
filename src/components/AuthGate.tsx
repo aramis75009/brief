@@ -87,6 +87,8 @@ export function AuthGate({
       const data = (await res.json().catch(() => ({}))) as { message?: string };
       setForgotMessage(data.message ?? "Si ce compte existe, un lien de réinitialisation vient d'être envoyé.");
       setStep("forgot");
+    } catch {
+      setError("Serveur injoignable. Réessaie.");
     } finally {
       setBusy(false);
     }
@@ -98,9 +100,13 @@ export function AuthGate({
         className={
           desktop
             ? "flex w-[42%] max-w-[560px] flex-col items-center justify-center gap-6 border-r border-white/[.06] px-8 text-center"
-            : "flex flex-col items-center gap-3.5 px-6 pt-10 pb-6 text-center"
+            : "safe-top flex flex-col items-center gap-3.5 px-6 text-center"
         }
-        style={{ background: "var(--color-ink)" }}
+        style={
+          desktop
+            ? { background: "var(--color-ink)" }
+            : { background: "var(--color-ink)", paddingBottom: 24 }
+        }
       >
         <Mark />
         <p className="text-20 font-extrabold tracking-tight text-white">Brief</p>
@@ -160,7 +166,7 @@ export function AuthGate({
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                  className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted"
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
