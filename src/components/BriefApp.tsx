@@ -18,13 +18,14 @@ import { BottomNav, type Screen } from "./BottomNav";
 import { CaptureBar } from "./CaptureBar";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
 import { DesktopShell } from "./desktop/DesktopShell";
-import { PinGate } from "./PinGate";
+import { AuthGate } from "./AuthGate";
 import { Toast } from "./Toast";
 import { EmptyState } from "./EmptyState";
 import { SkeletonList } from "./Skeleton";
 import { CheckIcon } from "./icons";
 import {
   ApiError,
+  UnauthorizedError,
   chatWithAssistant,
   createProject,
   deleteItem,
@@ -52,7 +53,6 @@ import {
   queueSnapshot,
   subscribeQueue,
 } from "@/lib/queue";
-import { UnauthorizedError, clearPin, getPin, PIN_HEADER, readStoredTranscript } from "@/lib/pin";
 import { enablePush, sendTestPush, readPushState, isStandalone, isIOS, type PushState } from "@/lib/push-client";
 import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
@@ -71,16 +71,38 @@ const TRANSCRIPT_KEY = "brief:transcript";
 const subscribeNoop = () => () => {};
 const useHydrated = () => useSyncExternalStore(subscribeNoop, () => true, () => false);
 
-/** Retourne les headers avec le PIN si disponible, pour les fetch directs. */
-function pinHeader(): Record<string, string> {
-  const pin = getPin();
-  return pin ? { [PIN_HEADER]: pin } : {};
+/** Lecture d'un brouillon de transcription persistée (hors PIN — inutile de garder pin.ts pour ça). */
+function readStoredTranscript(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(TRANSCRIPT_KEY) ?? "";
+  } catch {
+    return "";
+  }
 }
 
 export function BriefApp() {
   const hydrated = useHydrated();
   const isDesktop = useIsDesktop();
-  const [unlocked, setUnlocked] = useState(() => !!getPin());
+  const [unlocked, setUnlocked] = useState<boolean | null>(null);
+
+  // La session vit dans un cookie httpOnly — illisible en JS client, donc
+  // impossible à connaître de façon synchrone au premier rendu (contrairement
+  // à l'ancien PIN mémorisé en localStorage). D'où l'état à trois valeurs :
+  // null (en cours de vérification) / true / false.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session")
+      .then((res) => {
+        if (!cancelled) setUnlocked(res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setUnlocked(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Navigation
   const [screen, setScreen] = useState<Screen>("home");
@@ -165,7 +187,6 @@ export function BriefApp() {
 
   const fail = useCallback((e: unknown, fallbackTitle: string, retry?: () => void) => {
     if (e instanceof UnauthorizedError) {
-      clearPin();
       setUnlocked(false);
       return;
     }
@@ -179,7 +200,7 @@ export function BriefApp() {
     try {
       setOverview(await fetchOverview());
     } catch (e) {
-      if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+      if (e instanceof UnauthorizedError) { setUnlocked(false); }
     } finally {
       setOverviewLoading(false);
     }
@@ -190,7 +211,7 @@ export function BriefApp() {
     try {
       setTodayAgenda(await fetchAgendaDay(todayDateKey()));
     } catch (e) {
-      if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+      if (e instanceof UnauthorizedError) { setUnlocked(false); }
       // Réseau : non bloquant, comme refreshItems() — l'accueil garde le
       // dernier instantané connu plutôt que de casser l'écran.
     } finally {
@@ -354,7 +375,7 @@ export function BriefApp() {
       const list = await fetchProjects();
       if (list.length) setProjects(list);
     } catch (e) {
-      if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+      if (e instanceof UnauthorizedError) { setUnlocked(false); }
     } finally {
       setReloading(false);
     }
@@ -402,7 +423,7 @@ export function BriefApp() {
       audioUploadRef.current = uploadAudio(rec.blob, rec.mimeType)
         .then((res) => { audioIdRef.current = res.id; return res.id; })
         .catch((e) => {
-          if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+          if (e instanceof UnauthorizedError) { setUnlocked(false); }
           console.warn("[audio] upload échoué:", e instanceof Error ? e.message : e);
           return null;
         });
@@ -547,7 +568,6 @@ export function BriefApp() {
         return await chatWithAssistant(messages);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          clearPin();
           setUnlocked(false);
           throw e;
         }
@@ -573,11 +593,25 @@ export function BriefApp() {
     );
   }
 
-  if (!unlocked) {
+  if (unlocked === null) {
     return (
       <PhoneFrame>
         <StatusBar />
-        <PinGate onUnlocked={() => setUnlocked(true)} />
+        <div className="flex flex-1 items-center justify-center">
+          <span className="block size-6 animate-spin rounded-full border-2 border-ink/20 border-t-ink" />
+        </div>
+      </PhoneFrame>
+    );
+  }
+
+  if (!unlocked) {
+    if (isDesktop) {
+      return <AuthGate desktop onUnlocked={() => setUnlocked(true)} />;
+    }
+    return (
+      <PhoneFrame>
+        <StatusBar />
+        <AuthGate onUnlocked={() => setUnlocked(true)} />
       </PhoneFrame>
     );
   }
@@ -667,7 +701,7 @@ export function BriefApp() {
           <AgendaScreen
             onBack={() => setScreen("home")}
             onOpenTask={openTask}
-            onUnauthorized={() => { clearPin(); setUnlocked(false); }}
+            onUnauthorized={() => { setUnlocked(false); }}
           />
         )}
 
