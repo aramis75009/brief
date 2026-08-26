@@ -87,6 +87,17 @@ ligne restait.
 2 tests de régression construits sur les données prod exactes de Poster 10
 (avec et sans `completedAt`). 364 tests au total.
 
+### 0ter. ✅ Données corrigées (26/08 soir) : Poster 20 / Reposter 15 → kind task
+
+Aramis : « les tâches reposter et poster des articles de Frip & Trend sont des
+tâches et non pas des rdv ». Les items `it_1787066667909_reposter15`
+(Reposter 15) et `it_1787066667912_poster20` (Poster 20) étaient en
+`kind: "event"` en prod → corrigés en `kind: "task"` (backup
+`brief-20260826-213919.tar.gz` avant). Le sync CalDAV ne réécrit jamais
+`kind` sur un item existant (que title/due/rrule/exdates/overrides) → la
+correction tient. Le prompt de parse dit déjà « dans le doute, task » : ces
+items venaient d'un classement antérieur, pas du prompt actuel.
+
 ### 1. ✅ Déploiement VPS — effectué et vérifié (Hermes, 26/08 soir)
 
 Les étapes a→e de la passation précédente ont été exécutées :
