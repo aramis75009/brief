@@ -16,7 +16,7 @@ import { skinFor, shapeFor } from "@/lib/projects";
 import { PRIORITIES } from "@/lib/projects";
 import { fetchAgendaDay } from "@/lib/api";
 import { layoutDayLanes } from "@/lib/calendarLanes";
-import { UnauthorizedError } from "@/lib/pin";
+import { UnauthorizedError } from "@/lib/api";
 import { TIMEZONE, zonedParts, shiftDays, shiftMonths, weekdayOf, lastDayOfMonth, type CalendarDate } from "@/lib/zoned";
 import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Project } from "@/lib/types";

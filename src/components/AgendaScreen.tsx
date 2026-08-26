@@ -5,7 +5,7 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from "./icons";
 import { fetchAgendaDay } from "@/lib/api";
-import { UnauthorizedError } from "@/lib/pin";
+import { UnauthorizedError } from "@/lib/api";
 import { TIMEZONE, zonedParts, shiftDays, type CalendarDate } from "@/lib/zoned";
 import type { AgendaItem } from "@/lib/agenda";
 

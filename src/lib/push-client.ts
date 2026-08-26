@@ -1,6 +1,5 @@
 "use client";
 
-import { PIN_HEADER, getPin } from "./pin";
 
 /**
  * Abonnement Web Push côté navigateur.
@@ -80,13 +79,9 @@ export async function readPushState(): Promise<PushState> {
 }
 
 async function postSubscription(sub: PushSubscription): Promise<void> {
-  const pin = getPin();
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (pin) headers.set(PIN_HEADER, pin);
-
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
-    headers,
+    headers: new Headers({ "Content-Type": "application/json" }),
     body: JSON.stringify({ subscription: sub.toJSON() }),
   });
   if (!res.ok) {
@@ -133,14 +128,11 @@ export async function disablePush(): Promise<PushState> {
   const endpoint = sub.endpoint;
   await sub.unsubscribe();
 
-  const pin = getPin();
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (pin) headers.set(PIN_HEADER, pin);
   // Le retrait serveur est best-effort : l'abonnement est déjà mort côté
   // navigateur, et un endpoint orphelin est purgé au premier envoi (410).
   await fetch("/api/push/subscribe", {
     method: "DELETE",
-    headers,
+    headers: new Headers({ "Content-Type": "application/json" }),
     body: JSON.stringify({ endpoint }),
   }).catch(() => {});
 
@@ -149,16 +141,12 @@ export async function disablePush(): Promise<PushState> {
 
 /** Déclenche un envoi immédiat. Renvoie le nombre d'abonnements servis. */
 export async function sendTestPush(): Promise<{ sent: number; total: number }> {
-  const pin = getPin();
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (pin) headers.set(PIN_HEADER, pin);
-
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
 
   const res = await fetch("/api/push/test", {
     method: "POST",
-    headers,
+    headers: new Headers({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       title: "Brief",
       body: "Test de notification. Si tu lis ça, la chaîne fonctionne.",

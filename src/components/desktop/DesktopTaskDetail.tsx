@@ -22,7 +22,7 @@ import {
 } from "../icons";
 import { isoToLocalInputValue, localInputToIso } from "@/lib/due";
 import { itemType, type ItemType } from "@/lib/item-type";
-import { apiFetch } from "@/lib/pin";
+import { apiFetch } from "@/lib/api";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { calendarForProjectName } from "@/lib/calendarMapping";
 import { TIMEZONE } from "@/lib/zoned";

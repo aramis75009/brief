@@ -16,7 +16,7 @@ import {
 } from "./icons";
 import { isoToLocalInputValue, localInputToIso } from "@/lib/due";
 import { itemType, type ItemType } from "@/lib/item-type";
-import { apiFetch } from "@/lib/pin";
+import { apiFetch } from "@/lib/api";
 import { TIMEZONE } from "@/lib/zoned";
 import type { DraftItem, Item, Project } from "@/lib/types";
 
