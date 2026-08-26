@@ -17,7 +17,9 @@ export async function POST(req: Request): Promise<Response> {
 
   const supabase = await getSupabaseServerClient();
   try {
-    await supabase.auth.resetPasswordForEmail(email.trim());
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://brief.srv1899780.hstgr.cloud"}/auth/reset-password`,
+    });
   } catch {
     /* réponse toujours générique — ne jamais indiquer si l'email existe */
   }

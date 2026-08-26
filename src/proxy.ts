@@ -56,6 +56,30 @@ export async function proxy(request: NextRequest) {
   });
 
   try {
+    // Échange du code de récupération (lien « mot de passe oublié ») contre
+    // une session, AVANT getClaims : sans cet échange, la page
+    // /auth/reset-password n'aurait aucune session et updateUser échouerait.
+    // Le code ne vaut qu'une fois : on le retire de l'URL après échange.
+    const code = request.nextUrl.searchParams.get("code");
+    if (request.nextUrl.pathname === "/auth/reset-password" && code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error) {
+        const url = request.nextUrl.clone();
+        url.searchParams.delete("code");
+        url.searchParams.delete("next");
+        const redirect = NextResponse.redirect(url);
+        // Reporte les cookies de session posés par l'échange (via setAll →
+        // `response`) sur la réponse de redirection (règle de la doc
+        // Supabase : copier les cookies quand on construit une nouvelle
+        // réponse au lieu de renvoyer la réponse du client).
+        response.cookies.getAll().forEach((c) =>
+          redirect.cookies.set(c.name, c.value, c),
+        );
+        return redirect;
+      }
+      // Code invalide ou expiré : on laisse la page s'afficher, elle
+      // détectera l'absence de session et invitera à relancer le flux.
+    }
     await supabase.auth.getClaims();
   } catch (e) {
     // Supabase injoignable, jeton illisible : le rafraîchissement n'a pas eu

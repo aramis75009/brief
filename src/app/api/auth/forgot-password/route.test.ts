@@ -28,6 +28,17 @@ describe("POST /api/auth/forgot-password", () => {
     expect(body.message).toMatch(/Si ce compte existe/);
   });
 
+  it("passe un redirectTo vers /auth/reset-password", async () => {
+    resetPasswordForEmail.mockResolvedValueOnce({ data: {}, error: null });
+    await POST(req({ email: "a@b.com" }));
+    expect(resetPasswordForEmail).toHaveBeenCalledWith(
+      "a@b.com",
+      expect.objectContaining({
+        redirectTo: expect.stringContaining("/auth/reset-password"),
+      }),
+    );
+  });
+
   it("même réponse générique quand resetPasswordForEmail échoue", async () => {
     resetPasswordForEmail.mockRejectedValueOnce(new Error("network down"));
     const res = await POST(req({ email: "unknown@b.com" }));
