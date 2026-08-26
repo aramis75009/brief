@@ -11,13 +11,13 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-26 (après-midi) · PIN → Supabase Auth (email + mot de passe), fusionné, PAS déployé
+# Passation — 2026-08-26 (après-midi) · PIN → Supabase Auth : code + provisionnement prêts, déploiement pour Hermes
 
 | | |
 |---|---|
 | **Agent** | Claude Code (Sonnet 5) |
 | **Branche** | `feat/email-password-auth` (fusion de `feat/email-password-auth-sdd`, supprimée après fusion) |
-| **Commits** | `c803c96` = HEAD local (merge). Base de la branche : `d2d9316` (tip de `feat/ui-redesign-claude` au démarrage de la session). |
+| **Commits** | `f6f1f34` = HEAD local. Base de la branche : `d2d9316` (tip de `feat/ui-redesign-claude` au démarrage de la session). Fusion : `c803c96`. |
 
 ## Goal — l'objectif
 
@@ -57,30 +57,73 @@ Development) → revue de branche complète → correctifs → fusion locale.
 | Autorisation | N'importe qui avec le PIN | Table `authorized_users` (Postgres/Supabase), liste blanche à l'entrée |
 | Routes machine (cron/capture/digest) | Jeton machine dédié | **Inchangé** |
 
-### 3. ⚠️ NON DÉPLOYABLE EN L'ÉTAT — provisionnement Supabase en cours
+### 3. ✅ Provisionnement Supabase terminé — reste UNIQUEMENT le déploiement VPS
 
-**Aramis a créé le projet Supabase pendant cette session** (`brief`,
-`https://nqakaefcwdpotnatcdvb.supabase.co`, Frankfurt/eu-central-1, healthy).
-**Reste à faire avant tout déploiement** — checklist complète dans `TODOS.md`
-(section « P0 bis ») et dans le plan (Task 2, Step 6) :
+**Aramis et Claude Code ont terminé tout le provisionnement Supabase pendant
+cette session** (projet `brief`, `https://nqakaefcwdpotnatcdvb.supabase.co`,
+Frankfurt/eu-central-1, healthy) :
 
-1. ✅ Fait — créer le projet Supabase.
-2. 🔶 En cours — activer email+mot de passe seul (Providers), appliquer
-   `supabase/migrations/0001_authorized_users.sql`, créer le compte
-   d'Aramis, l'insérer dans `authorized_users`.
-3. Migrer la clé de signature JWT vers de l'asymétrique (sinon
-   `requireSession()` fait un aller-retour réseau à chaque appel API).
-4. Site URL / Redirect URLs Supabase → domaine réel de Brief.
-5. `.env.production` sur le VPS : poser les deux clés Supabase, vérifier
-   que `docker compose --env-file .env.production config` les résout.
-6. Après déploiement : `curl -i https://<domaine>/api/auth/session` → 401
-   attendu (un 500 = variable absente au build). Vérifier que le conteneur
-   `cron` démarre (le healthcheck ciblait une route supprimée — corrigé,
-   jamais testé avec un Docker réel dans cette session, seulement relu).
+1. ✅ Projet créé.
+2. ✅ Providers : Email seul actif (déjà le défaut sur ce projet, rien à changer).
+3. ✅ `supabase/migrations/0001_authorized_users.sql` appliquée.
+4. ✅ Compte d'Aramis créé (`aramis.begnene@gmail.com`, invité par email),
+   inséré dans `authorized_users` (vérifié : 1 ligne).
+5. ✅ Clé de signature JWT : **déjà asymétrique (ECC P-256) nativement** sur
+   ce projet — pas de migration à faire.
+6. ✅ Site URL = `https://brief.srv1899780.hstgr.cloud`, Redirect URL
+   `https://brief.srv1899780.hstgr.cloud/**` ajoutée.
 
-**Sans les étapes 1-2, Aramis ne peut plus se connecter à sa propre app** —
-le PIN est retiré, rien ne le remplace tant que le compte Supabase n'existe
-pas.
+**⚠️ Aramis a demandé que ce soit Hermes qui fasse le déploiement** (accès
+direct au VPS). Instructions exactes pour Hermes :
+
+**a. Ajouter au `.env.production` du VPS** (`/docker/brief/.env.production`) :
+```
+NEXT_PUBLIC_SUPABASE_URL=https://nqakaefcwdpotnatcdvb.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<voir ci-dessous — pas copiable depuis cette passation>
+```
+⚠️ **La clé publishable n'est PAS reproduite ici** : la capture d'écran dont
+elle vient était tronquée (`sb_publishable_wFCfL5hmHHpTXjG3m2PHbw_wbF0Z...`,
+coupée par l'UI) — la copier telle quelle casserait la connexion Supabase
+sans erreur claire. Aller la chercher en entier dans Supabase → Project
+Settings → API Keys → onglet « Publishable and secret API keys » → section
+*Publishable key* (commence par `sb_publishable_`, bouton copier à côté).
+**Jamais la Secret key** (`sb_secret_...`, même onglet) — elle ne doit
+jamais entrer dans cette app, nulle part.
+
+**b. Vérifier avant de builder** :
+```bash
+docker compose --env-file .env.production config | grep NEXT_PUBLIC_SUPABASE
+```
+Les deux doivent apparaître résolues (pas vides, pas littéralement
+`${NEXT_PUBLIC_SUPABASE_URL...}`).
+
+**c. Build + up** (comme d'habitude) :
+```bash
+docker compose --env-file .env.production up -d --build
+```
+
+**d. Vérifier après déploiement** :
+```bash
+curl -i https://brief.srv1899780.hstgr.cloud/api/auth/session
+```
+→ **401 attendu** (pas de session). Un **500** = variable Supabase absente
+au build (piège déjà documenté pour la clé VAPID dans `AGENTS.md`) → build
+à refaire avec les bonnes variables. Vérifier aussi :
+```bash
+docker inspect --format '{{.State.Health.Status}}' <conteneur app>
+```
+→ **healthy** attendu — le `HEALTHCHECK` du `Dockerfile` ciblait une route
+supprimée par cette migration, corrigé pendant la revue finale, **jamais
+testé avec un vrai Docker dans cette session** (Docker absent de la machine
+Claude Code). Si `unhealthy` : c'est le premier endroit à regarder, ça
+bloquerait aussi le démarrage du conteneur `cron` (plus aucun rappel Web
+Push).
+
+**e. Après un déploiement réussi et vérifié** : se connecter une fois sur
+`https://brief.srv1899780.hstgr.cloud` avec `aramis.begnene@gmail.com` +
+le mot de passe choisi via le lien d'invitation Supabase, pour confirmer
+que le flux entier fonctionne de bout en bout avant de considérer cette
+migration close.
 
 ## Decisions — choix critiques ou irréversibles
 
@@ -181,21 +224,24 @@ npx tsc --noEmit    → propre une fois le .next périmé de la copie principale
 
 ## Blockers
 
-**Aucun blocage technique côté code.** Le blocage est le provisionnement
-Supabase (en cours avec Aramis au moment de cette passation — voir Current
-state §3) : sans lui, un déploiement casserait l'accès d'Aramis à sa propre
-app.
+**Aucun blocage côté code, aucun blocage côté Supabase — tout est prêt.**
+Le seul obstacle restant est physique : Claude Code (ce Mac) n'a pas d'accès
+SSH au VPS, et Aramis a explicitement demandé que ce soit **Hermes** qui
+fasse ce déploiement, puisqu'il tourne directement dessus.
 
 ## Next — la prochaine action
 
-1. **Terminer le provisionnement Supabase avec Aramis** (Providers email
-   seul, migration SQL, compte + `authorized_users`, clé JWT asymétrique,
-   Site URL) — checklist exacte dans `TODOS.md` § P0 bis.
-2. Poser les deux variables d'env sur le VPS (`.env.production`), déployer,
-   suivre la checklist de vérification post-déploiement (`TODOS.md`).
-3. Une fois en prod et vérifié : traiter les points différés de `TODOS.md`
-   § P0 bis (script agenda, mot de passe oublié, doc README/coordination
-   encore périmée) avant qu'un agent ne bute dessus.
+**Pour Hermes, en priorité** : suivre les 5 étapes (a-e) de Current state §3
+— poser les deux variables Supabase dans `.env.production` (la clé
+publishable complète est à récupérer dans le dashboard Supabase, PAS dans
+cette passation — voir §3 pour pourquoi), rebuild, vérifier le healthcheck
+et `/api/auth/session`, puis un test de connexion réel avant de considérer
+la migration close.
+
+Une fois en prod et vérifié : traiter les points différés de `TODOS.md`
+§ P0 bis (script `brief-agents.sh agenda` cassé, flux « mot de passe
+oublié » incomplet, doc README/coordination encore périmée) avant qu'un
+agent ne bute dessus.
 
 ---
 
@@ -203,7 +249,7 @@ app.
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-26 (après-midi)** | **PIN → Supabase Auth (email + mot de passe), fusionné, pas déployé** | **Claude Code** | *(cette passation)* |
+| **2026-08-26 (après-midi)** | **PIN → Supabase Auth : code + provisionnement prêts, déploiement pour Hermes** | **Claude Code** | *(cette passation)* |
 | 2026-08-26 (matin) | Cinq chantiers poussés et déployés ; refonte Calendrier + Fiche par Claude Design | Hermes Agent | [fiche](docs/handoffs/2026-08-26-matin-chantiers-deployes-hermes.md) |
 | 2026-08-25 (soir) | Cinq chantiers front-end : waveform, DnD Kanban, calendrier, fiche, graphe | Claude Code | [fiche](docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md) |
 | 2026-08-25 (matin) | État du repo + défi Kanban/dépendances/Graphe pour Claude Code | Hermes Agent | [fiche](docs/handoffs/2026-08-25-hermes-etat-repo-mission-bugs.md) |
