@@ -13,6 +13,19 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Configure @typescript-eslint/no-unused-vars to ignore parameters prefixed with underscore.
+  // This is the idiomatic way to mark intentionally unused parameters (e.g., route handlers
+  // that receive but don't use the Request object, _req).
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;
