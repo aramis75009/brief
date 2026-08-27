@@ -11,369 +11,138 @@ tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-26 (soir) · Auth Supabase (email + mdp) DÉPLOYÉE en prod — PIN retiré
+# Passation — 2026-08-27 (matin) · Écran Tâches & RDV : tri chronologique + filtres d'état câblés + « Faites » réparé
 
 | | |
 |---|---|
-| **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Claude Code, 26/08 après-midi) |
-| **Branche** | `feat/email-password-auth` = **prod depuis le 26/08 soir** (fast-forward depuis `feat/ui-redesign-claude`) |
-| **Commits** | `817ca44` = HEAD local + origin + **prod déployée et vérifiée** (fix occurrences semaine onglet Tâches & RDV ; `4277879` fix coche récurrentes ; `6c4502b` RDV/occurrences ; `a620f49` onglet Tâches & RDV ; `c13217c` base auth) |
+| **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Hermes Agent, 26/08 soir) |
+| **Branche** | `feat/email-password-auth` = **prod** (déployée le 26/08 soir) |
+| **Commits** | `db53fed` = HEAD local + origin ; **prod en retard de 1 commit** (déploiement en attente d'accord Aramis) |
 
 ## Goal — l'objectif
 
-Le PIN partagé (`BRIEF_PIN`) est remplacé par une auth par utilisateur
-(email + mot de passe, Supabase Auth) — le code de Claude Code (14 tâches +
-revue de branche, tout fusionné) était prêt et provisionné côté Supabase ;
-**Hermes a fait le déploiement VPS** (étapes a→e de la passation précédente),
-vérifié, et la **prod sert désormais l'auth**. Il reste à Aramis de se
-connecter une fois en réel (étape e, cf. « Next ») et à traiter les points
-différés de `TODOS.md` § P0 bis.
+Analyse des captures d'Aramis (27/08, écran Tâches & RDV) → **3 bugs réels
+corrigés et validés** : tri chronologique des lignes, filtres d'état câblés
+(ils étaient calculés mais jamais appliqués), et filtre « Faites » qui ne
+pouvait jamais rien afficher. Deux points restants documentés pour la suite.
 
 ## Current state — ce qui a été fait
 
-### 0. ✅ Desktop : onglet « Tâches & RDV » + avancement semaine fiabilisé (26/08 soir, commit `a620f49` + `6c4502b`, déployé)
+### 1. ✅ Tri chronologique des lignes Tâches & RDV (fix `db53fed`)
 
-Demande d'Aramis : les RDV étaient zappés par le desktop (l'écran Tâches ne
-montrait que les `kind: "task"` alors que le mobile a des CTA Tâches /
-Rendez-vous / Idées). Corrigé :
+**Symptôme (capture Aramis 27/08)** : dans le groupe « Sport », « Aller
+courir » (sam. 29) était affiché AVANT « Séance push » (jeu. 27) et « Séance
+pull » (ven. 28) — la liste suivait l'ordre de `items.json`, pas les dates.
 
-- **Onglet « Tâches » → « Tâches & RDV »** (`DesktopHeader` + `DesktopTasks`) :
-  liste les tâches ET les RDV par défaut, avec un **filtre par type**
-  (Tout / Tâches / RDV) à côté des filtres d'état existants. Les filtres
-  d'état (Toutes / Aujourd'hui / En retard / Faites) s'appliquent aux DEUX
-  types via `filterActiveByState` (corrigé au 2e passage, commit `6c4502b` :
-  le 1er jet repassait par `filterTasks` → le filtre « RDV » était
-  TOUJOURS vide). Les lignes RDV portent une pastille « RDV · <date> ».
-- **CTA du hero Dashboard cliquables** (`DesktopDashboard`) : les barres
-  « Tâches / RDV / Idées » ouvrent l'onglet pré-filtré
-  (`onGoTasksKind` → `DesktopShell` state `tasksKind` → `initialKind`).
-- **Avancement de la semaine** : `weekProgressByProject` compte désormais
-  les **OCCURRENCES** (pas les lignes) — une série récurrente
-  (courir mer+sam, push lun+jeu, pull mar+ven) vaut 6/semaine, une
-  occurrence est faite si `lastCompletedOccurrenceAt` ≥ son heure
-  (sémantique « coche = fait jusqu'à maintenant », même logique que
-  l'agenda mobile : `occurrencesInRange` + `applyOverride`).
-  **Vérifié sur les données prod réelles : sport = 3/6 le 26/08 soir**
-  (push lun 24 ✓, pull mar 25 ✓, courir mer 26 ✓ — coché par Aramis ;
-  sam 29, jeu 27, ven 28 non faits). Le compteur « cette semaine »
-  du hero est passé de l'horizon 7 j glissants à `weekOpenCounts`
-  (**lundi→dimanche**, mêmes bornes que les barres). Le donut
-  « Aujourd'hui » n'a pas été touché (il était déjà correct).
-- Nouveaux helpers purs dans `src/lib/desktopDashboard.ts` :
-  `filterAgendaItems` (filtre par type), `filterActiveByState` (filtres
-  d'état génériques), `weekOpenItems` / `weekOpenCounts` (bornes semaine
-  partagées). Le badge de l'onglet compte tâches + RDV.
+**Cause** : `weekOccurrenceRows` (src/lib/desktopDashboard.ts) poussait les
+lignes dans l'ordre d'itération des items ; seules les occurrences D'UNE
+série étaient triées entre elles.
 
-### 0bis. ✅ Fix coche des récurrentes (26/08 soir, commit `4277879`, déployé)
+**Fix** : `return rows.sort((a, b) => a.due.localeCompare(b.due))` à la sortie
+de `weekOccurrenceRows`. Toutes les lignes ont un `due` non-null (les items
+sans `due` sont écartés plus haut) → le tri est sûr. Test de régression ajouté
+(reproduit la capture : courir/push/pull → jeu, ven, sam).
 
-**Symptôme (Aramis)** : « j'ai coché Poster 10 articles mais elle ne s'enlève
-pas de mes tâches à faire aujourd'hui ». Cause racine prouvée sur les données
-prod de `it_1786829768252_592` : `completionPatch` calculait la prochaine
-occurrence depuis `due` — or le cron des rappels avance `due` après chaque
-envoi → la coche de mardi (rappel sonné, due déjà au mercredi) avançait la
-série à JEUDI, sautant l'occurrence du mercredi ; la coche du mercredi soir
-inférait l'occurrence la plus récente = mardi (déjà cochée) → patch no-op, la
-ligne restait.
+### 2. ✅ Filtres d'état câblés — « Aujourd'hui » / « En retard » / « Faites » agissent enfin
 
-**Fix dans `src/lib/completion.ts`** :
-- `inferCompletedOccurrence` renvoie l'occurrence **brute RRULE** (plus
-  jamais `due`), filtre par **jour ≤ aujourd'hui** (une occurrence du jour
-  décalée en soirée par un override est cochée pendant la journée), applique
-  `applyOverride` pour l'occurrence effective ;
-- `rawForCompletedAt` : un `completedAt` effectif (heure affichée,
-  post-override) est ramené à l'occurrence brute via la table `overrides` ;
-- `nextOccurrence` est calculé depuis **l'occurrence cochée**, jamais depuis
-  `due` avancé par le cron.
-2 tests de régression construits sur les données prod exactes de Poster 10
-(avec et sans `completedAt`). 364 tests au total.
+**Symptôme** : les compteurs des filtres bougeaient mais la liste ne
+changeait JAMAIS (warning eslint `filtered is assigned a value but never
+used` dans `DesktopTasks.tsx:83`).
 
-### 0ter. ✅ Données corrigées (26/08 soir) : Poster 20 / Reposter 15 → kind task
+**Cause** : `groups` se construisait depuis `rows` (non filtrées) au lieu de
+`filtered` — `filterRowsByState` était appelé puis son résultat ignoré.
 
-Aramis : « les tâches reposter et poster des articles de Frip & Trend sont des
-tâches et non pas des rdv ». Les items `it_1787066667909_reposter15`
-(Reposter 15) et `it_1787066667912_poster20` (Poster 20) étaient en
-`kind: "event"` en prod → corrigés en `kind: "task"` (backup
-`brief-20260826-213919.tar.gz` avant). Le sync CalDAV ne réécrit jamais
-`kind` sur un item existant (que title/due/rrule/exdates/overrides) → la
-correction tient. Le prompt de parse dit déjà « dans le doute, task » : ces
-items venaient d'un classement antérieur, pas du prompt actuel.
+**Fix** : `groups` boucle désormais sur `filtered` (`DesktopTasks.tsx`).
+Le warning eslint associé a disparu (30 warnings restants = imports morts
+pré-existants, inoffensifs).
 
-### 0quater. ✅ Onglet Tâches & RDV : occurrences de la semaine développées (26/08 nuit, commit `817ca44`, déployé)
+### 3. ✅ Filtre « Faites » réparé — il ne pouvait RIEN afficher
 
-**Symptôme (Aramis)** : « les RDV de Frip & Trend ne sont pas présents samedi
-et dimanche ». Diagnostic sur données prod + vrai `buildDayAgenda` (test
-jetable `src/agenda-prod-check.test.ts`, supprimé avant commit) : le serveur
-génère bien les occurrences sam 29 / dim 30 (RRULE `FR,SA,SU` de Poster 20 /
-Reposter 15), mais l'onglet Tâches & RDV n'affichait qu'**une ligne par item**
-à son `due` courant (vendredi) — les occurrences du week-end n'y étaient
-jamais développées. Le calendrier desktop (via `/api/agenda`) les montrait,
-pas l'onglet.
+**Symptôme** : « Faites (0) » permanent (capture Aramis 27/08).
 
-**Fix** :
-- `src/lib/desktopDashboard.ts` : nouveau `weekOccurrenceRows(items, now)` —
-  une ligne par **occurrence de la semaine calendaire** (lundi→dimanche,
-  Europe/Paris) pour les séries récurrentes, même logique que
-  `buildDayAgenda` (overrides/exdates appliqués, occurrences ≤
-  `lastCompletedOccurrenceAt` masquées). Une série sans occurrence dans la
-  fenêtre garde une ligne à son `due` courant. Nouveau `filterRowsByState`
-  (les filtres Aujourd'hui/En retard se lisent sur l'occurrence, pas sur le
-  `due` courant de l'item).
-- `src/components/desktop/DesktopTasks.tsx` : affiche les lignes d'occurrences
-  (clé React `item:occurrence`), la coche transmet `row.due` en
-  `completedAt` → la série avance depuis l'occurrence cochée.
-- `src/components/BriefApp.tsx` : `DesktopShell` recevait `toggleDoneSimple`
-  (qui ignore `completedAt`) → remplacé par `toggleDone` (le transmet).
-- 8 tests ajoutés (dont régression FR,SA,SU → 3 lignes ven/sam/dim).
-  **372 tests au total** (364 + 8), tsc/eslint propres.
+**Cause** : `weekOccurrenceRows` excluait les items `doneAt` À LA SOURCE
+(`if (it.doneAt) continue`) — or `filterRowsByState` ne peut renvoyer de
+lignes « Faites » que si l'item est fait → contradiction, filtre mort.
 
-**À noter** : les séries Frip & Trend portent `UNTIL=20260831T235959Z`
-(fin août) — elles s'arrêtent le 31/08. Le week-end du 29-30 est couvert ;
-dès septembre, plus aucun créneau poster/reposter. **Question posée à Aramis
-(prolonger en continu ?) — réponse en attente.**
+**Fix** : les items faits restent dans `rows` (une ligne à leur `due`
+courant, sans développer d'occurrences résiduelles — une série faite garde
+UNe seule ligne) ; c'est `filterRowsByState` qui les écarte du filtre par
+défaut (`!r.item.doneAt`) et les garde pour « Faites ». Tests adaptés à la
+nouvelle sémantique + test « série faite = 1 ligne ».
 
-### 1. ✅ Déploiement VPS — effectué et vérifié (Hermes, 26/08 soir)
+**Comportement résultant (vérifié par tests)** : « Toutes » montre les
+actifs (items + occurrences de la semaine), « Faites » montre les items
+faits, « En retard » / « Aujourd'hui » lisent l'occurrence (`row.due`).
 
-Les étapes a→e de la passation précédente ont été exécutées :
+## Decisions — choix critiques (journal complet dans `DECISIONS.md`)
 
-- **a. `.env.production`** (`/docker/brief`) : ajout des deux variables
-  Supabase — `NEXT_PUBLIC_SUPABASE_URL` et
-  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (clé publishable complète,
-  récupérée auprès d'Aramis, vérifiée par longueur + correspondance exacte).
-  La **Secret key** (`sb_secret_…`) n'est entrée nulle part.
-- **b. Résolution vérifiée** : `docker compose --env-file .env.production
-  config` résout les deux variables (URL 40 car., clé 46 car., aucun
-  `${...}` littéral).
-- **c. Build + up** : `docker compose --env-file .env.production up -d
-  --build` — exit 0, **healthcheck jamais testé en vrai jusqu'ici : il
-  passe** (`healthy`), le conteneur `cron` a démarré (il attend ce healthy).
-- **d. Vérifications post-déploiement** :
-  - `curl -i https://brief.srv1899780.hstgr.cloud/api/auth/session` → **401**
-    `{"error":"Session invalide ou expirée."}` (pas de 500 → variables
-    présentes au build).
-  - `docker inspect --format '{{.State.Health.Status}}' brief-app-1` →
-    **healthy**.
-  - `GET /` → 200. `POST /api/auth/login` avec identifiants bidon → 401
-    « Email ou mot de passe incorrect. » (signe qu'il faut maintenant
-    `authorized_users` → la liste blanche est réellement consultée).
-  - Rappels : log cron `[cron] checked=56 … failures=0`. Sync CalDAV :
-    réponse `skipped` normale (fenêtre 15 min), jetons machine inchangés.
-- **Bascule de branche** : `/docker/brief` est passé de
-  `feat/ui-redesign-claude` (`d2d9316`) à **`feat/email-password-auth`
-  (`c13217c`)** en fast-forward (bundle+scp+ff, le remote HTTPS sans
-  credentials). `feat/ui-redesign-claude` reste sur GitHub, intacte et en
-  retard de 25 commits — **ne pas la merger ni l'avancer sans demande
-  explicite** (elle n'est plus la branche servie).
-- **Sauvegarde** : `brief-20260826-094904.tar.gz` (1.1M) dans
-  `/var/backups/brief/` avant le redéploiement.
-
-### 1. Design et implémentation — complets, fusionnés (Claude Code)
-
-- **Spec** : `docs/superpowers/specs/2026-08-26-email-password-auth-design.md`.
-- **Plan** : `docs/superpowers/plans/2026-08-26-email-password-auth.md` (14
-  tâches, corrigé en cours de route — voir Decisions).
-- **Maquette approuvée par Aramis** (écran de connexion, logo animé) :
-  `https://claude.ai/code/artifact/5655973d-ef06-4ed1-8585-90c6af776456`.
-- Les 14 tâches sont passées par un cycle complet implémenteur → relecteur,
-  avec boucles de correction quand nécessaire (détail exhaustif dans le
-  ledger SDD, supprimé avec le worktree — l'historique git fait foi
-  maintenant, `git log --oneline d2d9316..c803c96`).
-- **Revue de branche complète** (Opus) a trouvé 3 défauts critiques de
-  **déploiement**, invisibles à l'échelle d'une seule tâche — tous corrigés
-  et revérifiés (voir Decisions). Verdict final : **Ready to merge — Yes.**
-- **Fusion locale faite** : `feat/email-password-auth-sdd` → `feat/email-password-auth`
-  (un conflit dans `DECISIONS.md`, résolu en gardant la version la plus
-  complète). Worktree nettoyé, branche technique supprimée.
-
-### 2. Ce que ça change concrètement
-
-| | Avant | Après |
-|---|---|---|
-| Garde `/api/*` | `requirePin(req)` (PIN partagé, header `x-brief-pin`) | `await requireSession()` (JWT Supabase, cookie httpOnly) |
-| Écran de connexion | `PinGate.tsx` (supprimé) | `AuthGate.tsx` (email + mot de passe) |
-| Session | localStorage + cookie JS, PIN en clair | Cookie httpOnly, rafraîchi par `src/proxy.ts` (Next 16 : `middleware.ts` → `proxy.ts`, renommage pris en compte) |
-| Autorisation | N'importe qui avec le PIN | Table `authorized_users` (Postgres/Supabase), liste blanche à l'entrée |
-| Routes machine (cron/capture/digest) | Jeton machine dédié | **Inchangé** |
-
-### 3. ✅ Provisionnement Supabase terminé (Claude Code, 26/08)
-
-Projet `brief`, `https://nqakaefcwdpotnatcdvb.supabase.co`,
-Frankfurt/eu-central-1, healthy :
-
-1. ✅ Projet créé.
-2. ✅ Providers : Email seul actif (déjà le défaut sur ce projet, rien à changer).
-3. ✅ `supabase/migrations/0001_authorized_users.sql` appliquée.
-4. ✅ Compte d'Aramis créé (`aramis.begnene@gmail.com`, invité par email),
-   inséré dans `authorized_users` (vérifié : 1 ligne).
-5. ✅ Clé de signature JWT : **déjà asymétrique (ECC P-256) nativement** sur
-   ce projet — pas de migration à faire.
-6. ✅ Site URL = `https://brief.srv1899780.hstgr.cloud`, Redirect URL
-   `https://brief.srv1899780.hstgr.cloud/**` ajoutée.
-
-## Decisions — choix critiques ou irréversibles
-
-- **Email + mot de passe, pas email + code OTP.** Le brainstorming initial
-  était parti sur un code à usage unique envoyé par email ; Aramis a corrigé
-  en cours de route (« email plus mdp »). Design et maquette refaits en
-  conséquence — voir la conversation, pas archivée séparément.
-- **`authorized_users` = liste blanche à l'entrée, pas un verrou en continu.**
-  Retirer une ligne bloque les futures connexions mais ne révoque **pas**
-  une session déjà ouverte (le cookie httpOnly continue d'être rafraîchi par
-  `src/proxy.ts` jusqu'à expiration naturelle). Pour couper l'accès
-  immédiatement, désactiver/supprimer dans `auth.users` côté Supabase.
-  Nuance ajoutée à `DECISIONS.md` après que la revue finale l'ait signalée.
-- **`requireSession()` ne vérifie PAS `authorized_users` à chaque requête**,
-  seulement au login (`/api/auth/login`). Sans inscription libre dans
-  Brief, `auth.users` EST déjà la liste blanche ; `authorized_users` sert
-  surtout de métadonnées (nom, dernière connexion) + défense en profondeur
-  au moment de la connexion, pas un contrôle permanent — ce qui garde
-  `requireSession()` sans appel réseau par requête (une fois la clé JWT
-  passée en asymétrique).
-- **Deux défauts de plan trouvés au pré-scan SDD, corrigés avant tout
-  dispatch** : la policy RLS de `authorized_users` ne couvrait que `select`
-  alors que le login fait aussi un `update` (RLS aurait bloqué silencieusement,
-  0 ligne, aucune erreur) → policy `update` ajoutée. `PinGate.tsx` n'était
-  jamais explicitement supprimé dans le plan initial alors qu'il devenait
-  orphelin → ajouté à la tâche de nettoyage final.
-- **Pas de bouton de déconnexion pendant longtemps — revenu dessus.** Le plan
-  supposait à tort qu'un bouton « Verrouiller » existait déjà (faux, vérifié
-  par grep). Première décision : ne pas en ajouter (hors périmètre). La
-  revue de branche finale a renversé cette décision à raison : contrairement
-  à l'ancien PIN (effaçable par l'utilisateur), le nouveau cookie httpOnly
-  ne peut être terminé par **aucune** action utilisateur sans un bouton.
-  Ajouté : `AccountSheet.tsx` a maintenant une ligne « Se déconnecter ».
-- **3 défauts critiques trouvés uniquement à la revue de branche complète**
-  (invisibles à l'échelle d'une tâche) — tous corrigés dans une seule vague
-  de correctifs, revérifiée :
-  1. `/api/capture` appelait `/api/parse` en HTTP interne avec l'ancien
-     header PIN (route désormais protégée par session) → 401 → capture
-     cassée en silence. Corrigé par extraction de la logique de
-     structuration dans `src/lib/parse.ts`, appelée directement (plus
-     d'appel HTTP interne du tout).
-  2. `Dockerfile` : `HEALTHCHECK` visait `POST /api/session` (supprimée) →
-     conteneur jamais sain → `cron` (rappels Web Push) ne démarre jamais.
-     Corrigé : `GET /api/auth/session`. **Testé en vrai au déploiement
-     Hermes : passe.**
-  3. `NEXT_PUBLIC_SUPABASE_URL`/`..._PUBLISHABLE_KEY` jamais câblées dans
-     `Dockerfile`/`docker-compose.yml` (piège déjà documenté pour la clé
-     VAPID, oublié pour Supabase) → site entièrement injoignable au
-     déploiement. Corrigé, calqué sur le motif VAPID existant. **Testé en
-     vrai au déploiement Hermes : les variables sont résolues et le site
-     répond.**
-- **Une branche technique (`feat/email-password-auth-sdd`) a servi de
-  worktree** parce que `feat/email-password-auth` était déjà extraite dans
-  la copie principale (git interdit une même branche dans deux worktrees).
-  Fusionnée puis supprimée à la fin — ne pas la chercher, elle n'existe
-  plus.
+- **RAS pour cette session** — les décisions actives restent celles des
+  passations précédentes (auth Supabase, CalDAV source de vérité, statuts
+  tâche, pas de reactflow…). Aucun arbitrage nouveau d'Aramis.
 
 ## Changed — fichiers et composants
 
-Diff complet : `git diff d2d9316..c803c96 --stat` (~50 fichiers). Nouveaux :
-`src/lib/supabase/server.ts` (pas de `client.ts` — jamais nécessaire, tout
-passe par les routes `/api/auth/*` côté serveur), `src/lib/parse.ts`, `src/proxy.ts`,
-`src/app/api/auth/{login,logout,session,forgot-password}/`,
-`src/components/AuthGate.tsx`, `supabase/migrations/0001_authorized_users.sql`.
-Supprimés : `src/lib/pin.ts`, `src/components/PinGate.tsx`,
-`src/app/api/session/route.ts`. Modifiés : les 17 autres routes `/api/*`
-(garde), `Dockerfile`/`docker-compose.yml` (healthcheck + build args),
-`src/components/{BriefApp,AccountSheet}.tsx`, `AGENTS.md` (invariant
-sécurité), `DECISIONS.md`, `eslint.config.mjs` (`argsIgnorePattern`).
+| Fichier | Nature |
+|---|---|
+| `src/lib/desktopDashboard.ts` | tri chronologique de `weekOccurrenceRows` ; items faits gardés (1 ligne) pour le filtre « Faites » |
+| `src/lib/desktopDashboard.test.ts` | +2 tests (tri multi-items, série faite = 1 ligne), 1 test adapté (fait gardé) |
+| `src/components/desktop/DesktopTasks.tsx` | `groups` construit sur `filtered` (filtres d'état câblés) |
 
-Côté déploiement (cette passation) : `.env.production` du VPS a gagné les
-deux variables `NEXT_PUBLIC_SUPABASE_*` (jamais commitées) ; `/docker/brief`
-est désormais branché sur `feat/email-password-auth` @ `c13217c` ;
-`docs/handoffs/2026-08-26-email-password-auth-claude-code.md` **NEW** —
-archive de la passation précédente.
-
-## Validations — passants / échoués / non lancés
+## Validations
 
 ### ✅ Passants
 
 | Commande / geste | Résultat |
 |---|---|
-| `npx vitest run` (Claude Code, merge) | 27 files, **345 passed** \| 1 skipped |
-| `npx vitest run` (Hermes, 26/08 soir) | **364 passed** (dont 2 tests de régression coche récurrentes sur données prod) |
-| `npx vitest run` (Hermes, 26/08 nuit) | **372 passed** (364 + 8 tests occurrences semaine onglet Tâches & RDV) |
-| `npx eslint src` | 0 errors, 29 warnings (baseline pré-existante) |
+| `npx eslint .` | **0 erreur**, 30 warnings (imports morts pré-existants — le warning `filtered`/`groupByProject` de DesktopTasks a disparu) |
 | `npx tsc --noEmit` | propre |
-| `docker compose --env-file .env.production config` | variables Supabase résolues |
-| `docker compose --env-file .env.production up -d --build` | exit 0, **brief-app-1 healthy** (healthcheck exercé pour la 1re fois en vrai) |
-| `GET /api/auth/session` (sans cookie) | **401** « Session invalide ou expirée. » |
-| `GET /` | 200 |
-| `POST /api/auth/login` (identifiants bidon) | **401** « Email ou mot de passe incorrect. » |
-| Rappels (cron) | `[cron] checked=56 … failures=0` |
-| Sync CalDAV (jeton machine) | route répond, `skipped` (fenêtre 15 min) |
-| Sauvegarde | `brief-20260826-094904.tar.gz` créée et lue |
+| `TZ=UTC npx vitest run` | **374 passed** (373 + 1 nouveau) |
 
-### ⚠️ Non lancés / à vérifier
+### ❌ Échoués
 
-1. **Étape e — test de connexion réel** : se connecter une fois sur
-   `https://brief.srv1899780.hstgr.cloud` avec `aramis.begnene@gmail.com` +
-   le mot de passe choisi via le lien d'invitation Supabase (déjà reçu par
-   email). **C'est Aramis qui peut le faire** (il détient le mot de passe).
-   Rien d'autre ne bloque la migration.
-2. **`src/app/layout.tsx:60` — `LayoutProps` introuvable** en `tsc` si le
-   `.next/types` n'a pas été régénéré récemment (dépend d'un `next dev`/`build`
-   récent, pas du code de cette migration — confirmé disparaître/réapparaître
-   selon l'état de `.next`). Pas bloquant, pré-existant.
-3. **Flux « mot de passe oublié » — ✅ COMPLET depuis le 26/08 soir (commit
-   `a13af27`, déployé)** : `redirectTo` vers `/auth/reset-password`, échange
-   du code dans `src/proxy.ts`, page de saisie du nouveau mot de passe,
-   route `POST /api/auth/reset-password` (`updateUser`). 6 tests ajoutés
-   (351 au total).
-4. **`scripts/brief-agents.sh agenda`** cassé (PIN header vers une route
-   migrée) — `digest` fonctionne toujours. Voir `TODOS.md`.
-5. **Aucune purge de l'état client à la déconnexion** (`BriefApp.tsx`) — sans
-   impact tant qu'un seul compte existe ; à traiter avant un 2e utilisateur.
+Aucun.
+
+### ⚠️ Non lancés / À vérifier
+
+1. **Déploiement prod** : `feat/email-password-auth` est 1 commit en retard
+   (`db53fed`). Déployer quand Aramis valide (bundle+scp+ff + `docker compose
+   --env-file .env.production up -d --build`, procédure `docs/coordination.md`).
+2. **Vérification visuelle** : le rendu du fix n'a pas été screenshoté
+   (pas de navigateur sur cette session) — les 37 tests du module + tsc +
+   eslint couvrent la logique ; un coup d'œil sur l'écran après déploiement
+   confirmera le tri.
 
 ## Blockers
 
-**Aucun blocage technique.** Le déploiement est terminé et vérifié. Points
-d'attention :
+**Aucun blocage technique.** Rappels d'état :
 
-- **La prod n'est plus sur `feat/ui-redesign-claude`** — elle sert
-  `feat/email-password-auth` (@ `c13217c`). Ne pas merger ni avancer
-  `feat/ui-redesign-claude` sans demande explicite d'Aramis (25 commits en
-  retard sur la nouvelle prod ; elle n'est plus servie).
-- **`feat/email-password-auth` n'est pas (encore) fusionnée dans
-  `feat/ui-redesign-claude` ni dans `main`** : la prod est branchée
-  directement dessus. C'est un choix délibéré (passation Claude Code +
-  consigne Aramis « ne merge pas dans feat/ui-redesign-claude sans me
-  redemander »). Toute évolution de prod passe par cette branche.
-- **Le PIN est mort** : les routes `/api/*` refusent le header `x-brief-pin`
-  (garde `requireSession()`). Les scripts/raccourcis qui l'utilisaient
-  (`brief-agents.sh agenda`, éventuels raccourcis iOS à base de PIN) sont à
-  migrer — voir `TODOS.md` § P0 bis.
-- **Le remote prod (/docker/brief) reste HTTPS sans credentials** : se
-  déployer par bundle+scp+ff.
-- **Ne pas lancer `npm run dev` sur ce conteneur** (AGENTS.md) : le port 3000
-  appartient au bridge WhatsApp.
+- **La prod est sur `feat/email-password-auth`** (plus `feat/ui-redesign-claude`,
+  qui reste 25+ commits en retard, ne pas merger sans demande).
+- **Le PIN est mort** (auth Supabase, cookie httpOnly) ; les scripts qui
+  l'utilisaient (`brief-agents.sh agenda`) sont à migrer — `TODOS.md` § P0 bis.
+- **Remote prod HTTPS sans credentials** : se déployer par bundle+scp+ff.
+- **Ne pas lancer `npm run dev` ici** (port 3000 = bridge WhatsApp).
+
+## Points restants repérés sur les captures (27/08) — NON corrigés, à trancher
+
+1. **Cohérence des compteurs** : badge nav « Tâches & RDV (14) » = items
+   actifs (`DesktopShell`), filtre « Toutes (17) » = occurrences de la
+   semaine (séries développées) — deux périmètres différents qui peuvent
+   dérouter. Comportement voulu, mais à clarifier si Aramis relève l'écart.
+2. **Question en attente (Aramis)** : les séries Frip & Trend s'arrêtent au
+   31/08 (`UNTIL=20260831T235959Z`). Prolonger en continu (10 en semaine,
+   15-20 le week-end) ? Réponse à intégrer (RRULE/UNTIL côté CalDAV + items).
 
 ## Next — la prochaine action
 
-1. **Aramis : étape e — ✅ FAIT (26/08 soir)** : connexion en réel validée
-   (« Tout fonctionne, j'ai pu me reconnecter »). Le flux de bout en bout est
-   confirmé — migration auth close. Il a aussi validé le flux « mot de passe
-   oublié » réparé le même soir (choix du mot de passe via
-   `/auth/reset-password`).
-2. **Puis traiter les points différés de `TODOS.md` § P0 bis** (script
-   `brief-agents.sh agenda` cassé, purge de l'état client à la déconnexion,
-   doc README/coordination/agent-calendar-access encore périmée — le point
-   le plus gênant : le tableau des variables d'env de `README.md` omet les
-   deux clés Supabase et liste encore `BRIEF_PIN`).
-3. **Avancement semaine — comportement validé sur prod** (sport = 3/6 le
-   26/08 soir). Attention : les items sport simples déjà faits (`Aller à la
-   salle de sport`, `— séance Pull` du 18/08, caldav-* des 18-19/08) ont des
-   `doneAt` hors de la semaine courante → ils n'apparaissent pas tant que
-   leur date n'est pas dans la fenêtre lundi→dimanche. Si un chiffre paraît
-   encore faux, re-vérifier avec un test jetable `src/lib/prod-check.test.ts`
-   (copier `items.json` prod dans `/tmp/items-prod.json`, NOW = jour
-   courant, puis supprimer le fichier avant commit).
-4. **Question en attente (Aramis)** : les séries Frip & Trend s'arrêtent au
-   31/08 (`UNTIL=20260831T235959Z`). Prolonger en continu (rythme actuel :
-   10 en semaine, 15-20 le week-end) ? Réponse à intégrer (mise à jour des
-   RRULE/UNTIL côté CalDAV + items).
-5. Les deux refontes Claude Design (calendrier desktop + fiche tâche) restent
-   en attente du livrable `.dc.html` (décision du matin 26/08).
+1. **Déploiement de `db53fed`** sur validation d'Aramis (voir Validations).
+2. **Réponse à la question Frip & Trend** (prolonger les séries après le 31/08 ?).
+3. Les points différés de `TODOS.md` § P0 bis restent : `brief-agents.sh
+   agenda` cassé, purge état client à la déconnexion, README/coordination/
+   agent-calendar-access périmés (variables Supabase manquantes, `BRIEF_PIN`
+   encore listé).
+4. Les refontes Claude Design (calendrier desktop + fiche tâche) en attente
+   du livrable `.dc.html`.
 
 ---
 
@@ -381,7 +150,8 @@ d'attention :
 
 | Date | Sujet | Agent | Fiche |
 |---|---|---|---|
-| **2026-08-26 (soir)** | **Auth Supabase (email + mdp) DÉPLOYÉE — PIN retiré** | **Hermes Agent** | *(cette passation)* |
+| **2026-08-27 (matin)** | **Tâches & RDV : tri + filtres câblés + « Faites » réparé** | **Hermes Agent** | *(cette passation)* |
+| 2026-08-26 (soir) | Auth Supabase (email + mdp) DÉPLOYÉE — PIN retiré | Hermes Agent | [fiche](docs/handoffs/2026-08-26-auth-supabase-deployee.md) |
 | 2026-08-26 (après-midi) | PIN → Supabase Auth : code + provisionnement prêts, déploiement pour Hermes | Claude Code | [fiche](docs/handoffs/2026-08-26-email-password-auth-claude-code.md) |
 | 2026-08-26 (matin) | Cinq chantiers poussés et déployés ; refonte Calendrier + Fiche par Claude Design | Hermes Agent | [fiche](docs/handoffs/2026-08-26-matin-chantiers-deployes-hermes.md) |
 | 2026-08-25 (soir) | Cinq chantiers front-end : waveform, DnD Kanban, calendrier, fiche, graphe | Claude Code | [fiche](docs/handoffs/2026-08-25-cinq-chantiers-frontend-claude-code.md) |
