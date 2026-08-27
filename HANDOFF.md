@@ -17,7 +17,7 @@ tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Hermes Agent** — *je passe la main* (passation précédente : Hermes Agent, 26/08 soir) |
 | **Branche** | `feat/email-password-auth` = **prod** (déployée le 26/08 soir) |
-| **Commits** | `db53fed` = HEAD local + origin ; **prod en retard de 1 commit** (déploiement en attente d'accord Aramis) |
+| **Commits** | `db53fed` = HEAD local + origin ; **DÉPLOYÉ en prod le 27/08 (matin)** — Aramis a validé le fix en signalant le tri ; prod = `832a811` (fix + passation) |
 
 ## Goal — l'objectif
 
@@ -104,13 +104,10 @@ Aucun.
 
 ### ⚠️ Non lancés / À vérifier
 
-1. **Déploiement prod** : `feat/email-password-auth` est 1 commit en retard
-   (`db53fed`). Déployer quand Aramis valide (bundle+scp+ff + `docker compose
-   --env-file .env.production up -d --build`, procédure `docs/coordination.md`).
-2. **Vérification visuelle** : le rendu du fix n'a pas été screenshoté
-   (pas de navigateur sur cette session) — les 37 tests du module + tsc +
-   eslint couvrent la logique ; un coup d'œil sur l'écran après déploiement
-   confirmera le tri.
+1. **Vérification visuelle (Aramis)** : le tri est DÉPLOYÉ en prod (27/08
+   matin) — un rechargement de l'écran Tâches & RDV doit montrer les lignes
+   par date croissante (27 avant 28, séances par jour). Si l'ancien ordre
+   persiste : rechargement forcé (PWA desktop = cache navigateur).
 
 ## Blockers
 
