@@ -25,27 +25,50 @@
 
 Tu as signalé trois manques le 2026-08-14. Les voici, une fois pour toutes.
 
+### Lire les tâches et rendez-vous d'Aramis
+
+`bash scripts/brief-agents.sh digest` (récap du jour) ou `agenda AAAA-MM-JJ`
+(jour précis) — JSON brut depuis l'API prod. Secrets dans `.env.local` /
+`.env.production`, jamais commités. Voir `docs/agent-calendar-access.md`.
+
 ### Tu tournes sur le VPS de production
 
 Ton conteneur et la production de Brief sont sur **la même machine**. Ce n'est
 pas une machine de développement isolée. Une commande destructive sur le système
 de fichiers du VPS touche ce qui sert Aramis.
 
-### Deux copies du dépôt, à ne jamais confondre
+### Coordination multi-agents (depuis le 2026-08-19)
+
+Brief est travaillé en parallèle par **Claude Code (Mac d'Aramis)** et **toi
+(Hermes, VPS)**. Avant toute session :
+
+1. `git fetch origin --prune` puis lis `HANDOFF.md` (la dernière passation —
+   si elle a changé, quelqu'un d'autre est passé entre-temps).
+2. Lance `bash scripts/coord/status.sh` — compare GitHub / ta copie / la prod.
+3. Si la prod a avancé, fast-forward AVANT de coder.
+4. Avant tout push : `bash scripts/coord/pre-push.sh`.
+
+Règles complètes : `docs/coordination.md`. Ne pousse jamais sur la branche de
+prod en parallèle d'un autre agent sans passation explicite.
+
+### Les copies du dépôt, à ne jamais confondre
 
 | Chemin | Quoi | Tu y touches ? |
 |---|---|---|
 | `/opt/data/Projets/brief` | **Ta copie de travail.** | ✅ oui |
 | `/docker/brief` | **La production.** C'est ce qui sert le site. | ❌ **non** — voir §2 |
 
-Les deux pointent sur `github.com/aramis75009/brief`. C'est GitHub qui les
-aligne, jamais une copie de fichiers d'un dossier à l'autre.
+Il y a **4 copies au total** (GitHub, ta copie, la prod VPS, le Mac d'Aramis
+pour Claude Code) — le tableau complet et les règles sont dans
+`docs/coordination.md`. Les copies pointent toutes sur
+`github.com/aramis75009/brief`. C'est GitHub qui les aligne, jamais une copie
+de fichiers d'un dossier à l'autre.
 
 ### L'adresse et la branche de production
 
 - Domaine : **`https://brief.srv1899780.hstgr.cloud`**
 - L'IP : `dig +short brief.srv1899780.hstgr.cloud` — ne la code jamais en dur.
-- **La prod est sur la branche `feat/task-completion`, pas sur `main`.**
+- **La prod est sur la branche `feat/ui-redesign-claude`, pas sur `main`.**
   Vérifie (`git -C /docker/brief branch --show-current`) avant de supposer.
 - Traefik est partagé avec n8n, dans `/docker/traefik`. Brief s'y branche par
   les labels de `app`. **Il n'y a pas de proxy dans le dépôt Brief.**
@@ -151,7 +174,7 @@ tester sur son téléphone ». Une validation inventée coûte plus cher qu'un a
 feat/<sujet-court>   ou   fix/<sujet-court>
 ```
 
-Elle part de la branche que la tâche vise — souvent `feat/task-completion`, pas
+Elle part de la branche que la tâche vise — souvent `feat/ui-redesign-claude`, pas
 `main`. Demande si tu hésites.
 
 Messages de commit **en anglais**, format `type: sujet` (`feat:`, `fix:`,

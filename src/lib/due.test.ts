@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatDue, formatRelativeDue, resolveDue, toIsoWithOffset } from "./due";
+import {
+  compareByDue,
+  formatDue,
+  formatRelativeDue,
+  isDueToday,
+  isoToLocalInputValue,
+  localInputToIso,
+  resolveDue,
+  toIsoWithOffset,
+} from "./due";
 
 /**
  * Ces tests couvrent le chantier que le pivot a déplacé : c'est Brief qui
@@ -147,5 +156,101 @@ describe("formatDue", () => {
       expect(res.tone).toBe("overdue");
       expect(res.label).toBe("Hier");
     });
+  });
+});
+
+describe("isDueToday", () => {
+  // Mercredi 19 août 2026, n'importe quelle heure de la journée à Paris.
+  const now = new Date("2026-08-19T10:00:00+02:00");
+
+  it("une tâche aujourd'hui à 20:15 (Paris) compte, quelle que soit l'heure", () => {
+    expect(isDueToday("2026-08-19T20:15:00+02:00", now)).toBe(true);
+  });
+
+  it("une tâche demain ne compte pas", () => {
+    expect(isDueToday("2026-08-20T09:00:00+02:00", now)).toBe(false);
+  });
+
+  it("sans échéance, ce n'est jamais aujourd'hui", () => {
+    expect(isDueToday(null, now)).toBe(false);
+  });
+
+  it("une échéance illisible n'est jamais aujourd'hui", () => {
+    expect(isDueToday("pas-une-date", now)).toBe(false);
+  });
+
+  it("21h30 UTC (23h30 à Paris) reste le 19 — la comparaison doit lire l'heure française", () => {
+    expect(isDueToday("2026-08-19T21:30:00Z", now)).toBe(true);
+  });
+
+  it("22h30 UTC (00h30 le 20 à Paris) devient DEMAIN — le fuseau français décide, jamais l'UTC brut", () => {
+    expect(isDueToday("2026-08-19T22:30:00Z", now)).toBe(false);
+  });
+
+  it("23h30 UTC la veille (01h30 à Paris le 19) compte comme aujourd'hui", () => {
+    expect(isDueToday("2026-08-18T23:30:00Z", now)).toBe(true);
+  });
+});
+
+describe("compareByDue", () => {
+  it("trie par échéance croissante — la plus proche d'abord", () => {
+    const items = [
+      { due: "2026-08-25T00:00:00Z" },
+      { due: "2026-08-20T00:00:00Z" },
+      { due: "2026-08-22T00:00:00Z" },
+    ];
+    expect(items.sort(compareByDue).map((i) => i.due)).toEqual([
+      "2026-08-20T00:00:00Z",
+      "2026-08-22T00:00:00Z",
+      "2026-08-25T00:00:00Z",
+    ]);
+  });
+
+  it("relègue les items sans échéance à la fin", () => {
+    const items = [{ due: null }, { due: "2026-08-20T00:00:00Z" }, { due: null }];
+    const sorted = items.sort(compareByDue);
+    expect(sorted[0].due).toBe("2026-08-20T00:00:00Z");
+    expect(sorted[1].due).toBeNull();
+    expect(sorted[2].due).toBeNull();
+  });
+
+  it("une échéance illisible est traitée comme une absence d'échéance", () => {
+    const items = [{ due: "n'importe quoi" }, { due: "2026-08-20T00:00:00Z" }];
+    expect(items.sort(compareByDue)[0].due).toBe("2026-08-20T00:00:00Z");
+  });
+});
+
+describe("isoToLocalInputValue / localInputToIso", () => {
+  it("aller-retour stable : iso → local → iso", () => {
+    const iso = "2026-08-20T14:30:00+02:00";
+    const local = isoToLocalInputValue(iso);
+    expect(local).toBe("2026-08-20T14:30");
+    expect(localInputToIso(local)).toBe(iso);
+  });
+
+  it("isoToLocalInputValue(null) renvoie une chaîne vide", () => {
+    expect(isoToLocalInputValue(null)).toBe("");
+  });
+
+  it("isoToLocalInputValue sur une date illisible renvoie une chaîne vide", () => {
+    expect(isoToLocalInputValue("n'importe quoi")).toBe("");
+  });
+
+  it("localInputToIso sur une entrée malformée renvoie null", () => {
+    expect(localInputToIso("pas une date")).toBeNull();
+    expect(localInputToIso("2026-08-20")).toBeNull();
+    expect(localInputToIso("2026-08-20T14:30:00")).toBeNull();
+  });
+
+  it("localInputToIso sur un jour calendaire impossible renvoie null", () => {
+    expect(localInputToIso("2026-02-31T10:00")).toBeNull();
+  });
+
+  it("localInputToIso produit un décalage Europe/Paris cohérent en été (+02:00)", () => {
+    expect(localInputToIso("2026-08-20T14:30")).toBe("2026-08-20T14:30:00+02:00");
+  });
+
+  it("localInputToIso produit un décalage Europe/Paris cohérent en hiver (+01:00)", () => {
+    expect(localInputToIso("2026-01-15T09:00")).toBe("2026-01-15T09:00:00+01:00");
   });
 });

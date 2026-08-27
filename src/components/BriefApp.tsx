@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useMemo } from "react";
 import { HomeScreen } from "./HomeScreen";
 import { TaskDetailScreen } from "./TaskDetailScreen";
 import { AgendaScreen } from "./AgendaScreen";
@@ -8,19 +8,30 @@ import { IdeasScreen } from "./IdeasScreen";
 import { SearchScreen } from "./SearchScreen";
 import { CaptureSheet, type CaptureStage } from "./CaptureSheet";
 import { AccountSheet } from "./AccountSheet";
+import { HelpSheet } from "./HelpSheet";
+import { NotificationsSheet } from "./NotificationsSheet";
+import { VoiceSettingsSheet } from "./VoiceSettingsSheet";
+import { PrivacySheet } from "./PrivacySheet";
+import { SubscriptionSheet } from "./SubscriptionSheet";
+import { ChatSheet } from "./ChatSheet";
 import { BottomNav, type Screen } from "./BottomNav";
 import { CaptureBar } from "./CaptureBar";
 import { PhoneFrame, StatusBar } from "./PhoneFrame";
-import { PinGate } from "./PinGate";
+import { DesktopShell } from "./desktop/DesktopShell";
+import { AuthGate } from "./AuthGate";
 import { Toast } from "./Toast";
 import { EmptyState } from "./EmptyState";
 import { SkeletonList } from "./Skeleton";
 import { CheckIcon } from "./icons";
 import {
   ApiError,
+  UnauthorizedError,
+  chatWithAssistant,
   createProject,
   deleteItem,
   deleteProject,
+  fetchAgendaDay,
+  fetchCalDavStatus,
   fetchProjects,
   fetchItems,
   fetchOverview,
@@ -29,8 +40,10 @@ import {
   setItemDone,
   transcribeAudio,
   updateItem,
+  uploadAudio,
 } from "@/lib/api";
-import { formatDue, resolveDue } from "@/lib/due";
+import type { AgendaItem } from "@/lib/agenda";
+import { formatDue, resolveDue, toIsoWithOffset } from "@/lib/due";
 import { uid } from "@/lib/ids";
 import {
   enqueue,
@@ -40,25 +53,74 @@ import {
   queueSnapshot,
   subscribeQueue,
 } from "@/lib/queue";
-import { UnauthorizedError, clearPin, getPin, readStoredTranscript } from "@/lib/pin";
+import { enablePush, sendTestPush, readPushState, isStandalone, isIOS, type PushState } from "@/lib/push-client";
 import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
+import { useIsDesktop } from "@/lib/useIsDesktop";
+import { zonedParts, shiftDays, zonedTime } from "@/lib/zoned";
 import type { DraftItem, Item, Overview, Phase, Project, ToastKind } from "@/lib/types";
+
+/** Date du jour, `AAAA-MM-JJ` en Europe/Paris — clé attendue par `/api/agenda`. */
+function todayDateKey(): string {
+  const p = zonedParts(new Date());
+  return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+}
 
 const TRANSCRIPT_KEY = "brief:transcript";
 
 const subscribeNoop = () => () => {};
 const useHydrated = () => useSyncExternalStore(subscribeNoop, () => true, () => false);
 
+/** Lecture d'un brouillon de transcription persistée (hors PIN — inutile de garder pin.ts pour ça). */
+function readStoredTranscript(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(TRANSCRIPT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function BriefApp() {
   const hydrated = useHydrated();
-  const [unlocked, setUnlocked] = useState(() => !!getPin());
+  const isDesktop = useIsDesktop();
+  const [unlocked, setUnlocked] = useState<boolean | null>(null);
+
+  // La session vit dans un cookie httpOnly — illisible en JS client, donc
+  // impossible à connaître de façon synchrone au premier rendu (contrairement
+  // à l'ancien PIN mémorisé en localStorage). D'où l'état à trois valeurs :
+  // null (en cours de vérification) / true / false.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session")
+      .then((res) => {
+        if (!cancelled) setUnlocked(res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setUnlocked(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Navigation
   const [screen, setScreen] = useState<Screen>("home");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Écran vers lequel « Retour » doit revenir depuis une fiche — capturé au
+  // moment de l'ouverture, pas figé sur "home". Sans ça, Recherche → Fiche →
+  // Retour ramenait toujours à l'Accueil au lieu de Recherche.
+  const [returnScreen, setReturnScreen] = useState<Screen>("home");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [voiceSettingsOpen, setVoiceSettingsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [calendarSyncAt, setCalendarSyncAt] = useState<number | null>(null);
   const [captureStage, setCaptureStage] = useState<CaptureStage>("idle");
 
   // Data
@@ -69,6 +131,11 @@ export function BriefApp() {
   const pending = useSyncExternalStore(subscribeQueue, queueSnapshot, queueServerSnapshot);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  // Source unique pour « aujourd'hui » : le même `/api/agenda` que l'onglet
+  // Rendez-vous, pour que la tuile d'accueil et l'onglet ne puissent jamais
+  // afficher deux nombres différents pour le même jour (voir HANDOFF.md).
+  const [todayAgenda, setTodayAgenda] = useState<AgendaItem[]>([]);
+  const [todayAgendaLoaded, setTodayAgendaLoaded] = useState(false);
   const [projects, setProjects] = useState<Project[]>(SEED_PROJECTS);
   const [reloading, setReloading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
@@ -78,6 +145,12 @@ export function BriefApp() {
   const structureRef = useRef<(text: string) => void>(() => {});
   const sendRef = useRef<() => void>(() => {});
   const loadedRef = useRef(false);
+  /** audioId de la dernière dictée — rattaché aux items au moment de l'envoi. */
+  const audioIdRef = useRef<string | null>(null);
+  /** Durée (s) de la dernière dictée — conservée pour bâtir `audioOrigin` à l'envoi. */
+  const audioSecondsRef = useRef(0);
+  /** Promise de l'upload audio en cours — résout vers l'audioId ou null. */
+  const audioUploadRef = useRef<Promise<string | null>>(Promise.resolve(null));
 
   useEffect(() => { projectsRef.current = projects; }, [projects]);
 
@@ -91,6 +164,21 @@ export function BriefApp() {
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+  /** Ouvre une fiche en mémorisant l'écran de provenance pour le Retour. */
+  const openTask = useCallback((id: string) => {
+    setReturnScreen(screen);
+    setSelectedTaskId(id);
+    setScreen("task");
+  }, [screen]);
+
+  /** Ouvre le compte, avec l'âge RÉEL du dernier passage CalDAV — jamais un texte figé. */
+  const openAccount = useCallback(() => {
+    setAccountOpen(true);
+    void fetchCalDavStatus()
+      .then(({ lastSyncAt }) => setCalendarSyncAt(lastSyncAt))
+      .catch(() => {}); // non bloquant : l'écran Compte reste utilisable sans cette info
+  }, []);
+
   const flash = useCallback((msg: string, kind: ToastKind = "ok") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, kind });
@@ -99,7 +187,6 @@ export function BriefApp() {
 
   const fail = useCallback((e: unknown, fallbackTitle: string, retry?: () => void) => {
     if (e instanceof UnauthorizedError) {
-      clearPin();
       setUnlocked(false);
       return;
     }
@@ -113,24 +200,43 @@ export function BriefApp() {
     try {
       setOverview(await fetchOverview());
     } catch (e) {
-      if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+      if (e instanceof UnauthorizedError) { setUnlocked(false); }
     } finally {
       setOverviewLoading(false);
     }
   }, []);
 
+  /* --- Rendez-vous du jour (source unique, partagée avec l'onglet Rendez-vous) --- */
+  const refreshTodayAgenda = useCallback(async () => {
+    try {
+      setTodayAgenda(await fetchAgendaDay(todayDateKey()));
+    } catch (e) {
+      if (e instanceof UnauthorizedError) { setUnlocked(false); }
+      // Réseau : non bloquant, comme refreshItems() — l'accueil garde le
+      // dernier instantané connu plutôt que de casser l'écran.
+    } finally {
+      setTodayAgendaLoaded(true);
+    }
+  }, []);
+
   /* --- Toggle done --- */
-  const toggleDone = useCallback(async (id: string) => {
+  const toggleDone = useCallback(async (id: string, completedAt?: string | null) => {
     const before = sent.find((t) => t.id === id);
     if (!before) return;
     const done = !before.doneAt;
     setDoneBusyId(id);
     setSent((s) => s.map((t) => (t.id === id ? { ...t, doneAt: done ? new Date().toISOString() : null } : t)));
     try {
-      const { item, outcome } = await setItemDone(id, done);
+      const { item, outcome } = await setItemDone(id, done, completedAt);
       setSent((s) => s.map((t) => (t.id === id ? item : t)));
-      if (outcome === "advanced") flash(`Repoussé au ${formatDue(item.due, item.allDay)}.`);
+      // « Repoussé » disait à Aramis que la coche avait raté sa cible : on
+      // termine l'occurrence du jour (masquée de l'agenda et de l'accueil),
+      // et la série continue à la prochaine occurrence — le toast le dit.
+      if (outcome === "advanced") flash(`Terminée — prochaine le ${formatDue(item.due, item.allDay)}.`);
+      else if (done) flash("Tâche terminée ✓");
+      else flash("Tâche rouverte");
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch (e) {
       setSent((s) => s.map((t) => (t.id === id ? before : t)));
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
@@ -138,7 +244,7 @@ export function BriefApp() {
     } finally {
       setDoneBusyId(null);
     }
-  }, [sent, flash, refreshOverview, fail]);
+  }, [sent, flash, refreshOverview, refreshTodayAgenda, fail]);
 
   /* --- Remove item --- */
   const removeItem = useCallback(async (id: string) => {
@@ -149,12 +255,13 @@ export function BriefApp() {
     try {
       await deleteItem(id);
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch (e) {
       setSent(before);
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
       flash(e instanceof ApiError ? e.message : "La suppression n'a pas été enregistrée.", "err");
     }
-  }, [sent, flash, refreshOverview, fail]);
+  }, [sent, flash, refreshOverview, refreshTodayAgenda, fail]);
 
   /* --- Postpone --- */
   const postponeItem = useCallback(async (id: string) => {
@@ -165,11 +272,65 @@ export function BriefApp() {
       setSent((s) => s.map((t) => (t.id === id ? updated : t)));
       flash("Reporté à demain.");
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch (e) {
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
       flash("Impossible de reporter la tâche.", "err");
     }
-  }, [flash, refreshOverview, fail]);
+  }, [flash, refreshOverview, refreshTodayAgenda, fail]);
+
+  /* --- Édition complète d'un item (fiche) --- */
+  const saveItemEdit = useCallback(async (id: string, patch: Partial<DraftItem>): Promise<boolean> => {
+    try {
+      const updated = await updateItem(id, patch);
+      setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+      flash("Modifications enregistrées.");
+      void refreshOverview();
+      void refreshTodayAgenda();
+      return true;
+    } catch (e) {
+      if (e instanceof UnauthorizedError) { fail(e, ""); return false; }
+      flash(e instanceof ApiError ? e.message : "La modification n'a pas été enregistrée.", "err");
+      return false;
+    }
+  }, [flash, refreshOverview, refreshTodayAgenda, fail]);
+
+  /* --- Idées : archiver (bouton « Abandonner », mobile et desktop) --- */
+  const archiveIdea = useCallback((id: string) => {
+    void (async () => {
+      try {
+        const updated = await updateItem(id, { status: "archived" });
+        setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+        flash("Idée archivée.");
+      } catch (e) {
+        if (e instanceof UnauthorizedError) { fail(e, ""); return; }
+        flash("Archivage impossible.", "err");
+      }
+    })();
+  }, [flash, fail]);
+
+  /**
+   * Idées : « Planifier demain » (desktop) — fixe une échéance concrète
+   * (demain 09:00, priorité 2), contrairement à la simple conversion mobile
+   * qui laisse l'échéance vide. Deux comportements distincts, assumés : sur
+   * desktop, l'idée quitte réellement la boîte pour se poser sur l'agenda.
+   */
+  const promoteIdeaTomorrow = useCallback((id: string) => {
+    void (async () => {
+      try {
+        const tomorrow = shiftDays(zonedParts(new Date()), 1);
+        const due = toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
+        const updated = await updateItem(id, { status: "active", due, allDay: false, priority: 2 });
+        setSent((s) => s.map((t) => (t.id === id ? updated : t)));
+        flash("Planifié demain 09:00.");
+        void refreshOverview();
+        void refreshTodayAgenda();
+      } catch (e) {
+        if (e instanceof UnauthorizedError) { fail(e, ""); return; }
+        flash("Planification impossible.", "err");
+      }
+    })();
+  }, [flash, fail, refreshOverview, refreshTodayAgenda]);
 
   /* --- Refresh items --- */
   const refreshItems = useCallback(async () => {
@@ -181,8 +342,31 @@ export function BriefApp() {
       }
       setSent(await fetchItems());
       void refreshOverview();
+      void refreshTodayAgenda();
     } catch { /* non bloquant */ }
-  }, [flash, refreshOverview]);
+  }, [flash, refreshOverview, refreshTodayAgenda]);
+
+  /** Tâches : ajout rapide sans passer par la voix (écran Tâches desktop). */
+  const quickAddTask = useCallback((title: string, projectId: string) => {
+    const t = title.trim();
+    if (!t) { flash("Écris quelque chose d'abord.", "err"); return; }
+    void (async () => {
+      try {
+        const tomorrow = shiftDays(zonedParts(new Date()), 1);
+        const due = toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
+        const draft: DraftItem = {
+          id: uid(), kind: "task", title: t, projectId, due, allDay: false,
+          priority: 2, rrule: null, status: "active",
+        };
+        const { saved, total } = await saveItems([draft]);
+        if (saved < total) { flash("Non enregistré.", "err"); return; }
+        await refreshItems();
+        flash(`Rangé dans ${projectsRef.current.find((p) => p.id === projectId)?.name ?? projectId}.`);
+      } catch (e) {
+        fail(e, "L'ajout a échoué.");
+      }
+    })();
+  }, [flash, fail, refreshItems]);
 
   /* --- Projects --- */
   const loadProjects = useCallback(async (opts: { silent?: boolean } = {}) => {
@@ -191,7 +375,7 @@ export function BriefApp() {
       const list = await fetchProjects();
       if (list.length) setProjects(list);
     } catch (e) {
-      if (e instanceof UnauthorizedError) { clearPin(); setUnlocked(false); }
+      if (e instanceof UnauthorizedError) { setUnlocked(false); }
     } finally {
       setReloading(false);
     }
@@ -218,8 +402,15 @@ export function BriefApp() {
 
   useEffect(() => { structureRef.current = (text: string) => void structure(text); }, [structure]);
 
+  /* --- Édition d'un brouillon avant envoi (type, date/heure) --- */
+  const updateDraft = useCallback((id: string, patch: Partial<DraftItem>) => {
+    setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  }, []);
+
   /* --- Transcription --- */
   const onRecorded = useCallback(async (rec: Recording) => {
+    audioIdRef.current = null;
+    audioSecondsRef.current = rec.seconds;
     try {
       const text = await transcribeAudio(rec.blob, rec.mimeType, () => setCaptureStage("transcribing"));
       if (!text) {
@@ -228,6 +419,14 @@ export function BriefApp() {
         return;
       }
       setTranscript((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+      // Upload de l'audio — on garde la promise pour l'attendre au send().
+      audioUploadRef.current = uploadAudio(rec.blob, rec.mimeType)
+        .then((res) => { audioIdRef.current = res.id; return res.id; })
+        .catch((e) => {
+          if (e instanceof UnauthorizedError) { setUnlocked(false); }
+          console.warn("[audio] upload échoué:", e instanceof Error ? e.message : e);
+          return null;
+        });
       // Auto-structure après transcription
       void structure(text);
     } catch (e) {
@@ -270,8 +469,34 @@ export function BriefApp() {
       flash("Rien à enregistrer.", "err");
       return;
     }
+    // Attendre que l'upload audio soit terminé — sans ça, audioIdRef.current
+    // est encore null si l'utilisateur envoie avant la fin de l'upload.
+    const audioId = await audioUploadRef.current;
+    const durationSec = audioSecondsRef.current;
+    const fullText = transcript.trim();
+    const hasAudioMeta = !!audioId && durationSec > 0 && !!fullText;
+    const dateIso = new Date().toISOString();
+    const allIds = ready.map((d) => d.id);
+    const itemsToSend = ready.map((d) => ({
+      ...d,
+      title: d.title.trim(),
+      ...(audioId ? { audioId } : {}),
+      ...(hasAudioMeta
+        ? {
+            audioOrigin: {
+              text: fullText,
+              highlight: d.title.trim(),
+              startSec: 0,
+              endSec: durationSec,
+              durationSec,
+              date: dateIso,
+              siblingIds: allIds.filter((sid) => sid !== d.id),
+            },
+          }
+        : {}),
+    }));
     try {
-      const { saved, total } = await saveItems(ready.map((d) => ({ ...d, title: d.title.trim() })));
+      const { saved, total } = await saveItems(itemsToSend);
       if (saved < total) {
         flash(`${saved} enregistré(s) sur ${total}.`, "err");
         return;
@@ -279,12 +504,13 @@ export function BriefApp() {
       await refreshItems();
       setDrafts([]);
       setTranscript("");
+      audioIdRef.current = null;
       setCaptureOpen(false);
       setCaptureStage("idle");
       setScreen("home");
       flash(`${saved} item${saved > 1 ? "s" : ""} enregistré${saved > 1 ? "s" : ""}`);
     } catch (e) {
-      const queued = enqueue(ready.map((d) => ({ ...d, title: d.title.trim() })));
+      const queued = enqueue(itemsToSend);
       if (queued) {
         setDrafts([]);
         setTranscript("");
@@ -294,7 +520,7 @@ export function BriefApp() {
         fail(e, "L'enregistrement a échoué.", () => sendRef.current());
       }
     }
-  }, [drafts, flash, fail, refreshItems]);
+  }, [drafts, transcript, flash, fail, refreshItems]);
 
   useEffect(() => { sendRef.current = () => void send(); }, [send]);
 
@@ -304,14 +530,56 @@ export function BriefApp() {
     let alive = true;
     void (async () => { if (alive) await refreshItems(); })();
     void (async () => { if (alive) await loadProjects({ silent: true }); })();
+    // Vérifier l'état d'abonnement push au démarrage — sans ça, le statut
+    // repasse à "Désactivées" à chaque réouverture même si l'utilisateur
+    // a déjà activé les notifications.
+    void (async () => {
+      try {
+        const state = await readPushState();
+        if (alive && state.status === "on") setPushSubscribed(true);
+      } catch { /* silencieux — pas de réseau ou SW pas prêt */ }
+    })();
     return () => { alive = false; };
   }, [hydrated, unlocked, refreshItems, loadProjects]);
 
-  /* --- Derived data --- */
-  const activeItems = sent.filter((t) => t.status !== "idea" && t.status !== "archived");
-  const ideaItems = sent.filter((t) => t.status === "idea");
-  const selectedTask = selectedTaskId ? sent.find((t) => t.id === selectedTaskId) ?? null : null;
-  const loading = overviewLoading && sent.length === 0;
+  /* --- Derived data (mémoïsés — pas de .filter() à chaque rendu) --- */
+  const activeItems = useMemo(
+    () => sent.filter((t) => t.status !== "idea" && t.status !== "archived"),
+    [sent],
+  );
+  const ideaItems = useMemo(() => sent.filter((t) => t.status === "idea"), [sent]);
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? sent.find((t) => t.id === selectedTaskId) ?? null : null),
+    [selectedTaskId, sent],
+  );
+  const loading = (overviewLoading && sent.length === 0) || !todayAgendaLoaded;
+
+  /* --- Callbacks stables pour éviter les re-rendus des composants memo --- */
+  const toggleDoneSimple = useCallback((id: string) => void toggleDone(id), [toggleDone]);
+
+  const onOpenAgenda = useCallback(() => setScreen("agenda"), []);
+  const onOpenIdeas = useCallback(() => setScreen("ideas"), []);
+  const openChat = useCallback(() => setChatOpen(true), []);
+
+  /** Envoie l'historique à l'assistant Brief et renvoie la réponse du modèle. */
+  const handleChatSend = useCallback(
+    async (messages: { role: string; content: string }[]): Promise<string> => {
+      try {
+        return await chatWithAssistant(messages);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          setUnlocked(false);
+          throw e;
+        }
+        throw e;
+      }
+    },
+    [],
+  );
+  const goBackFromTask = useCallback(() => {
+    setSelectedTaskId(null);
+    setScreen(returnScreen);
+  }, [returnScreen]);
 
   /* --- Render --- */
   if (!hydrated) {
@@ -325,12 +593,68 @@ export function BriefApp() {
     );
   }
 
-  if (!unlocked) {
+  if (unlocked === null) {
     return (
       <PhoneFrame>
         <StatusBar />
-        <PinGate onUnlocked={() => setUnlocked(true)} />
+        <div className="flex flex-1 items-center justify-center">
+          <span className="block size-6 animate-spin rounded-full border-2 border-ink/20 border-t-ink" />
+        </div>
       </PhoneFrame>
+    );
+  }
+
+  if (!unlocked) {
+    if (isDesktop) {
+      return <AuthGate desktop onUnlocked={() => setUnlocked(true)} />;
+    }
+    return (
+      <PhoneFrame>
+        <StatusBar />
+        <AuthGate onUnlocked={() => setUnlocked(true)} />
+      </PhoneFrame>
+    );
+  }
+
+  if (isDesktop) {
+    return (
+      <>
+        <DesktopShell
+          items={sent}
+          activeItems={activeItems}
+          ideaItems={ideaItems}
+          todayAgenda={todayAgenda}
+          projects={projects}
+          overview={overview}
+          transcript={transcript}
+          calendarSyncAt={calendarSyncAt}
+          pushSubscribed={pushSubscribed}
+          onToggleDone={toggleDone}
+          onPostpone={(id) => void postponeItem(id)}
+          onArchiveIdea={archiveIdea}
+          onPromoteIdea={promoteIdeaTomorrow}
+          onSaveItem={saveItemEdit}
+          onQuickAddTask={quickAddTask}
+          onDeleteItem={(id) => void removeItem(id)}
+          onEnablePush={() => {
+            void (async () => {
+              try {
+                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                if (!vapidKey) { flash("Clé VAPID absente — recompile le build.", "err"); return; }
+                const state = await enablePush(vapidKey);
+                if (state.status === "on") { setPushSubscribed(true); flash("Notifications activées."); }
+              } catch (e) {
+                flash(e instanceof Error ? e.message : "Activation impossible.", "err");
+              }
+            })();
+          }}
+          onOpenCapture={openCapture}
+          onOpenChat={openChat}
+          onOpenAccount={openAccount}
+          onOpenNotifications={() => setNotificationsOpen(true)}
+        />
+        {renderSharedSheets()}
+      </>
     );
   }
 
@@ -343,16 +667,20 @@ export function BriefApp() {
         {screen === "home" && (
           <HomeScreen
             items={activeItems}
+            todayAgenda={todayAgenda}
+            ideaCount={ideaItems.length}
             projects={projects}
             overview={overview}
             loading={loading}
-            onToggleDone={(id) => void toggleDone(id)}
-            onOpenTask={(id) => { setSelectedTaskId(id); setScreen("task"); }}
-            onOpenAgenda={() => setScreen("agenda")}
-            onOpenIdeas={() => setScreen("ideas")}
-            onOpenAccount={() => setAccountOpen(true)}
+            onToggleDone={toggleDoneSimple}
+            onOpenTask={openTask}
+            onOpenAgenda={onOpenAgenda}
+            onOpenIdeas={onOpenIdeas}
+            onOpenAccount={openAccount}
             onCapture={openCapture}
-            onAskAI={openCapture}
+            onAskAI={openChat}
+            onHelp={() => setHelpOpen(true)}
+            onNotifications={() => setNotificationsOpen(true)}
           />
         )}
 
@@ -360,20 +688,20 @@ export function BriefApp() {
           <TaskDetailScreen
             item={selectedTask}
             projects={projects}
-            onBack={() => { setSelectedTaskId(null); setScreen("home"); }}
-            onDone={(id) => void toggleDone(id)}
+            onBack={goBackFromTask}
+            onDone={toggleDoneSimple}
             onPostpone={(id) => void postponeItem(id)}
             onDelete={(id) => void removeItem(id)}
             onOpenSibling={(id) => setSelectedTaskId(id)}
+            onSave={saveItemEdit}
           />
         )}
 
         {screen === "agenda" && (
           <AgendaScreen
-            items={activeItems}
-            projects={projects}
             onBack={() => setScreen("home")}
-            loading={loading}
+            onOpenTask={openTask}
+            onUnauthorized={() => { setUnlocked(false); }}
           />
         )}
 
@@ -392,17 +720,7 @@ export function BriefApp() {
                 }
               })();
             }}
-            onArchive={(id) => {
-              void (async () => {
-                try {
-                  const updated = await updateItem(id, { status: "archived" });
-                  setSent((s) => s.map((t) => (t.id === id ? updated : t)));
-                  flash("Idée archivée.");
-                } catch (e) {
-                  flash("Archivage impossible.", "err");
-                }
-              })();
-            }}
+            onArchive={archiveIdea}
             onBack={() => setScreen("home")}
             onCapture={openCapture}
             loading={loading}
@@ -413,10 +731,9 @@ export function BriefApp() {
           <SearchScreen
             items={sent}
             projects={projects}
-            onOpenItem={(id) => { setSelectedTaskId(id); setScreen("task"); }}
-            onVoiceSearch={() => {/* TODO: voice search */}}
+            onOpenItem={openTask}
             onBack={() => setScreen("home")}
-            onOpenAccount={() => setAccountOpen(true)}
+            onOpenAccount={openAccount}
           />
         )}
 
@@ -432,32 +749,140 @@ export function BriefApp() {
         onCapture={openCapture}
       />
 
-      {captureOpen && (
-        <CaptureSheet
-          open={captureOpen}
-          stage={captureStage}
-          seconds={recorder.seconds}
-          transcript={transcript}
-          drafts={drafts}
-          projects={projects}
-          micError={recorder.error ? { title: "Micro refusé", description: "Autorise le micro dans les réglages pour dicter." } : null}
-          onStartListen={toggleMic}
-          onStopListen={() => recorder.stop()}
-          onSubmitText={handleSubmitText}
-          onConfirm={() => void send()}
-          onReplay={() => { setCaptureStage("idle"); setDrafts([]); }}
-          onClose={closeCapture}
-        />
-      )}
-
-      {accountOpen && (
-        <AccountSheet
-          open={accountOpen}
-          onClose={() => setAccountOpen(false)}
-        />
-      )}
-
-      {toast && <Toast message={toast.msg} kind={toast.kind} />}
+      {renderSharedSheets()}
     </PhoneFrame>
   );
+
+  /**
+   * Feuilles partagées mobile/desktop — Capture, Compte, Aide, Notifications,
+   * Voix, Confidentialité, Abonnement, Chat, Toast. Chacune dans son propre
+   * `fixed inset-0` : sur mobile ça équivaut à l'ancien `absolute inset-0`
+   * (le cadre `PhoneFrame` occupe déjà tout le viewport hors aperçu `sm:`),
+   * sur desktop ça les épingle au vrai viewport plutôt qu'au flux, qui peut
+   * dépasser la hauteur visible (tableau de bord long). `CaptureSheet` seule
+   * change de variante : centrée sur desktop (`DESIGN.md` §7 — revue éditable),
+   * feuille montante sur mobile.
+   */
+  function renderSharedSheets() {
+    return (
+      <>
+        {captureOpen && (
+          <div className="fixed inset-0 z-70">
+            <CaptureSheet
+              open={captureOpen}
+              stage={captureStage}
+              seconds={recorder.seconds}
+              levels={recorder.levels}
+              transcript={transcript}
+              drafts={drafts}
+              projects={projects}
+              micError={recorder.error ? { title: "Micro refusé", description: "Autorise le micro dans les réglages pour dicter." } : null}
+              variant={isDesktop ? "modal" : "sheet"}
+              onStartListen={toggleMic}
+              onStopListen={() => recorder.stop()}
+              onSubmitText={handleSubmitText}
+              onUpdateDraft={updateDraft}
+              onConfirm={() => void send()}
+              onReplay={() => { setCaptureStage("idle"); setDrafts([]); }}
+              onClose={closeCapture}
+            />
+          </div>
+        )}
+
+        {accountOpen && (
+          <div className="fixed inset-0 z-70">
+            <AccountSheet
+              open={accountOpen}
+              calendarSyncAt={calendarSyncAt}
+              onClose={() => setAccountOpen(false)}
+              onOpenVoice={() => { setAccountOpen(false); setVoiceSettingsOpen(true); }}
+              onOpenPrivacy={() => { setAccountOpen(false); setPrivacyOpen(true); }}
+              onOpenSubscription={() => { setAccountOpen(false); setSubscriptionOpen(true); }}
+              onLogout={() => {
+                // Le cookie de session est httpOnly : seul le serveur peut
+                // l'effacer. On n'attend pas sa réponse pour rendre l'écran de
+                // connexion — la garde de session refusera de toute façon toute
+                // requête suivante.
+                void fetch("/api/auth/logout", { method: "POST" });
+                setAccountOpen(false);
+                setUnlocked(false);
+              }}
+            />
+          </div>
+        )}
+
+        {helpOpen && (
+          <div className="fixed inset-0 z-70">
+            <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
+          </div>
+        )}
+
+        {notificationsOpen && (
+          <div className="fixed inset-0 z-70">
+            <NotificationsSheet
+              open={notificationsOpen}
+              subscribed={pushSubscribed}
+              onTestPush={() => {
+                void (async () => {
+                  try {
+                    const { sent, total } = await sendTestPush();
+                    if (sent > 0) flash("Notification envoyée — vérifie ton écran.");
+                    else flash("Aucun abonnement actif. Active les notifications d'abord.", "err");
+                  } catch (e) {
+                    flash(e instanceof Error ? e.message : "Échec du test.", "err");
+                  }
+                })();
+              }}
+              onEnablePush={() => {
+                void (async () => {
+                  try {
+                    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                    if (!vapidKey) { flash("Clé VAPID absente — recompile le build.", "err"); return; }
+                    const state = await enablePush(vapidKey);
+                    if (state.status === "on") {
+                      setPushSubscribed(true);
+                      flash("Notifications activées.");
+                    }
+                  } catch (e) {
+                    flash(e instanceof Error ? e.message : "Activation impossible.", "err");
+                  }
+                })();
+              }}
+              onClose={() => setNotificationsOpen(false)}
+            />
+          </div>
+        )}
+
+        {voiceSettingsOpen && (
+          <div className="fixed inset-0 z-70">
+            <VoiceSettingsSheet open={voiceSettingsOpen} onClose={() => setVoiceSettingsOpen(false)} />
+          </div>
+        )}
+
+        {privacyOpen && (
+          <div className="fixed inset-0 z-70">
+            <PrivacySheet open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+          </div>
+        )}
+
+        {subscriptionOpen && (
+          <div className="fixed inset-0 z-70">
+            <SubscriptionSheet open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
+          </div>
+        )}
+
+        {chatOpen && (
+          <div className="fixed inset-0 z-70">
+            <ChatSheet open={chatOpen} onClose={() => setChatOpen(false)} onSend={handleChatSend} />
+          </div>
+        )}
+
+        {toast && (
+          <div className="pointer-events-none fixed inset-0">
+            <Toast message={toast.msg} kind={toast.kind} />
+          </div>
+        )}
+      </>
+    );
+  }
 }

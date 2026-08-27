@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { CloseIcon, ChevronRightIcon, CalendarIcon, MicIcon, BellIcon } from "./icons";
 import type { ReactNode } from "react";
@@ -8,13 +9,39 @@ import type { ReactNode } from "react";
  * AccountSheet — compte & réglages (sheet modal).
  */
 
+/** Texte d'âge de synchro à partir du VRAI dernier passage CalDAV (ms epoch). */
+function formatSyncAge(lastSyncAt: number | null): string {
+  if (lastSyncAt === null) return "Pas encore synchronisé";
+  const minutes = Math.max(0, Math.round((Date.now() - lastSyncAt) / 60_000));
+  if (minutes < 1) return "Synchronisé à l'instant";
+  if (minutes < 60) return `Synchronisé il y a ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return `Synchronisé il y a ${hours} h`;
+}
+
 export function AccountSheet({
   open,
+  calendarSyncAt,
   onClose,
+  onOpenVoice,
+  onOpenPrivacy,
+  onOpenSubscription,
+  onLogout,
 }: {
   open: boolean;
+  calendarSyncAt: number | null;
   onClose: () => void;
+  onOpenVoice?: () => void;
+  onOpenPrivacy?: () => void;
+  onOpenSubscription?: () => void;
+  onLogout?: () => void;
 }) {
+  // Hooks avant le retour anticipé (règle de React) : `open` peut passer à
+  // false pendant la fermeture du sheet, l'ordre des hooks ne doit pas changer.
+  const [caldavOn, setCaldavOn] = useState(true);
+  const [autoStructOn, setAutoStructOn] = useState(false);
+  const [remindersOn, setRemindersOn] = useState(true);
+
   if (!open) return null;
 
   return (
@@ -57,30 +84,50 @@ export function AccountSheet({
           <SettingRow
             icon={<SettingIcon bg="var(--color-meet-100)"><CalendarIcon size={15} className="text-meet-700" /></SettingIcon>}
             title="Calendrier Apple"
-            subtitle="Synchronisé il y a 4 min"
-            toggleOn={true}
+            subtitle={formatSyncAge(calendarSyncAt)}
+            toggleOn={caldavOn}
+            onToggle={() => setCaldavOn((v) => !v)}
           />
           <div className="mx-3.5 h-px bg-ink/[.06]" />
           <SettingRow
             icon={<SettingIcon bg="var(--color-ink)"><MicIcon size={15} className="text-white" /></SettingIcon>}
             title="Structuration auto"
             subtitle="Découper la dictée sans confirmation"
-            toggleOn={false}
+            toggleOn={autoStructOn}
+            onToggle={() => setAutoStructOn((v) => !v)}
           />
           <div className="mx-3.5 h-px bg-ink/[.06]" />
           <SettingRow
             icon={<SettingIcon bg="var(--color-idea-100)"><BellIcon size={15} className="text-idea-700" /></SettingIcon>}
             title="Rappels du matin"
             subtitle="Tous les jours à 8:00"
-            toggleOn={true}
+            toggleOn={remindersOn}
+            onToggle={() => setRemindersOn((v) => !v)}
           />
         </div>
 
         {/* Navigation rows */}
         <div className="mb-4 flex flex-col gap-0.5">
-          <NavRow label="Voix, langue & transcription" />
-          <NavRow label="Confidentialité des notes vocales" />
-          <NavRow label="Abonnement" value="Plus" />
+          <NavRow
+            label="Voix, langue & transcription"
+            onClick={onOpenVoice}
+          />
+          <NavRow
+            label="Confidentialité des notes vocales"
+            onClick={onOpenPrivacy}
+          />
+          <NavRow
+            label="Abonnement"
+            value="Plus"
+            onClick={onOpenSubscription}
+          />
+          {/* La session est un cookie httpOnly rafraîchi à chaque requête par
+              src/proxy.ts : sans cette ligne, rien dans le produit ne permet de
+              la terminer. */}
+          <NavRow
+            label="Se déconnecter"
+            onClick={onLogout}
+          />
         </div>
 
         {/* Close */}
@@ -108,14 +155,20 @@ function SettingRow({
   title,
   subtitle,
   toggleOn,
+  onToggle,
 }: {
   icon: ReactNode;
   title: string;
   subtitle: string;
   toggleOn: boolean;
+  onToggle?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3.5 py-[13px]">
+    <div
+      className="flex items-center gap-3 px-3.5 py-[13px]"
+      onClick={onToggle}
+      style={{ cursor: onToggle ? "pointer" : "default" }}
+    >
       {icon}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[14.5px] font-bold">{title}</span>
@@ -126,9 +179,12 @@ function SettingRow({
   );
 }
 
-function NavRow({ label, value }: { label: string; value?: string }) {
+function NavRow({ label, value, onClick }: { label: string; value?: string; onClick?: () => void }) {
   return (
-    <button className="flex min-h-[44px] items-center justify-between gap-2 rounded-[14px] px-3.5 py-[13px] text-left">
+    <button
+      onClick={onClick}
+      className="flex min-h-[44px] items-center justify-between gap-2 rounded-[14px] px-3.5 py-[13px] text-left"
+    >
       <span className="text-[14.5px] font-bold">{label}</span>
       <span className="flex items-center gap-2">
         {value && <span className="text-[12.5px] font-bold text-ink-muted">{value}</span>}

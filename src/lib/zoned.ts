@@ -54,6 +54,14 @@ export function zonedParts(date: Date): CalendarDate & {
   hour: number;
   minute: number;
 } {
+  // Garde-fou : une date invalide (NaN) faisait planter formatToParts →
+  // RangeError → crash de TOUTE l'app au rendu (constaté en prod le
+  // 2026-08-19 : un DTSTART CalDAV flottant non converti). Une date
+  // invalide ne doit jamais faire tomber l'interface ; elle renvoie une
+  // valeur sentinelle que les appelants traitent comme « aucune date ».
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return { y: 0, m: 0, d: 0, weekday: -1, hour: -1, minute: -1 };
+  }
   const f: Record<string, string> = {};
   for (const p of PARTS.formatToParts(date)) f[p.type] = p.value;
 

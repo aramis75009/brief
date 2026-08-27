@@ -1,6 +1,6 @@
 import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { patchItem, readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
@@ -51,6 +51,7 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     notes: typeof v.notes === "string" ? v.notes : undefined,
     subtasks: Array.isArray(v.subtasks) ? v.subtasks.filter(isSubTask) : undefined,
     audioOrigin: isAudioOrigin(v.audioOrigin) ? v.audioOrigin : undefined,
+    audioId: typeof v.audioId === "string" && v.audioId.trim() ? v.audioId.trim() : undefined,
     status: v.status === "idea" || v.status === "archived" ? v.status : undefined,
   };
 }
@@ -71,7 +72,7 @@ function isAudioOrigin(v: unknown): v is import("@/lib/types").AudioOrigin {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const url = new URL(req.url);
@@ -87,7 +88,7 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: { items?: unknown };
@@ -156,12 +157,12 @@ export async function POST(req: Request): Promise<Response> {
  * lecture-modification-écriture concurrente perdrait l'une des deux.
  */
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
-  let body: { id?: unknown; done?: unknown };
+  let body: { id?: unknown; done?: unknown; completedAt?: unknown };
   try {
-    body = (await req.json()) as { id?: unknown; done?: unknown };
+    body = (await req.json()) as { id?: unknown; done?: unknown; completedAt?: unknown };
   } catch {
     return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
   }
@@ -171,11 +172,16 @@ export async function PATCH(req: Request): Promise<Response> {
   if (typeof body.done !== "boolean") {
     return Response.json({ error: "`done` doit être un booléen." }, { status: 400 });
   }
+  // Occurrence PRÉCISE cochée (l'heure effective affichée dans la liste du
+  // jour). Sur une récurrence, le cron des rappels peut avoir avancé `due`
+  // au-delà de l'occurrence qu'on coche : sans elle, `completionPatch`
+  // enregistrerait la mauvaise occurrence comme faite.
+  const completedAt = typeof body.completedAt === "string" ? body.completedAt : undefined;
 
   const item = (await readItems()).find((i) => i.id === id);
   if (!item) return Response.json({ error: "Item introuvable." }, { status: 404 });
 
-  const { kind, patch } = completionPatch(item, body.done, new Date());
+  const { kind, patch } = completionPatch(item, body.done, new Date(), completedAt);
 
   try {
     const updated = await patchItem(id, patch);

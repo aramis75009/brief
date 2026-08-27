@@ -1,6 +1,5 @@
 "use client";
 
-import { PIN_HEADER, getPin } from "./pin";
 import type { DraftItem, Item } from "./types";
 
 /** Ce qui dort dans la file : un brouillon + l'instant où il y est entré. */
@@ -145,17 +144,13 @@ export async function flushQueue(): Promise<FlushResult> {
   const items = read();
   if (!items.length) return { attempted: 0, saved: 0, remaining: 0 };
 
-  const pin = getPin();
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (pin) headers.set(PIN_HEADER, pin);
-
   let saved = 0;
   let savedIds: string[] = [];
 
   try {
     const res = await fetch("/api/items", {
       method: "POST",
-      headers,
+      headers: new Headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({ items }),
       signal: AbortSignal.timeout(30_000),
     });

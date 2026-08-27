@@ -27,6 +27,91 @@ Voir la section « Décisions à trancher » plus bas.
 
 ---
 
+## P0 bis — ✅ DÉPLOYÉ le 2026-08-26 soir (auth email + mot de passe en prod)
+
+**Quoi :** le PIN partagé (`BRIEF_PIN`) est entièrement remplacé par une auth
+Supabase (email + mot de passe) — 14 tâches + 1 vague de correctifs, revue de
+branche complète, fusionné dans `feat/email-password-auth` (commit `c803c96`),
+**déployé en prod par Hermes le 26/08 soir** (étapes a→e, vérifié : session
+401, healthcheck healthy, login 401, rappels + CalDAV ok). La prod est
+branchée sur `feat/email-password-auth` @ `c13217c`.
+Voir `docs/superpowers/specs/2026-08-26-email-password-auth-design.md`,
+`docs/superpowers/plans/2026-08-26-email-password-auth.md` et l'entrée
+`DECISIONS.md` du 2026-08-26.
+
+**⚠️ Ne PAS déployer sans avoir fait, dans l'ordre** (checklist complète :
+plan, section Task 2 Step 6) :
+1. ✅ **Fait le 2026-08-26** — projet Supabase créé (`brief`,
+   `https://nqakaefcwdpotnatcdvb.supabase.co`, Frankfurt/eu-central-1).
+   Providers vérifié : Email seul déjà actif par défaut, tout le reste
+   désactivé — rien à changer.
+2. ✅ **Fait le 2026-08-26** — `supabase/migrations/0001_authorized_users.sql`
+   appliquée (table + les deux policies RLS). Compte d'Aramis créé par
+   invitation email (`aramis.begnene@gmail.com`, UUID
+   `90f86119-b834-4f8a-9410-219940373653`), inséré dans `authorized_users`
+   (vérifié : `select * from authorized_users` → 1 ligne).
+3. ✅ **Déjà en l'état voulu** — la clé de signature JWT de ce projet est
+   nativement en ECC (P-256) asymétrique (vérifié dans Project Settings →
+   JWT Keys : `CURRENT KEY` = ECC P-256, l'ancienne clé HS256 n'apparaît
+   qu'en "Previously used keys", conservée seulement pour vérifier les
+   jetons déjà émis jusqu'à expiration). Rien à migrer — l'entrée
+   `DECISIONS.md` sur le sujet supposait à tort que HS256 était le défaut
+   sur les nouveaux projets ; à corriger.
+4. ✅ **Fait le 2026-08-26** — Site URL réglé sur
+   `https://brief.srv1899780.hstgr.cloud`, Redirect URL
+   `https://brief.srv1899780.hstgr.cloud/**` ajoutée (vérifié après
+   rechargement de la page, valeurs persistées côté serveur).
+5. ✅ **Fait le 2026-08-26 soir (Hermes)** — `NEXT_PUBLIC_SUPABASE_URL` /
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` posées dans `.env.production` sur
+   le VPS (clé publishable complète fournie par Aramis), `docker compose
+   --env-file .env.production config` les résout (pas vides), puis déploiement.
+6. ✅ **Fait le 2026-08-26 soir (Hermes)** — `curl -i
+   https://brief.srv1899780.hstgr.cloud/api/auth/session` → **401** (pas de
+   500 → variables présentes au build). `docker inspect --format
+   '{{.State.Health.Status}}' brief-app-1` → **healthy**, et le conteneur
+   `cron` (rappels Web Push) a démarré.
+
+**Checklist de déploiement (points 1-6) : tout fait. Reste l'étape e : Aramis
+se connecte une fois en réel (`aramis.begnene@gmail.com` + mdp du mail
+d'invitation Supabase) pour confirmer le flux de bout en bout.
+
+**Sans le point 1-2, Aramis ne peut plus se connecter à sa propre app** — le
+PIN a été retiré, rien ne le remplace tant que le compte n'existe pas.
+✅ Compte créé et invité le 26/08 — le PIN n'est plus nécessaire.
+
+**Corrigé pendant la revue finale, vérifié en vrai au déploiement du
+26/08 soir (Hermes)** : le `HEALTHCHECK` du `Dockerfile` passe (healthy) et
+les `build.args` de `docker-compose.yml` pour les deux variables Supabase
+sont résolus et inlinés (session 401, pas de 500).
+
+**Différé volontairement, pas dans cette branche :**
+- **`scripts/brief-agents.sh agenda AAAA-MM-JJ` est cassé** — appelle
+  `/api/agenda` (migrée) avec l'ancien header PIN → 401. `digest` marche
+  toujours (jeton machine). À trancher : jeton machine dédié en lecture pour
+  `/api/agenda`, ou retirer la sous-commande.
+- **✅ Le flux « Mot de passe oublié » est COMPLET depuis le 26/08 soir
+  (commit `a13af27`, déployé)** — `redirectTo` vers `/auth/reset-password`,
+  échange du code dans `src/proxy.ts`, page de saisie du nouveau mot de
+  passe, route `POST /api/auth/reset-password` (`updateUser`). 6 tests
+  ajoutés (351 au total).
+- **Aucune purge de l'état client à la déconnexion** (`BriefApp.tsx`) : les
+  items du compte précédent restent brièvement affichés après une nouvelle
+  connexion sur le même onglet, et la file hors-ligne (`src/lib/queue.ts`,
+  localStorage) survit à la déconnexion. Sans impact tant qu'un seul compte
+  existe ; à traiter avant l'arrivée d'un second utilisateur.
+- **Documentation encore périmée** (mentionne le PIN) : `README.md` (tableau
+  des variables d'env — liste `BRIEF_PIN`, **omet les deux clés Supabase**,
+  ce qui est le point le plus gênant puisque c'est la référence de
+  déploiement), `docs/coordination.md` (smoke-test curl), et
+  `docs/agent-calendar-access.md` (« BRIEF_PIN = clé maîtresse »).
+- `src/proxy.ts` : `createServerClient(...)` lui-même reste hors du
+  `try/catch` ajouté en revue finale — une URL Supabase présente mais mal
+  formée (pas juste absente) plante encore tout le site. Correctif d'une
+  ligne, non urgent (le smoke-test du point 6 ci-dessus l'attraperait au
+  déploiement).
+
+---
+
 ## P0 — ✅ Entièrement soldé le 2026-08-13
 
 **Les trois blocages sont levés le même jour** : l'app est en ligne en HTTPS, elle
@@ -157,12 +242,144 @@ raison nouvelle.
 
 ## P2 — Prévu, à faire plus tard
 
+### Stocker les enregistrements vocaux — annoncé par Aramis comme le prochain chantier (2026-08-19 soir)
+- **Quoi :** garder l'audio brut de chaque dictée, pas seulement le texte
+  transcrit, pour pouvoir ré-écouter l'original derrière un item. Le bouton
+  « Écouter l'extrait » existe déjà dans `TaskDetailScreen.tsx` (à côté du
+  fil d'origine) mais n'a **aucun handler** — conçu pour ça dès le départ,
+  jamais branché faute de quoi que ce soit à lire.
+- **État actuel, vérifié dans le code :** `src/app/api/transcribe/route.ts`
+  reçoit le fichier audio en multipart et le transmet tel quel à Groq
+  Whisper — **il n'est enregistré nulle part**, perdu dès que la réponse
+  HTTP part. `Item.audioOrigin` (`src/lib/types.ts`) ne garde que des
+  métadonnées texte (transcription complète, extrait surligné, `startSec`/
+  `endSec`/`durationSec`) — jamais le blob audio lui-même.
+- **Prérequis explicites d'Aramis avant de s'y attaquer**, dans ses mots :
+  « il va falloir bien vérifier que l'IA qui s'occupe de transcrire le vocal
+  à l'écrit fonctionne bien, que l'enregistrement fonctionne bien, etc. » —
+  fiabiliser l'existant (`useRecorder.ts` côté client, `/api/transcribe`
+  côté serveur) avant d'ajouter le stockage par-dessus, pas en même temps.
+- **Questions à trancher avant de coder** (brainstorming architectural,
+  pas un fix ponctuel — voir `superpowers:brainstorming`) : où stocker
+  (volume `brief-data` existant vs stockage objet dédié — les fichiers
+  audio pèsent nettement plus que le JSON actuel, qui reste minuscule) ;
+  taille/rétention (garder indéfiniment ou purger après N jours ?) ; format
+  exact du lien `AudioOrigin` → fichier stocké ; câblage réel du bouton Play
+  déjà présent dans l'UI ; confidentialité (ce sont des enregistrements
+  vocaux personnels, sur un VPS auto-hébergé — pas de tiers, mais un vrai
+  volume de données sensibles qui grossit).
+- **Effort :** M-L, nécessite un vrai brainstorming architectural avant
+  d'écrire du code · **Priorité :** annoncée par Aramis comme le prochain
+  chantier — à traiter avant les autres entrées P2 ci-dessous.
+- **Dépend de :** fiabilité vérifiée de l'enregistrement et de la
+  transcription en premier (prérequis explicite d'Aramis, voir ci-dessus).
+
+### Bug préexistant : `<button>` imbriqué dans `TodayRow`/`RowCheckbox`
+- **Quoi :** `HomeScreen.tsx`, la ligne « Aujourd'hui » est un `<button>` qui
+  contient `RowCheckbox`, un second `<button>` — HTML invalide, erreur
+  d'hydratation React visible en console (« 2 Issues » dans l'overlay dev).
+- **Découvert :** en testant la refonte du 19/08, pas introduit par elle.
+- **Effort :** S (CC) · **Priorité :** P2
+
+### Refonte du système de tâches + report avec choix de date — retour Aramis 2026-08-20
+- **Quoi :** Aramis : « je pense qu'il va falloir qu'on revoie complètement le
+  système de tâches dans Brief car là j'essaye de repousser une tâche, je peux
+  pas choisir la date à laquelle je vais la repousser, tout bug quasiment tout
+  bug au niveau des tâches. Il va falloir qu'on donne la main à [une IA très
+  puissante] pour qu'elle s'occupe de tout ça. »
+- **Deux problèmes concrets :**
+  1. « Reporter » ne propose aucune date : `postponeItem` (`BriefApp.tsx`)
+     fait `resolveDue("demain", …)` en dur — impossible de repousser à une
+     date choisie. Il faut un sélecteur de date/heure dans la fiche.
+  2. Le comportement des récurrentes prêtait à confusion (toast « Repoussé »,
+     occurrences passées réaffichées) — corrigé le 20/08 soir pour le
+     masquage (commit `899ade4`), mais la refonte globale du modèle de
+     tâches reste demandée par Aramis.
+- **Direction pressentie :** confier la refonte du modèle de tâches à une IA
+  puissante (Claude ?), via un vrai brainstorming architectural d'abord
+  (comme le chantier stockage vocal). PAS un fix ponctuel.
+- **Effort :** XL · **Priorité :** P2, en attente de décision Aramis sur
+  l'agent/la méthode.
+
 **Tranché par Aramis le 2026-08-15 :**
 
-### Version Desktop & Vue Kanban (Trello-like)
-- Refonte / layout adapté grand écran (navigation latérale, vue d'ensemble étendue).
-- Vue en colonnes Kanban / Board interactif avec glisser-déposer (Drag & Drop) d'un statut/horizon à un autre.
-- Prototype préliminaire / preview HTML via Claude Design.
+### ~~Version Desktop~~ — V1 livrée le 2026-08-23, en attente de revue
+- **Quoi :** port fidèle du prototype Claude Design `Brief Desktop.dc.html`
+  (5 écrans : Dashboard, Calendrier, Tâches, Idées, Réglages, + palette ⌘K +
+  modale de capture) en composants React réels, `src/components/desktop/`,
+  bascule à 1024px via `useIsDesktop()`. Mobile inchangé. Voir
+  `docs/handoffs/2026-08-23-...` (prochaine archive) pour le détail.
+- **Reste à faire :** revue visuelle d'Aramis sur écran large, `npm run build`
+  (non lancé pendant la session d'implémentation — `dev` tournait en
+  parallèle), commit/déploiement sur demande explicite.
+- **Effort :** fait (Claude Code) · **Priorité :** revue avant merge
+
+### Vue Kanban (Trello-like) — hors périmètre de la V1 desktop
+- **Quoi :** colonnes Kanban / board interactif avec glisser-déposer
+  (Drag & Drop) d'un statut/horizon à un autre.
+- **Pourquoi différée :** le prototype fourni par Aramis pour la V1 desktop
+  (`Brief Desktop.dc.html`) ne contient aucun board Kanban — seulement les 5
+  écrans listés ci-dessus. Le tranchage du 2026-08-15 groupait les deux sous
+  un même chantier ; ils sont désormais deux chantiers distincts.
+- **Effort :** M-L (nécessite un vrai brainstorming — modèle de statuts/
+  colonnes, drag & drop) · **Priorité :** P2, à spécifier séparément
+
+### Calendrier desktop — gros chantier (reporté par Aramis le 23/08)
+- **Quoi :** l'écran Calendrier desktop (`DesktopCalendar.tsx`) a un affichage
+  buggé. Aramis le sait et reporte : « c'est un gros chantier, on s'en
+  occupera plus tard ».
+- **Mise à jour 2026-08-25 (soir) :** le **chevauchement** est traité (commit
+  `dcad9ce`) — les événements d'un même créneau se partagent la largeur du jour
+  en voies, conformément à `DESIGN.md` §7.2, avec un « +N » dépliable au-delà de
+  trois. C'était le défaut le plus visible, pas le seul : la vue **mois** et le
+  panneau latéral n'ont pas été touchés, et rien n'a été vérifié au-delà de 4
+  événements simultanés sur un créneau.
+- **Mise à jour 2026-08-26 :** Aramis a vu la preview et tranche : le calendrier
+  doit être **entièrement revu par Claude Design** (nouveau livrable `.dc.html`),
+  puis porté en code. **Ne pas continuer à « rafistoler » l'écran actuel** — les
+  correctifs restants attendent la refonte. Décision inscrite dans
+  `DECISIONS.md` (2026-08-26). **Effort :** L · **Priorité :** P1 (décision actée)
+
+### Fiche tâche desktop — refonte Claude Design (décision 2026-08-26)
+- **Quoi :** la fiche tâche (`DesktopTaskDetail.tsx`) a été livrée et recettée
+  (25/08, commit `62ad6a6`), mais Aramis a vu la preview et **veut une refonte
+  complète par Claude Design**, comme le calendrier. **Ne pas retoucher le
+  design en code tant que le livrable Claude Design n'est pas arrivé.**
+- **Décision :** `DECISIONS.md` (2026-08-26). **Effort :** M · **Priorité :** P1
+- **Rappel de l'existant à conserver** : bandeau de blocage, étiquettes avant le
+  titre, noms d'étiquettes (pas les IDs bruts), chaîne AVANT/ICI/APRÈS en bas,
+  sidebar label/valeur, `tagTextOn()` par luminance.
+
+### Deux arbitrages produit ouverts, trouvés le 2026-08-25 (soir)
+
+Ni l'un ni l'autre n'est un bug : ce sont des décisions qui appartiennent à
+Aramis, laissées en place volontairement plutôt que tranchées à sa place.
+
+- **Le filtre projet ne s'applique pas à la ligne « Non placées ».**
+  `DesktopKanban.tsx:399` calcule `unplaced` (la liste filtrée par projet) et ne
+  s'en sert **jamais** : la barre et son badge utilisent tous deux `allUnplaced`.
+  Donc cocher un projet filtre les colonnes mais pas les non placées. La
+  variable morte suggère que l'intention initiale était l'inverse. Corriger dans
+  un sens ou dans l'autre change le comportement à l'écran : à trancher.
+  **Effort :** S · **Priorité :** P2
+- **La palette d'étiquettes sort du système de couleurs.** `TAG_COLOR_MAP`
+  (`DesktopTaskDetail.tsx:40`) contient dix teintes iOS saturées (`#FF3B30`,
+  `#007AFF`, `#AF52DE`…) alors que `DESIGN.md` n'admet que trois teintes de
+  destination plus `danger`, et pose qu'« une teinte désigne, elle ne décore
+  jamais ». Seul le **contraste** a été corrigé le 25/08 (`tagTextOn()` choisit
+  encre ou blanc par luminance) : le nom se lit désormais sur les dix couleurs.
+  Reste la question de fond — garder une palette libre choisie par
+  l'utilisateur, ou ramener les étiquettes dans le système. **Effort :** S
+  (contraste fait) → M (refonte palette) · **Priorité :** P2
+
+### Scraper les concurrents (Asana, Monday, Trello) → "Asana personnalisé"
+- **Quoi :** Aramis veut enrichir Brief avec des fonctionnalités inspirées
+  des outils de gestion de projet (cards style Trello, vues multiples,
+  fonctions de projet). Démarche : scraper tous les sites concurrents,
+  analyser ce qu'ils proposent, adapter à Brief.
+- **Demandé le :** 2026-08-23 par Aramis
+- **Effort :** XL (recherche + design + dev) · **Priorité :** P2, à lancer
+  après stabilisation de la V1 desktop
 
 ### Workflow Conversationnel Telegram ↔ Hermes ↔ Brief
 - Consultation des tâches en langage naturel (synthèse ultra lisible, priorités, deadlines).
@@ -202,6 +419,41 @@ raison nouvelle.
 ---
 
 ## P3 — Différé
+
+### Comprendre le mécanisme exact de la dérive DTSTART du 2026-08-19
+- **Quoi :** l'item récurrent « Aller courir » a vu son DTSTART calendrier
+  passer du mercredi 19 au samedi 22 en moins de 30h après sa création, alors
+  que la suite de tests EXISTANTE (`caldav.test.ts`, avant le fix du 19/08)
+  affirme que ce scénario précis (`due` avancé, calendrier non rattrapé) doit
+  produire un `skip` — donc aucun PUT. Non reproduit, non expliqué : les logs
+  Docker ne remontaient qu'au dernier redéploiement du jour, tout l'historique
+  antérieur est perdu.
+- **Ce que la session du 19/08 (soir) a établi, sans répondre à cette
+  question précise :** le même soir, trois items migrés (dont « Aller
+  courir ») ont montré un symptôme DE LA MÊME FAMILLE — `due` affiché/sonné
+  pour une occurrence antérieure à `seriesAnchor`, donc impossible sur le
+  vrai calendrier. Root cause identifiée pour CE symptôme : la migration
+  avait figé `seriesAnchor` à une valeur déjà en avance sur le rattrapage
+  jour-par-jour de `due` en cours. Corrigé structurellement
+  (`pendingReminders`, compartiment `beforeAnchor`, voir `DECISIONS.md`) —
+  **toute occurrence antérieure à l'ancre est désormais rattrapée
+  silencieusement, quelle qu'en soit la cause.** Ça ferme la classe de bug,
+  pas la question d'origine : le POURQUOI du saut initial mercredi→samedi en
+  moins de 30h reste non expliqué.
+- **Pourquoi ce n'est plus bloquant du tout, même en cas de récidive :** le
+  fix `beforeAnchor` intercepte structurellement toute occurrence antérieure
+  à `seriesAnchor`, peu importe comment `due` en est venu à dériver derrière
+  l'ancre — il n'y a plus besoin de connaître la cause pour empêcher le
+  symptôme (faux rappel, mauvaise tâche affichée).
+- **Pourquoi le garder en tête quand même :** un due qui dérive DEVANT
+  l'ancre (pas derrière) ne serait pas intercepté par ce fix — signe possible
+  d'un chemin d'écriture CalDAV encore différent. Voir la passation
+  « Calendrier intouché + fin des occurrences fantômes » et « DTSTART mobile
+  des séries récurrentes corrigé » dans `docs/handoffs/` pour la trace
+  complète des deux investigations.
+- **Effort :** S (CC), si ça se reproduit avec des logs disponibles cette
+  fois · **Priorité :** P3 (déclassé — le symptôme concret est structurellement fermé)
+- **Dépend de :** une récidive DEVANT l'ancre observée, logs à l'appui.
 
 ### Sous-tâches
 - **Quoi :** permettre à une dictée de produire une tâche avec ses sous-tâches.
@@ -250,6 +502,33 @@ raison nouvelle.
 
 ## Dette connue
 
+- ~~**Le drag & drop du Kanban n'a jamais été vérifié à l'exécution.**~~ —
+  **LEVÉE le 2026-08-25 soir**, et il était bel et bien cassé : les pilules de
+  la ligne « Non placées » se montaient **hors du `DndContext`**, donc leurs
+  capteurs n'étaient jamais enregistrés et le geste n'activait rien, sans lever
+  d'erreur (commit `5e07462`). Le geste est désormais vérifié à l'exécution —
+  `@dnd-kit` SE simule fidèlement avec de vrais événements pointer : `mousedown`,
+  franchir les 6px de l'`activationConstraint`, puis une trajectoire en une
+  quinzaine de pas. Trois cartes déplacées, `PATCH` et `columnId` vérifiés sur
+  disque. Voir la passation du 25/08 soir pour le script.
+- **`DesktopTaskDetail.tsx` portait 3 erreurs eslint** — **corrigées le 24/08
+  soir par Hermes** (apostrophes + `preserve-manual-memoization`). Le lint
+  global est désormais **0 erreur** (30 warnings d'imports morts, antérieurs,
+  inoffensifs).
+- **Le tirage de lien du graphe n'écoute que la souris.** Les ancres de
+  `DependencyGraph.tsx` sont branchées sur `mousedown` / `mousemove` : sur écran
+  tactile, créer une dépendance au doigt ne marche pas. La vue est desktop
+  (bascule à 1024px), donc ce n'est pas bloquant, mais un iPad la sert.
+  **Effort :** S — passer aux `pointer events`, qui couvrent les deux.
+- **Le reset `prefers-reduced-motion` fige aussi les autres animations.**
+  `globals.css:234` pose `animation-iteration-count: 1 !important` sur `*`. La
+  waveform de capture n'en dépend plus (elle est pilotée par l'état depuis le
+  25/08), mais `WaveformIdle` de la `CaptureBar`, `pop`, `rail` et `shimmer` sont
+  immobiles sur toute machine réglée en « animations réduites » — ce qui est le
+  cas de celle d'Aramis (`SPI_GETCLIENTAREAANIMATION = False`). Pour un décor
+  c'est le comportement correct ; pour un **squelette de chargement** (`shimmer`)
+  c'est une perte d'information, puisque `DESIGN.md` en fait une mécanique et pas
+  un décor. À regarder si un écran de chargement paraît figé.
 - `src/app/favicon.ico` date de l'ancienne identité — à régénérer depuis la capsule.
 - `docs/designs/preview-systeme.html` montre encore cinq teintes et aucune forme.
 - `docs/designs/organiseur-autonome.md` décrit l'architecture CalDAV abandonnée.

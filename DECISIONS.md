@@ -14,6 +14,522 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-26 · Le PIN partagé devient une auth email + mot de passe (Supabase)
+
+**Décision.** Le PIN unique (`BRIEF_PIN`, `src/lib/guard.ts`) est remplacé par
+une identité par utilisateur : email + mot de passe, via Supabase Auth. Une
+table Postgres `authorized_users` sert de liste blanche **à l'entrée**
+(aucune inscription libre — les comptes sont créés à la main par Aramis) :
+retirer une ligne bloque les futures connexions, mais ne révoque **pas** une
+session déjà ouverte — celle-ci continue d'être rafraîchie par `src/proxy.ts`
+jusqu'à expiration. Pour couper l'accès d'un utilisateur immédiatement, le
+désactiver ou le supprimer dans `auth.users` côté Supabase, pas seulement
+dans `authorized_users`. Les routes machine (cron, capture, digest) gardent
+leurs jetons dédiés, inchangés.
+
+**Pourquoi.** Deux raisons d'Aramis (26/08) : sécurité (le PIN est un secret
+en clair côté client, sans notion d'identité) et préparation au
+multi-utilisateur (un second utilisateur viendra). Design complet et maquette
+validée avant implémentation — voir
+`docs/superpowers/specs/2026-08-26-email-password-auth-design.md` et
+`https://claude.ai/code/artifact/5655973d-ef06-4ed1-8585-90c6af776456`.
+
+**Comment.** `requireSession()` (nouveau, remplace `requirePin()`) vérifie
+localement un JWT Supabase — sans appel réseau par requête, à condition que
+la clé de signature du projet soit asymétrique (ECC). **Vérifié sur le
+projet réel (26/08) : c'est déjà le cas nativement** — les projets Supabase
+créés récemment provisionnent une clé ECC (P-256) par défaut, l'ancienne
+clé HS256 n'apparaît qu'en clé « précédente », gardée seulement pour
+vérifier les jetons déjà émis. Aucune migration à faire. `src/proxy.ts`
+(Next 16 a renommé `middleware.ts` en `proxy.ts`) rafraîchit la session sur
+chaque requête. `POST /api/auth/login|logout|forgot-password`,
+`GET /api/auth/session`. `src/lib/pin.ts` supprimé.
+
+**Statut.** ✅ Implémenté, revue de branche complète effectuée (correctifs de
+déploiement inclus). ✅ Provisionnement Supabase terminé le 26/08 (projet,
+migration SQL, compte Aramis, clé JWT déjà asymétrique, Site URL/Redirect
+URLs). ✅ **Déployé en prod le 26/08 soir par Hermes** : les deux variables
+posées dans `.env.production` du VPS, build+up, vérifié (session 401,
+healthcheck healthy, rappels + CalDAV ok). Reste le test de connexion réel
+par Aramis (étape e, un seul compte : `aramis.begnene@gmail.com` + mdp du
+mail d'invitation Supabase).
+
+---
+
+## 2026-08-26 · Calendrier desktop et fiche tâche : refonte complète par Claude Design
+
+**Décision.** Le **Calendrier desktop** (`DesktopCalendar.tsx`) et la **fiche
+tâche desktop** (`DesktopTaskDetail.tsx`) seront **entièrement redessinés par
+Claude Design** (nouveau livrable `.dc.html`), puis portés en code. D'ici là,
+**ne pas refiner ces deux écrans dans le code** : les correctifs de fonction
+(voies du calendrier, contraste des étiquettes, chaîne de dépendances) restent,
+mais aucun autre investissement visuel.
+
+**Pourquoi.** Aramis a vu les deux écrans dans la preview du 25/08 au soir
+(soirée du 26/08 matin, Paris) : le calendrier a un affichage qu'il ne juge pas
+à la hauteur (patched, pas conçu) et la fiche tâche ne lui convient pas non
+plus. La leçon du 19/08 s'applique : quand un écran pose question, le chemin
+éprouvé est de passer par Claude Design (spec de rendu `.dc.html`), puis de
+porter à l'identique — pas de rafistoler en code.
+
+**Comment.** Aramis fournira le livrable Claude Design (le calendrier et la
+fiche). Les deux écrans se porteront ensuite selon le workflow validé :
+analyser le `.dc.html` avec gstack (`$B text` + `$B screenshot` +
+`vision_analyze`), PUIS coder. La section « Fiche tâche » de TODOS.md rappelle
+l'existant à conserver.
+
+**Statut :** 🔶 acté, à implémenter (livrable Claude Design à venir).
+
+---
+
+## 2026-08-24 (après-midi) · Deux statuts de tâche, pas quatre
+
+**Décision.** Une tâche n'a que **deux statuts : à faire et fait**
+le seul champ `doneAt`. Aucun état « en cours » n'est stocké ni dérivé.
+
+La vue Graphe en tire **trois** statuts d'affichage, et pas un de plus :
+
+| Statut affiché | Règle | Couleur |
+|---|---|---|
+| terminée | `doneAt` renseigné | gris `#A9A9A2` |
+| bloquée | au moins un prédécesseur non terminé | rouge `#E23A2E` |
+| prête | tout le reste | vert `#34C759` |
+
+**Pourquoi.** Le prototype Claude Design décrivait quatre états, le quatrième
+(orange, « bientôt disponible ») supposant un `todo | doing | done` par tâche.
+Le faire apparaître aurait demandé soit un `startedAt` — que la décision du
+2026-08-24 (matin) écarte, « c'est l'utilisateur qui place ses cartes, pas un
+statut dérivé » —, soit une inférence depuis les sous-tâches ou la colonne
+Kanban. Une inférence se trompe en silence : une tâche paraîtrait « en cours »
+sans que personne l'ait décidé. Arbitrage d'Aramis : rester sur la version
+simple tant que les vrais statuts n'existent pas.
+
+**Ce qui viendra.** Aramis a annoncé qu'on passera à de **vrais statuts de
+tâche** — choisis explicitement, pas devinés. Quand ce sera le cas, c'est
+`graphStatus()` dans `src/lib/graph.ts` qui change, **et elle seule** : la vue,
+la légende et le panneau lisent tous leur statut par cette fonction. Le
+quatrième état (orange) redeviendra alors possible sans retoucher le dessin.
+
+**Ne pas.** Réintroduire un orange « bientôt » par inférence (sous-tâches
+entamées, nom de colonne Kanban) sans que de vrais statuts existent — c'est
+exactement ce qui a été écarté ici.
+
+---
+
+## 2026-08-22 (soir) · Stockage audio, assistant IA, couleurs projets, calendrier Fake
+
+### Stockage des audios vocaux
+
+**Décision.** Les enregistrements vocaux sont persistés sur le volume
+`brief-data` (`$BRIEF_DATA_DIR/audio/`) — plus de perte. L'`audioId` est
+attaché à l'item, l'`audioOrigin` contient les métadonnées (texte complet,
+extrait surligné, durée, date, siblings).
+
+**Pourquoi.** Aramis dictait des notes, la transcription devenait une tâche,
+mais l'audio original était perdu. Ne pas pouvoir réécouter la dictée
+originale enlève beaucoup de valeur à un organiseur vocal.
+
+**Bug critique.** `jsonFetch()` forçait `Content-Type: application/json` sur
+les FormData, écrasant le `multipart/form-data` + boundary. L'upload
+audio échouait silencieusement à chaque fois (400). Fix : ne pas forcer
+Content-Type sur FormData — règle absolue.
+
+**Race condition.** L'upload était fire-and-forget. Si l'utilisateur
+envoyait avant la fin de l'upload, `audioIdRef.current` était null.
+Fix : `send()` fait `await audioUploadRef.current` avant de lire l'audioId.
+
+### Assistant IA (tuile "Demander à l'IA")
+
+**Décision.** La tuile "Demander à l'IA" ouvre un vrai chat (ChatSheet),
+pas la capture vocale. Route `/api/chat` qui appelle Ollama Cloud
+(`deepseek-v4-flash:0731`) avec le contexte des tâches/RDV du jour +
+projets.
+
+**Pourquoi.** La tuile était un bouton mort qui ouvrait le même tunnel que
+la dictée. Un assistant IA qui connaît le contexte de l'utilisateur
+(tâches, RDV, projets) apporte une vraie valeur — poser des questions,
+demander de l'aide pour organiser, suggérer des priorités.
+
+### Couleurs de projet = couleurs Apple Calendar
+
+**Décision.** Les tokens `--color-p1` à `--color-p6` sont alignés sur les
+**vraies couleurs** des calendriers Apple d'Aramis, vérifiées le 22/08/2026
+dans l'app Calendrier iPhone :
+
+| Projet | Calendrier | Couleur | Hex |
+|---|---|---|---|
+| Frip & Trend | Vinted Frip&Trend | bleu | #007AFF |
+| My Flip | My Flip | orange | #FF9500 |
+| Web@cadémie | Web@académie | rouge | #FF3B30 |
+| Perso | Personnel | violet | #AF52DE |
+| Sport | Sport | jaune | #FFCC00 |
+| IA | IA | vert | #34C759 |
+
+**Pourquoi.** Avant, les couleurs étaient inventées (Frip orange au lieu
+de bleu, Perso vert au lieu de violet…). Aramis veut que les pastilles dans
+Brief matchent visuellement ses calendriers Apple pour une reconnaissance
+instantanée.
+
+### Calendrier "Fake" inclus dans l'agenda
+
+**Décision.** Le calendrier iCloud "Fake" est ajouté à
+`EXTRA_AGENDA_CALENDARS` dans `caldav.ts` — ses événements apparaissent
+dans l'agenda Brief.
+
+**Pourquoi.** Aramis pose des tâches sur ce calendrier (ex: "Commander les
+sacs Nike sur HippoBuy"). Sans l'inclure, ces tâches n'apparaissent pas
+dans Brief.
+
+### Sous-tâches générées par le parseur
+
+**Décision.** Le prompt de `/api/parse` demande au LLM de générer des
+`subtasks` quand la note décrit plusieurs étapes pour une même tâche.
+
+**Pourquoi.** Une note comme "préparer le devis : vérifier le stock,
+calculer le prix, envoyer le mail" contient 3 étapes distinctes. Les
+sous-tâches avec checkboxes et barre de progression donnent une vision
+précise de l'avancement sur la fiche.
+
+### Notifications push — vérification au démarrage
+
+**Décision.** `readPushState()` est appelé au démarrage (useEffect dans
+BriefApp) pour restaurer le statut d'abonnement push.
+
+**Pourquoi.** Sans ça, `pushSubscribed` démarrait toujours à `false` →
+le statut repassait à "Désactivées" à chaque réouverture, même si
+l'utilisateur avait déjà activé les notifications.
+
+**Statut.** ✅ Fait.
+
+---
+
+## 2026-08-20 (après-midi) · `DESIGN.md` est de retour — réécrit fidèle au code
+
+**Décision.** `DESIGN.md` existe de nouveau à la racine. Ce n'est **pas** une
+résurrection de l'ancien (système corail/General Sans, supprimé le 20/08 au
+matin, voir l'entrée ci-dessous — cette suppression-là reste valide, on ne la
+rouvre pas). C'est un **nouveau fichier**, généré par Claude Design à la
+demande d'Aramis pour décrire fidèlement le système **réellement en prod**
+(tokens de `globals.css`, composants de `src/components/`), pas une
+proposition. `AGENTS.md` et `CLAUDE.md` sont remis à jour pour le citer comme
+lecture obligatoire avant toute décision visuelle — le texte « DESIGN.md est
+supprimé, ne plus s'y référer » qu'ils portaient depuis ce matin est retiré.
+
+**Pourquoi.** Le 20/08 au matin, la suppression de l'ancien `DESIGN.md` avait
+laissé un vide : plus aucun document ne décrivait le système v1 (Plus Jakarta,
+ink, task/meet/idea) déjà en prod depuis le 18/08 — seul le code le portait.
+Aramis, en repassant sur `manifest.ts` et l'icône PWA dans cette même session,
+a constaté l'écart et fait générer un `DESIGN.md` correct par Claude Design
+plutôt que de laisser le vide.
+
+**Comment.** Fichier remplacé en entier (contenu fourni par Aramis, généré par
+Claude Design). Section « 4. Iconographie » complétée avec l'icône PWA
+(`BriefIcon.dc.html`, variante B — voir l'entrée dédiée ci-dessous) que le
+document reçu ne couvrait pas. Section « 6. Écarts connus » allégée du point
+`manifest.ts #F5F3F0` : déjà corrigé dans cette session, plus un écart. `AGENTS.md` /
+`CLAUDE.md` : les deux mentions « DESIGN.md supprimé » remplacées par un
+renvoi vers ce fichier.
+
+**Statut.** ✅ Fait.
+
+---
+
+## 2026-08-20 · Icône PWA remplacée — variante « Trois destinations » (Claude Design v1)
+
+**Décision.** L'icône PWA change : trois barres corail sur fond encre →
+trois traits arrondis décroissants (task bleu, meet vert, idea ambre) sur
+fond `#101010`, alignés à gauche. Source : projet Claude Design « Brief PWA
+et desktop », `BriefIcon.dc.html`, variante B — choisie et documentée par
+Aramis lui-même (`GUIDE-IMPLEMENTATION.md` du projet, avec verdict et
+rationale). `public/icon-{192,512}.png`, `apple-touch-icon.png`,
+`icon-maskable-512.png` (contenu à 80 %), `favicon-32.png` et
+`src/app/favicon.ico` régénérés avec `sharp` depuis ce tracé. `manifest.ts` :
+`background_color`/`theme_color` `#F5F3F0` → `#F4F4F2` (alignés sur
+`--color-bg`, qui avait déjà migré dans `globals.css` sans que le manifest ne
+suive).
+
+**Pourquoi.** L'ancienne icône représentait l'outil (dicter — barres de
+niveau audio) plutôt que le produit (ranger). La variante B est la seule des
+cinq candidates qui tient à 20 px sans trait fin et la seule qui dit « c'est
+rangé ». Ses couleurs (`#101010`/`#CFE0FF`/`#CBE9D6`/`#FBE2AE`) correspondent
+exactement aux tokens déjà en place dans `globals.css`
+(`--color-ink`/`--color-task-100`/`--color-meet-100`/`--color-idea-100`) :
+implémenter l'icône littéralement n'introduit aucune divergence, ça comble un
+retard (le manifest et les PNG dataient du système corail du 10/08).
+
+**Comment.** Script Node ponctuel (`sharp`, non conservé dans le dépôt) qui
+rend le SVG à chaque taille, plus `translate(51.2 51.2) scale(0.8)` pour la
+version maskable. `favicon.ico` reconstruit à la main (conteneur ICO avec PNG
+embarqué 16 + 32).
+
+**Statut.** ✅ Implémenté. Non déployé au moment de l'écriture — voir
+`HANDOFF.md`.
+
+---
+
+## 2026-08-20 · Accès des agents aux tâches/RDV — jeton machine en query param (claude.ai)
+
+**Décision.** Les agents (Claude Code, Hermes, Codex, **claude.ai**) peuvent
+lire les tâches et rendez-vous d'Aramis via l'API prod. `GET /api/digest`
+accepte désormais le jeton machine en **query param** (`?token=`), en plus du
+header `Authorization: Bearer`. C'est un **opt-in strict par route** :
+`allowQueryToken` dans `src/lib/cron-auth.ts`, activé **uniquement** sur
+`/api/digest` (lecture seule). Le PIN n'est **jamais** accepté en query, et
+aucune route d'écriture (capture, items) n'accepte le query token.
+
+**Pourquoi.** claude.ai (abo Pro d'Aramis) ne peut pas poser de header HTTP :
+il ne fait que des GET sur une URL nue. Sans le query token, Claude ne peut
+pas interroger le planning d'Aramis — c'est le besoin explicite d'Aramis
+(20/08) : « je veux que Claude puisse avoir lui aussi accès comme toi à mes
+tâches et rdv dans brief ». Le token est un jeton de **lecture seule**,
+révocable seul (distinct du PIN), donc acceptable en clair dans une URL.
+
+**Comment.** `cron-auth.ts` : si `allowQueryToken` et aucun header fourni,
+lire `?token=` et comparer en temps constant. `digest/route.ts` : option
+activée. Script `scripts/brief-agents.sh url` : génère l'URL avec le token
+**URL-encodé** (le token est base64, contient `+ / =` — non encodé, le serveur
+reçoit un token tronqué → 401). Doc : `docs/agent-calendar-access.md`.
+
+**Statut.** ✅ Déployé en prod le 20/08 (commit `49b50e5`, conteneur Healthy,
+URL vérifiée depuis internet : 200 avec token encodé, 401 sans / avec token
+invalide).
+
+---
+
+## 2026-08-20 · L'ancien DESIGN.md est supprimé — le design system Claude Design v1 est LA source de vérité visuelle
+
+**Décision.** `DESIGN.md` (racine du repo) est **supprimé** et ne doit plus
+jamais être suivi ni cité. La source de vérité visuelle est le **design system
+Claude Design v1 (iOS)** : `/opt/data/brief-design-claude/Brief Design
+System.dc.html`, implémenté à l'identique dans `src/app/globals.css` +
+`src/components/`. Les références à `DESIGN.md` ont été retirées de
+`AGENTS.md` et `CLAUDE.md`.
+
+**Pourquoi.** DESIGN.md décrivait l'ancien système (General Sans + corail
+`#EC5230` + 8 teintes × 5 formes), écrit le 09/08 par `/design-consultation` —
+**avant** que Claude Design ne conçoive le design system v1 (18/08, Plus
+Jakarta + ink + task/meet/idea), qui l'a remplacé et a été reconstruit et
+déployé en prod. Le fichier n'a jamais été mis à jour : il contredisait la
+spec v1 ET la prod. Conséquence concrète le 20/08 : Claude Design a détecté le
+conflit (General Sans vs Plus Jakarta, corail vs ink) et a failli construire
+ses maquettes profil/urgence sur les mauvais tokens ; son audit de la veille
+accusait même `PinGate.tsx` de tokens « legacy » alors que l'écran suivait la
+spec v1. Aramis : « je veux pas du tout qu'il suive le design.md de l'ancienne
+version... Celle-là faut vraiment plus en parler. » Un fichier mort dans le
+repo est un piège permanent pour tous les agents (Claude Code, Hermes, Codex).
+
+**Comment.** `git rm DESIGN.md` ; `AGENTS.md` : ligne retirée du tableau des
+fichiers, note « design system Claude Design v1 = source de vérité, ancien
+DESIGN.md supprimé le 20/08 » ajoutée ; `CLAUDE.md` : section « Système de
+design » réécrite sur la même base. Les handoffs passés (avant le 20/08) qui
+citent DESIGN.md restent des archives — ne pas les ressusciter.
+
+**Statut.** ✅ Fait — commit `95322c1`, poussé le 2026-08-20.
+
+---
+
+## 2026-08-20 · Les occurrences décalées d'une série dans Calendrier sont adoptées (RECURRENCE-ID)
+
+**Décision.** Quand Aramis décale UNE occurrence d'une série récurrente dans
+l'app Calendrier (ex. Séance push du jeudi 16h→17h, Poster/Reposter 10
+18h→19h), Brief **adopte le décalage** : l'occurrence s'affiche à sa nouvelle
+heure dans l'accueil et l'agenda, le rappel sonne à la nouvelle heure, et le
+prochain PUT de Brief **réécrit l'override** dans l'ICS au lieu de l'écraser.
+Même règle pour les occurrences supprimées (EXDATE) : déjà adoptées depuis le
+18/08, elles sont désormais aussi **appliquées à l'affichage et aux rappels**
+(avant, seule la réécriture ICS les protégeait).
+
+**Pourquoi.** Constaté en prod le 2026-08-20 : iCloud écrit un VEVENT override
+avec `RECURRENCE-ID` dans le même ICS que le master quand on déplace une
+occurrence. `parseRemoteEvent` ne lisait que le premier VEVENT (le master) →
+Brief voyait la série « identique » → `skip` → l'édition n'était jamais
+adoptée, l'agenda affichait l'ancienne heure, les rappels sonnaient à
+l'ancienne heure, et un PUT réécrivait l'ICS SANS les overrides (perte
+définitive des décalages d'Aramis). Le calendrier est la source de vérité
+(décision 18/08) : il doit gagner **par occurrence**, pas seulement pour le
+master.
+
+**Comment.** Nouveau champ `Item.overrides` (`RECURRENCE-ID` → nouveau DTSTART,
+UTC RFC 5545), adopté par `calendarPatch`/`decideExternalSync` et réécrit par
+`buildEventIcs` (un VEVENT override par occurrence décalée). Fonctions pures
+(`applyOverride`, `icalUtc`, `remoteDueToItem`) extraites dans
+`src/lib/overrides.ts` — partageables avec le client (HomeScreen) sans
+importer `caldav.ts` (server-only). Appliqué à : `buildDayAgenda` (accueil +
+Rendez-vous), `pendingReminders`/`payloadFor`/avancement des séries
+(`reminders.ts`), `sanitizePatch` (PATCH `/api/items/[id]`). L'avancement des
+séries part désormais de `seriesAnchor` (l'ancre stable), pas de `due` qui
+peut être décalé par un override.
+
+**Statut.** ✅ Fait — commit `c0d0c23`, déployé en prod le 2026-08-20 (vérifié : overrides adoptés dans items.json, ICS iCloud intacts).
+
+---
+
+## 2026-08-19 (soir) · Le calendrier Apple reste intouché — Brief n'y supprime plus jamais rien
+
+**Décision.** Brief peut AJOUTER et METTRE À JOUR des événements dans le
+calendrier Apple, **jamais en SUPPRIMER un**, quelle qu'en soit la raison.
+**Renverse la partie suppression** de l'entrée « Calendrier Apple → Brief :
+adoption totale » du 2026-08-19 (« cocher l'item dans Brief supprime
+l'événement original ») — le reste de cette entrée (adoption totale sans tri
+bruit/signal) tient toujours, seule la conséquence "coché ⇒ delete" saute.
+
+**Pourquoi.** Aramis, le soir même : « je veux toujours que le calendrier
+reste intouché » — exemple donné, terminer « Learn CSS rush demain » dans
+Brief ne doit pas supprimer l'événement correspondant dans Calendrier. Preuve
+trouvée en investiguant : l'item adopté « Aller courir » (calendrier Sport,
+`externalUid` 30DC2273…) a été coché dans Brief ce soir (`doneAt` posé) — sous
+l'ancien comportement, le prochain passage CalDAV allait supprimer
+l'événement réel qu'Aramis a lui-même posé dans son app Calendrier. C'est
+l'incident concret qui a motivé le renversement, pas une préférence abstraite.
+
+**Comment.** `src/lib/caldav.ts` : les trois chemins de suppression sont
+coupés — Phase 1 (nettoyage des `brief-*` orphelins), Phase 3 pour un item
+adopté coché (`decideExternalSync`, `existing.doneAt` → `noop` au lieu de
+`delete-remote`), Phase 3 pour un UID tombstoné (idem, `noop` au lieu de
+`delete-remote` — le tombstone empêche toujours la ré-adoption comme nouvel
+item, il n'entraîne simplement plus de suppression distante). Le type
+`"delete-remote"` et la fonction `deleteEvent` sont retirés : plus aucun
+appelant.
+
+**Compromis accepté, pas caché.** Un item dont le PROJET change échoue
+désormais son PUT vers le nouveau calendrier (iCloud renvoie 412, le même UID
+existant encore dans l'ancien) au lieu d'être proprement déplacé — visible
+sous son ancien calendrier jusqu'à résolution manuelle. Piste pour une
+session future : la méthode CalDAV `MOVE` relocalise un événement sans jamais
+le supprimer ; pas implémentée cette session, hors périmètre de l'urgence du
+soir.
+
+**Statut.** ✅ Implémenté, testé (`caldav.test.ts` — les deux tests qui
+attendaient `delete-remote` attendent désormais `noop`).
+
+---
+
+## 2026-08-19 (soir) · Une occurrence antérieure à `seriesAnchor` ne sonne jamais
+
+**Décision.** Le planificateur de rappels (`src/lib/reminders.ts`) ne notifie
+et n'affiche plus jamais une échéance `due` antérieure au `seriesAnchor` de
+son item — elle est rattrapée silencieusement à l'ancre, sans notification,
+dès le passage suivant (≤ 60 s).
+
+**Pourquoi.** Aramis, au réveil (enfin, en soirée) : « le premier truc que
+j'ouvre sur l'app, c'est des mauvaises tâches, contrairement à mon
+calendrier. » Root cause confirmée sur `items.json` de PROD : trois items
+récurrents migrés lors de la session précédente (fix DTSTART,
+`Item.seriesAnchor`) avaient un `due` qui traînait encore quelques jours en
+arrière de leur ancre fraîchement figée. Par construction RFC 5545, aucune
+occurrence n'existe avant DTSTART — ces occurrences « d'aujourd'hui »
+n'avaient donc jamais existé sur le vrai calendrier iCloud (confirmé
+visuellement : la capture macOS d'Aramis ne montre rien pour elles sous le
+jour affiché par Brief). Brief a quand même sonné et affiché pour elles,
+jusqu'à ce qu'un rattrapage jour par jour (plusieurs heures, plusieurs faux
+rappels) finisse par les recaler tout seul.
+
+**Comment.** `pendingReminders` renvoie un troisième compartiment
+`beforeAnchor` (échéance `< seriesAnchor`) : ni `ready` (pas de push), ni
+`stale` (pas juste ignorée) — `runReminders` réécrit directement `due =
+seriesAnchor` pour ces items, sans poser `remindedAt` puisque rien n'a été
+envoyé. Nouveau champ `ReminderRun.correctedToAnchor`, journalisé dans les
+logs du cron.
+
+**Statut.** ✅ Implémenté, testé (`reminders.test.ts`, 3 tests neufs).
+
+---
+
+## 2026-08-19 · Calendrier Apple → Brief : adoption totale, sans tri bruit/signal
+
+**Décision.** Tout événement posé directement dans l'app Calendrier, dans un
+des 6 calendriers que Brief connaît (Personnel, Sport, Vinted Frip&Trend, My
+Flip, Web@académie, IA), devient une **vraie tâche Brief** au prochain sync —
+rappel Web Push, coche, sous-tâches possibles. Aucun tri automatique par
+calendrier, par forme (journée entière ou non) ou par contenu : « adopte tout,
+on verra à l'usage » (Aramis).
+
+**Pourquoi.** En construisant la vue Rendez-vous, la proposition initiale était
+d'exclure le calendrier « Personnel » (jugé « bruit » — ex. « Rentre Jeanne »).
+Aramis a corrigé : « c'est dangereux ce que tu dis » — il y range aussi de
+vraies tâches importantes (ex. « Relancer Revolut pour le remboursement de
+1000€ »). Rien ne distingue programmatiquement les deux dans un même
+calendrier : même forme, souvent journée entière. Le risque d'un faux négatif
+(rater une vraie tâche) est pire que celui d'un faux positif (une tâche
+ignorable de plus à cocher ou supprimer).
+
+**Comment.** `src/lib/caldav.ts` : `decideExternalSync` (nouvelle Phase 3 de
+`runCalDavSync`) — événement sans item lié → `create` ; item adopté actif dont
+l'événement diffère → `update` (le calendrier gagne toujours, pas
+d'avancement interne à distinguer comme pour un item `brief-*`) ; événement
+disparu → item marqué terminé (jamais recréé) ; item coché dans Brief →
+événement supprimé du calendrier. `Item.externalUid`/`externalCalendar`
+marquent un item adopté ; `buildEventIcs` l'exclut du PUT `brief-<id>` (il vit
+déjà sous son UID d'origine, un second PUT dupliquerait l'événement).
+`src/lib/agenda.ts` déduplique par `externalUid` en plus de `brief-<id>`.
+
+**Statut.** ✅ Implémenté, testé (`caldav.test.ts`, `agenda.test.ts`). Premier
+passage réel en prod : ~6 événements existants (Rentre Jeanne, Terminé Learn
+CSS, Réveil, Ranger appartement, deux séances sport historiques) seront
+adoptés comme tâches — attendu, pas un bug.
+
+---
+
+## 2026-08-19 · Coordination multi-agents — GitHub est la vérité centrale
+
+**Décision.** Brief est désormais travaillé par **plusieurs agents en
+parallèle** : Claude Code (sur le Mac d'Aramis) et Hermes Agent (sur le VPS,
+copie `/opt/data/Projets/brief`). Règles :
+
+1. **GitHub (`aramis75009/brief`) est la vérité centrale.** Les copies du dépôt
+   (Mac, VPS Hermes, VPS prod `/docker/brief`) ne s'alignent QUE par
+   fetch/pull/push. Jamais de copie de fichiers entre dossiers.
+2. **Un agent = une branche de travail à la fois.** Pousser directement sur la
+   branche de prod en parallèle est interdit sans passation explicite dans
+   `HANDOFF.md`.
+3. **Avant toute session** : `git fetch origin --prune` + lire `HANDOFF.md` +
+   lancer `bash scripts/coord/status.sh` (compare les copies). Si la prod a
+   avancé, fast-forward avant de coder.
+4. **Avant tout push** : `bash scripts/coord/pre-push.sh` (vérifie branche de
+   prod, retard sur origin, HANDOFF.md présent).
+
+**Pourquoi.** Le 2026-08-19, un bug de cache PWA iOS (« This page couldn't
+load ») a été corrigé par Claude Code (commit `c8c175c`) **une minute après**
+qu'Hermes l'ait diagnostiqué — preuve que deux agents travaillaient en
+parallèle sans coordination. Aussi : `HERMES.md` et `AGENTS.md` disaient encore
+que la prod tourne sur `feat/task-completion` alors qu'elle est sur
+`feat/ui-redesign-claude` depuis le 19/08 — des docs périmées font travailler
+les agents sur la mauvaise branche.
+
+**Comment.** Fichiers livrés sur la branche `feat/agent-multi-coordination` :
+`docs/coordination.md`, `scripts/coord/status.sh`, `scripts/coord/pre-push.sh`,
+`HANDOFF.md` restauré à la racine, `AGENTS.md` corrigé.
+
+**Statut.** ✅ Fait (PR en attente de merge).
+
+---
+
+## 2026-08-19 · Une date invalide ne doit jamais faire planter l'app — normaliser à la source
+
+**Décision.** Toute date issue d'une source externe (CalDAV, API, saisie) doit
+être **normalisée en ISO avant stockage** dans `due`. Si une conversion échoue,
+écrire `undefined` (« pas d'échéance ») — jamais une chaîne brute non-parseable.
+En plus de la cause, deux garde-fous : `zonedParts()` ne lève plus jamais de
+RangeError (date invalide → valeur sentinelle), et `readItems()` normalise à la
+lecture (répare en mémoire sans réécrire le fichier).
+
+**Pourquoi.** Le 2026-08-19, un seul item (`it_msurvw97_6`, récurrence Frip &
+Trend) avec `due = "20260820T140000"` — un DTSTART ICS flottant (sans `Z` ni
+tirets) renvoyé brut par `remoteDueToItem()` — a fait planter **toute l'app**
+dans tous les navigateurs : `new Date()` ne parse pas ce format → Invalid Date
+→ `Intl.DateTimeFormat.formatToParts()` → RangeError → React ne montait plus.
+Le serveur répondait 200 partout (curl OK) : le crash était côté client,
+invisible pour les sondes réseau. Un rappel absent se voit ; un crash ne se
+voit pas.
+
+**Comment.** Commit `aacea8e` (merge `4a1ad33` dans la prod) : `caldav.ts`
+(`remoteDueToItem()` convertit `YYYYMMDDTHHMMSS` → ISO Europe/Paris), `zoned.ts`
+(garde-fou), `store.ts` (normalisation à la lecture). Tests : 128/128.
+
+**Statut.** ✅ Implémenté, déployé, vérifié en prod (0 item `due` non-ISO).
+
+---
+
 ## 2026-08-18 · Le cookie PIN est posé par le serveur (Set-Cookie), pas par JavaScript
 
 **Décision.** Le cookie persistant `brief_pin` est posé **côté serveur** par

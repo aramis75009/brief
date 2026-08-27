@@ -84,4 +84,35 @@ describe("pendingReminders", () => {
     expect(ready.map((i) => i.id)).toEqual(["i2"]);
     expect(stale).toHaveLength(0);
   });
+
+  it("une échéance antérieure à seriesAnchor est une occurrence fantôme — ni ready, ni stale", () => {
+    // Constaté le 19/08 au soir : due traînait derrière l'ancre fraîchement
+    // figée d'une série migrée. Cette occurrence n'a jamais existé sur le
+    // vrai calendrier (RFC 5545 : rien avant DTSTART) — pas de push pour elle.
+    const ghost = item({
+      due: "2026-08-10T09:00:00+02:00",
+      seriesAnchor: "2026-08-11T09:00:00+02:00",
+      rrule: "FREQ=DAILY",
+    });
+    const { ready, stale, beforeAnchor } = pendingReminders([ghost], NOW);
+    expect(ready).toHaveLength(0);
+    expect(stale).toHaveLength(0);
+    expect(beforeAnchor.map((i) => i.id)).toEqual(["i1"]);
+  });
+
+  it("due === seriesAnchor suit le chemin normal (pas fantôme)", () => {
+    const onAnchor = item({
+      due: "2026-08-10T09:00:00+02:00",
+      seriesAnchor: "2026-08-10T09:00:00+02:00",
+    });
+    const { ready, beforeAnchor } = pendingReminders([onAnchor], NOW);
+    expect(ready.map((i) => i.id)).toEqual(["i1"]);
+    expect(beforeAnchor).toHaveLength(0);
+  });
+
+  it("sans seriesAnchor, le comportement est inchangé même si due est ancien", () => {
+    const noAnchor = item({ due: "2026-08-01T09:00:00+02:00" });
+    const { beforeAnchor } = pendingReminders([noAnchor], NOW);
+    expect(beforeAnchor).toHaveLength(0);
+  });
 });

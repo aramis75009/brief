@@ -1,5 +1,12 @@
 # HANDOFF — Brief
 
+> **⚠️ MISE À JOUR 2026-08-19 (soir) : la priorité 1 de cette passation est
+> RÉSOLUE.** Le bug de sync CalDAV qui faisait planter l'app (crash client
+> `RangeError: formatToParts()` sur un DTSTART flottant `20260820T140000`) a
+> été corrigé, déployé et vérifié — voir
+> [`2026-08-19-caldav-floating-dtstart.md`](2026-08-19-caldav-floating-dtstart.md).
+> Cette fiche est archivée ; la passation courante est `HANDOFF.md` à la racine.
+
 **Ce fichier ne contient qu'une seule passation : la dernière.** Avant de
 travailler, lis-le en entier. Avant de partir, remplace-le et archive celui que
 tu remplaces dans `docs/handoffs/`.

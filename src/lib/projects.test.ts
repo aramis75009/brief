@@ -69,9 +69,9 @@ describe("formes de projet", () => {
     expect(shapeFor({ id: "n-importe-quoi", shape: "capsule" })).toBe("capsule");
   });
 
-  it("chaque projet d'amorçage a une forme distincte", () => {
-    const shapes = SEED_PROJECTS.map((p) => shapeFor(p));
-    expect(new Set(shapes).size).toBe(shapes.length);
+  it("chaque projet d'amorçage a une teinte distincte", () => {
+    const tints = SEED_PROJECTS.map((p) => p.tint);
+    expect(new Set(tints).size).toBe(tints.length);
   });
 
   it("couvre 40 couples teinte+forme avant de se répéter", () => {

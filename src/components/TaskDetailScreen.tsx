@@ -1,22 +1,47 @@
 "use client";
 
+import { useCallback, useRef, useState } from "react";
 import { Chip } from "./Chip";
+import { TypeSegmented } from "./TypeSegmented";
 import { VoiceBadge } from "./VoiceBadge";
 import { WaveformStatic } from "./Waveform";
 import {
   ChevronLeftIcon,
-  DotsIcon,
+  EditIcon,
   CheckIcon,
+  CloseIcon,
   PlayIcon,
   ChevronRightIcon,
   ClockIcon,
 } from "./icons";
+import { isoToLocalInputValue, localInputToIso } from "@/lib/due";
+import { itemType, type ItemType } from "@/lib/item-type";
+import { apiFetch } from "@/lib/api";
 import { TIMEZONE } from "@/lib/zoned";
-import type { Item, Project } from "@/lib/types";
+import type { DraftItem, Item, Project } from "@/lib/types";
 
 /**
- * TaskDetailScreen — détail d'une tâche avec fil d'origine vocal.
+ * TaskDetailScreen — détail d'une tâche avec fil d'origine vocal, et son
+ * édition complète (type, titre, projet, date/heure, notes).
  */
+
+type EditDraft = {
+  title: string;
+  type: ItemType;
+  projectId: string;
+  dueLocal: string;
+  notes: string;
+};
+
+function draftFrom(item: Item): EditDraft {
+  return {
+    title: item.title,
+    type: itemType(item),
+    projectId: item.projectId,
+    dueLocal: isoToLocalInputValue(item.due),
+    notes: item.notes ?? "",
+  };
+}
 
 export function TaskDetailScreen({
   item,
@@ -27,6 +52,7 @@ export function TaskDetailScreen({
   onDelete,
   onToggleSub,
   onOpenSibling,
+  onSave,
 }: {
   item: Item | null;
   projects: Project[];
@@ -36,7 +62,86 @@ export function TaskDetailScreen({
   onDelete: (id: string) => void;
   onToggleSub?: (itemId: string, subId: string) => void;
   onOpenSibling?: (id: string) => void;
+  onSave: (id: string, patch: Partial<DraftItem>) => Promise<boolean>;
 }) {
+  // Hooks avant tout retour anticipé (règle de React) : `item` peut être null
+  // le temps d'un rendu (fiche ouverte avant que `sent` ne soit chargé).
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<EditDraft>(() =>
+    item ? draftFrom(item) : { title: "", type: "task", projectId: "", dueLocal: "", notes: "" },
+  );
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  /** Élément Audio courant — pour éviter d'en créer plusieurs simultanément. */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  /**
+   * Rejoue l'enregistrement audio lié à l'item, s'il existe.
+   * Fetch avec le header PIN (comme toutes les routes /api/*), puis lecture.
+   */
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- useCallback
+  const handlePlayAudio = useCallback(async () => {
+    if (!item?.audioId) return;
+    try {
+      const res = await apiFetch(`/api/audio/${encodeURIComponent(item.audioId)}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+      };
+      void audio.play();
+    } catch {
+      /* PIN révoqué ou réseau coupé : on ignore silencieusement */
+    }
+  }, [item?.audioId]);
+
+  const beginEdit = () => {
+    if (!item) return;
+    setDraft(draftFrom(item));
+    setFormError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setFormError(null);
+    setEditing(false);
+  };
+
+  const saveEdit = async () => {
+    if (!item) return;
+    const title = draft.title.trim();
+    if (!title) {
+      setFormError("Le titre ne peut pas être vide.");
+      return;
+    }
+    if (draft.type === "event" && !draft.dueLocal) {
+      setFormError("Un rendez-vous a besoin d'une date et d'une heure.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    const due = draft.type === "idea" ? null : draft.dueLocal ? localInputToIso(draft.dueLocal) : null;
+    const ok = await onSave(item.id, {
+      title,
+      kind: draft.type === "idea" ? item.kind : draft.type,
+      status: draft.type === "idea" ? "idea" : "active",
+      projectId: draft.projectId,
+      due,
+      allDay: due === null,
+      notes: draft.notes.trim() || undefined,
+    });
+    setSaving(false);
+    if (ok) setEditing(false);
+  };
+
   if (!item) {
     return (
       <div className="flex-1 min-h-0 overflow-auto px-5 pb-2" style={{ animation: "fade .25s both" }}>
@@ -67,45 +172,111 @@ export function TaskDetailScreen({
     : "Sans échéance";
 
   const audio = item.audioOrigin;
+  const currentType = itemType(item);
+  const chipVariant = currentType === "event" ? "meet" : currentType;
 
   return (
     <div className="flex-1 min-h-0 overflow-auto px-5 pb-2" style={{ animation: "fade .25s both" }}>
       {/* Header */}
       <div className="mb-5.5 flex items-center justify-between">
         <button
-          aria-label="Retour"
-          onClick={onBack}
+          aria-label={editing ? "Annuler" : "Retour"}
+          onClick={editing ? cancelEdit : onBack}
           className="flex size-11 items-center justify-center rounded-full border border-ink/[.08] bg-surface"
         >
-          <ChevronLeftIcon size={18} />
+          {editing ? <CloseIcon size={16} /> : <ChevronLeftIcon size={18} />}
         </button>
-        <button
-          aria-label="Plus d'options"
-          className="flex size-11 items-center justify-center gap-[3px] rounded-full border border-ink/[.08] bg-surface"
-        >
-          <DotsIcon size={18} />
-        </button>
-      </div>
-
-      {/* Chips */}
-      <div className="mb-3 flex gap-2">
-        {project && (
-          <Chip variant={item.kind === "task" ? "task" : "meet"}>
-            {project.name}
-          </Chip>
-        )}
-        {item.due && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-ink/[.08] bg-surface px-3 py-[7px] text-[12px] font-bold">
-            <ClockIcon size={12} />
-            {dueLabel}
-          </span>
+        {editing ? (
+          <button
+            onClick={() => void saveEdit()}
+            disabled={saving}
+            className="h-11 rounded-full bg-ink px-5 text-[13.5px] font-bold text-white disabled:opacity-60"
+          >
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        ) : (
+          <button
+            aria-label="Modifier"
+            onClick={beginEdit}
+            className="flex size-11 items-center justify-center rounded-full border border-ink/[.08] bg-surface"
+          >
+            <EditIcon size={17} />
+          </button>
         )}
       </div>
 
-      {/* Title */}
-      <h2 className="mb-4 text-[28px] font-extrabold leading-[1.14] tracking-[-0.03em]">{item.title}</h2>
+      {editing ? (
+        <div className="flex flex-col gap-3">
+          <TypeSegmented value={draft.type} onChange={(t) => setDraft((d) => ({ ...d, type: t }))} />
 
-      {/* Fil d'origine */}
+          <input
+            value={draft.title}
+            onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+            placeholder="Titre"
+            aria-label="Titre"
+            className="h-12 rounded-full border border-ink/[.12] bg-surface px-4 text-[16px] font-bold text-ink outline-none"
+          />
+
+          <select
+            value={draft.projectId}
+            onChange={(e) => setDraft((d) => ({ ...d, projectId: e.target.value }))}
+            aria-label="Projet"
+            className="h-11 rounded-full border border-ink/[.12] bg-surface px-4 text-[14px] font-semibold text-ink"
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          {draft.type !== "idea" && (
+            <input
+              type="datetime-local"
+              value={draft.dueLocal}
+              onChange={(e) => setDraft((d) => ({ ...d, dueLocal: e.target.value }))}
+              aria-label={draft.type === "event" ? "Date et heure du rendez-vous" : "Échéance"}
+              className="h-11 rounded-full border border-ink/[.12] bg-surface px-4 text-[14px] font-semibold text-ink outline-none"
+            />
+          )}
+
+          <textarea
+            value={draft.notes}
+            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+            placeholder="Notes (optionnel)"
+            aria-label="Notes"
+            rows={4}
+            className="rounded-18 border border-ink/[.1] bg-surface p-3.5 text-[14px] font-medium text-ink outline-none"
+          />
+
+          {formError && (
+            <p className="text-[13px] font-semibold" style={{ color: "var(--color-danger)" }}>{formError}</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Chips */}
+          <div className="mb-3 flex gap-2">
+            <Chip variant={chipVariant}>{project ? project.name : "Sans projet"}</Chip>
+            {item.due && currentType !== "idea" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-ink/[.08] bg-surface px-3 py-[7px] text-[12px] font-bold">
+                <ClockIcon size={12} />
+                {dueLabel}
+              </span>
+            )}
+          </div>
+
+          {/* Title */}
+          <h2 className="mb-4 text-[28px] font-extrabold leading-[1.14] tracking-[-0.03em]">{item.title}</h2>
+
+          {/* Notes */}
+          {item.notes && (
+            <p className="mb-3.5 text-[14.5px] font-medium leading-[1.5] text-ink-muted">{item.notes}</p>
+          )}
+        </>
+      )}
+
+      {!editing && (
+      <>
+      {/* Fil d'origine — audio avec métadonnées (audioOrigin) */}
       {audio && (
         <div className="mb-3.5 rounded-20 border border-ink/[.06] bg-surface p-4">
           {/* Header */}
@@ -115,6 +286,7 @@ export function TaskDetailScreen({
             </span>
             <button
               aria-label="Écouter l'extrait"
+              onClick={handlePlayAudio}
               className="flex size-8 flex-none items-center justify-center rounded-full bg-ink"
             >
               <PlayIcon size={12} className="text-white" />
@@ -161,6 +333,28 @@ export function TaskDetailScreen({
         </div>
       )}
 
+      {/* Enregistrement vocal — audio stocké sans métadonnées (audioId seul) */}
+      {!audio && item?.audioId && (
+        <div className="mb-3.5 rounded-20 border border-ink/[.06] bg-surface p-4">
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="font-mono text-[10px] tracking-[0.09em] text-ink-faint">
+              ENREGISTREMENT VOCAL
+            </span>
+            <button
+              aria-label="Écouter l'enregistrement"
+              onClick={handlePlayAudio}
+              className="flex size-9 flex-none items-center justify-center rounded-full bg-ink"
+            >
+              <PlayIcon size={14} className="text-white" />
+            </button>
+          </div>
+          {/* Waveform statique simplifiée */}
+          <div className="mt-3">
+            <WaveformStatic totalBars={24} activeStart={0} activeEnd={24} />
+          </div>
+        </div>
+      )}
+
       {/* Sous-tâches */}
       {subs.length > 0 && (
         <div className="rounded-20 border border-ink/[.06] bg-surface p-4">
@@ -204,7 +398,7 @@ export function TaskDetailScreen({
           className="flex h-[52px] items-center justify-center gap-2.5 rounded-full bg-ink text-[15.5px] font-bold text-white"
         >
           <CheckIcon size={17} className="text-white" />
-          {isDone ? "Rouvrir" : "Terminer"}
+          {isDone ? "Réouvrir" : "Terminer"}
         </button>
         <div className="flex gap-2.5">
           <button
@@ -222,6 +416,8 @@ export function TaskDetailScreen({
           </button>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

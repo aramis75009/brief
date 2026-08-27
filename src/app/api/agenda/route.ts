@@ -1,107 +1,55 @@
-import { requirePin } from "@/lib/guard";
+import { buildDayAgenda } from "@/lib/agenda";
+import { readAgendaSnapshot } from "@/lib/caldav";
+import { requireSession } from "@/lib/guard";
 import { readItems } from "@/lib/store";
-import { zonedParts, zonedTime, shiftDays } from "@/lib/zoned";
+import { shiftDays, zonedParts, zonedTime, type CalendarDate } from "@/lib/zoned";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Agenda — events et tâches datés pour une semaine donnée.
+ * Rendez-vous d'UN jour — fusion items Brief + instantané CalDAV.
  *
- * GET /api/agenda?week=2026-08-19
+ * GET /api/agenda?date=2026-08-20   (par défaut : aujourd'hui, Europe/Paris)
  *
- * Retourne les items groupés par jour et par matin/après-midi.
- * Les items sans échéance ou avec le statut "idea" sont exclus.
+ * Toute la logique de fusion (items actifs + événements posés directement
+ * dans l'app Calendrier + extension des séries récurrentes) vit dans
+ * `buildDayAgenda` (`src/lib/agenda.ts`), testée indépendamment — cette route
+ * ne fait que calculer les bornes du jour demandé et appeler cette fonction.
  */
 
-interface AgendaEntry {
-  id: string;
-  title: string;
-  kind: string;
-  due: string;
-  allDay: boolean;
-  durationMinutes?: number;
-  subtasks?: { id: string; title: string; done: boolean }[];
-  projectId: string;
-}
-
-interface DayGroup {
-  date: string;
-  label: string;
-  morning: AgendaEntry[];
-  afternoon: AgendaEntry[];
+function parseDateParam(raw: string | null): CalendarDate | null {
+  if (!raw) return zonedParts(new Date());
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { y, m: mo, d };
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const url = new URL(req.url);
-  const weekParam = url.searchParams.get("week");
-
-  // Determine week start (Monday)
-  let weekStart: Date;
-  if (weekParam) {
-    const d = new Date(weekParam);
-    if (Number.isNaN(d.getTime())) {
-      return Response.json({ error: "Date invalide." }, { status: 400 });
-    }
-    const parts = zonedParts(d);
-    const dow = (new Date(d).getDay() + 6) % 7; // 0 = Monday
-    weekStart = zonedTime(parts.y, parts.m, parts.d - dow, 0, 0);
-  } else {
-    const now = new Date();
-    const parts = zonedParts(now);
-    const dow = (now.getDay() + 6) % 7;
-    weekStart = zonedTime(parts.y, parts.m, parts.d - dow, 0, 0);
+  const parts = parseDateParam(url.searchParams.get("date"));
+  if (!parts) {
+    return Response.json({ error: "Date invalide (attendu AAAA-MM-JJ)." }, { status: 400 });
   }
 
-  const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+  const dayStart = zonedTime(parts.y, parts.m, parts.d, 0, 0);
+  const next = shiftDays(parts, 1);
+  const dayEnd = zonedTime(next.y, next.m, next.d, 0, 0);
 
-  const items = await readItems();
-  const dated = items.filter((item) => {
-    if (!item.due || item.status === "idea" || item.status === "archived") return false;
-    const d = new Date(item.due);
-    return d >= weekStart && d < weekEnd;
+  const [items, snapshot] = await Promise.all([readItems(), readAgendaSnapshot()]);
+  const events = buildDayAgenda(items, snapshot?.events ?? [], dayStart, dayEnd);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return Response.json({
+    date: `${parts.y}-${pad(parts.m)}-${pad(parts.d)}`,
+    generatedAt: snapshot?.generatedAt ?? null,
+    events,
   });
-
-  // Group by day
-  const days: DayGroup[] = [];
-  for (let i = 0; i < 7; i++) {
-    const dayStart = new Date(weekStart.getTime() + i * 86400000);
-    const dayEnd = new Date(dayStart.getTime() + 86400000);
-    const dayItems = dated.filter((item) => {
-      const d = new Date(item.due!);
-      return d >= dayStart && d < dayEnd;
-    });
-
-    const morning = dayItems
-      .filter((item) => new Date(item.due!).getHours() < 12)
-      .map(toEntry);
-    const afternoon = dayItems
-      .filter((item) => new Date(item.due!).getHours() >= 12)
-      .map(toEntry);
-
-    days.push({
-      date: dayStart.toISOString().slice(0, 10),
-      label: dayStart.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" }),
-      morning,
-      afternoon,
-    });
-  }
-
-  return Response.json({ week: weekStart.toISOString().slice(0, 10), days });
-}
-
-function toEntry(item: import("@/lib/types").Item): AgendaEntry {
-  return {
-    id: item.id,
-    title: item.title,
-    kind: item.kind,
-    due: item.due!,
-    allDay: item.allDay,
-    durationMinutes: item.durationMinutes,
-    subtasks: item.subtasks,
-    projectId: item.projectId,
-  };
 }

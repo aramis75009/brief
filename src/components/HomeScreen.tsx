@@ -11,7 +11,7 @@
  * fragiles. Les couleurs utilisent les variables CSS du design system.
  */
 
-import { useMemo, useRef, useCallback } from "react";
+import { memo, useMemo, useRef, useCallback } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { EmptyState } from "./EmptyState";
 import { SkeletonList } from "./Skeleton";
@@ -26,21 +26,55 @@ import {
   TaskCheckIcon,
 } from "./icons";
 import { skinFor, shapeFor } from "@/lib/projects";
-import { TIMEZONE, zonedParts } from "@/lib/zoned";
+import { compareByDue } from "@/lib/due";
+import { TIMEZONE } from "@/lib/zoned";
+import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Overview, Project } from "@/lib/types";
+
+/* ------------------------------------------------------------------ *
+ * Formateurs Intl — créés UNE FOIS au niveau du module, pas par ligne.
+ * `new Intl.DateTimeFormat()` est coûteux sur iOS Safari (parse ICU à
+ * chaque instanciation). Sur une liste de 20 items, on évite 20 allocs
+ * par rendu.
+ * ------------------------------------------------------------------ */
+const timeFmt = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: TIMEZONE,
+});
+const dayLabelFmt = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "long",
+  timeZone: TIMEZONE,
+});
 
 interface HomeScreenProps {
   items: Item[];
+  /**
+   * Rendez-vous/tâches d'AUJOURD'HUI, tels que rendus par `GET /api/agenda`
+   * (`buildDayAgenda`) — la MÊME fusion items+CalDAV que l'onglet Rendez-vous.
+   * L'accueil ne recalcule plus indépendamment « ce qui est prévu aujourd'hui » :
+   * un rendez-vous récurrent étendu par le calendrier, ou un événement adopté
+   * pas encore réécrit avec un `due` d'aujourd'hui, était invisible ici alors
+   * qu'il apparaissait déjà dans l'onglet Rendez-vous — deux sources
+   * concurrentes pour le même compteur.
+   */
+  todayAgenda: AgendaItem[];
+  /** Nombre d'idées à trier — même liste que l'écran Idées, jamais recalculé ici. */
+  ideaCount: number;
   projects: Project[];
   overview: Overview | null;
   loading: boolean;
-  onToggleDone: (id: string) => void;
+  onToggleDone: (id: string, completedAt?: string | null) => void;
   onOpenTask: (id: string) => void;
   onOpenAgenda: () => void;
   onOpenIdeas: () => void;
   onOpenAccount: () => void;
   onCapture: () => void;
   onAskAI: () => void;
+  onHelp: () => void;
+  onNotifications: () => void;
 }
 
 /* ------------------------------------------------------------------ *
@@ -66,7 +100,7 @@ const C = {
  * en bas, le tout en flex-col justify-between.
  * ------------------------------------------------------------------ */
 
-function DestinationTile({
+const DestinationTile = memo(function DestinationTile({
   bg,
   icon,
   label,
@@ -133,7 +167,7 @@ function DestinationTile({
       </span>
     </Tag>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Bouton d'action de l'en-tête (aide, notifications) — 40px, icône centrée.
@@ -173,7 +207,7 @@ function HeaderIconButton({
  * Case à cocher ronde — 26px, bordure 2px ink/18%. Affiche la coche si fait.
  * ------------------------------------------------------------------ */
 
-function RowCheckbox({
+const RowCheckbox = memo(function RowCheckbox({
   done,
   onClick,
 }: {
@@ -192,31 +226,34 @@ function RowCheckbox({
         width: 26,
         height: 26,
         borderRadius: 99,
-        border: `2px solid ${C.hairline18}`,
-        background: C.surface,
-        color: C.ink,
+        border: done ? `2px solid ${C.ink}` : `2px solid ${C.hairline18}`,
+        background: done ? C.ink : C.surface,
+        color: "#fff",
         cursor: "pointer",
         padding: 0,
       }}
     >
-      {done && <CheckIcon size={13} />}
+      {done && <CheckIcon size={13} className="text-white" />}
     </button>
   );
-}
+});
 
 /* ------------------------------------------------------------------ *
  * Une ligne de la liste « Aujourd'hui ».
  * ------------------------------------------------------------------ */
 
-function TodayRow({
+const TodayRow = memo(function TodayRow({
   item,
   project,
+  due,
   onToggle,
   onOpen,
 }: {
   item: Item;
   project: Project | undefined;
-  onToggle: (id: string) => void;
+  /** L'heure EFFECTIVE de l'occurrence (déjà corrigée des overrides par `buildDayAgenda`). */
+  due: string;
+  onToggle: (id: string, completedAt?: string | null) => void;
   onOpen: (id: string) => void;
 }) {
   const done = !!item.doneAt;
@@ -224,80 +261,177 @@ function TodayRow({
   const shape = project ? shapeFor(project) : "disc";
 
   // Heure formatée depuis l'échéance (fuseau Europe/Paris).
+  // Utilise le formateur module-level `timeFmt` — pas de `new Intl.DateTimeFormat()`
+  // par ligne à chaque rendu.
   const time = useMemo(() => {
-    if (!item.due) return "";
-    const d = new Date(item.due);
+    if (!due) return "";
+    const d = new Date(due);
     if (Number.isNaN(d.getTime())) return "";
     if (item.allDay) return "journée";
-    return new Intl.DateTimeFormat("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: TIMEZONE,
-    }).format(d);
-  }, [item.due, item.allDay]);
+    return timeFmt.format(d);
+  }, [due, item.allDay]);
 
   const isVocal = !!item.audioOrigin;
 
+  /* La ligne n'est PAS un bouton : elle en contient déjà un (la case à cocher).
+     Un <button> dans un <button> est du HTML invalide — React le signalait par
+     une erreur d'hydratation. La case et la zone d'ouverture sont donc deux
+     boutons frères dans un conteneur neutre ; le rendu ne change pas. */
   return (
-    <button
-      onClick={() => onOpen(item.id)}
-      className="flex w-full items-center gap-3 text-left"
-      style={{ padding: "12px 14px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+    <div
+      className="flex w-full items-center gap-3"
+      style={{ padding: "12px 14px" }}
     >
-      <RowCheckbox done={done} onClick={() => onToggle(item.id)} />
+      <RowCheckbox done={done} onClick={() => onToggle(item.id, due)} />
 
-      {/* Titre + métadonnées */}
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span
-          className="font-semibold tracking-[-0.01em]"
-          style={{
-            fontSize: 15,
-            lineHeight: 1.3,
-            color: done ? C.inkFaint : C.ink,
-            textDecoration: done ? "line-through" : "none",
-          }}
-        >
-          {item.title}
+      <button
+        onClick={() => onOpen(item.id)}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        style={{ padding: 0, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        {/* Titre + métadonnées */}
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span
+            className="font-semibold tracking-[-0.01em]"
+            style={{
+              fontSize: 15,
+              lineHeight: 1.3,
+              color: done ? C.inkFaint : C.ink,
+              textDecoration: done ? "line-through" : "none",
+            }}
+          >
+            {item.title}
+          </span>
+
+          {/* Métadonnées : pastille projet + libellé + badge vocal */}
+          <span className="flex items-center gap-[6px]">
+            {skin && (
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 6,
+                  height: 6,
+                  borderRadius: shape === "square" ? 1 : 99,
+                  background: skin.bg,
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            {project && (
+              <span
+                className="font-medium"
+                style={{ fontSize: 13, lineHeight: 1, color: C.inkMuted }}
+              >
+                {project.name}
+              </span>
+            )}
+            {isVocal && <VoiceBadge size="small" />}
+          </span>
         </span>
 
-        {/* Métadonnées : pastille projet + libellé + badge vocal */}
-        <span className="flex items-center gap-[6px]">
-          {skin && (
-            <span
-              style={{
-                display: "inline-block",
-                width: 6,
-                height: 6,
-                borderRadius: shape === "square" ? 1 : 99,
-                background: skin.bg,
-                flexShrink: 0,
-              }}
-            />
-          )}
-          {project && (
-            <span
-              className="font-medium"
-              style={{ fontSize: 13, lineHeight: 1, color: C.inkMuted }}
-            >
-              {project.name}
-            </span>
-          )}
-          {isVocal && <VoiceBadge size="small" />}
-        </span>
+        {/* Heure */}
+        {time && (
+          <span
+            className="shrink-0 font-bold tnum"
+            style={{ fontSize: 13, lineHeight: 1, color: done ? C.inkFaint : C.ink }}
+          >
+            {time}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ *
+ * Ligne minimale pour une entrée d'agenda sans item Brief correspondant
+ * (événement posé dans Calendrier, pas encore adopté — fenêtre ~15 min).
+ * Même principe que `EventRow` non cliquable d'`AgendaScreen`.
+ * ------------------------------------------------------------------ */
+
+const TodayAgendaFallbackRow = memo(function TodayAgendaFallbackRow({ entry }: { entry: AgendaItem }) {
+  const time = useMemo(() => {
+    if (entry.allDay) return "journée";
+    const d = new Date(entry.due);
+    if (Number.isNaN(d.getTime())) return "";
+    return timeFmt.format(d);
+  }, [entry.due, entry.allDay]);
+
+  return (
+    <div
+      className="flex w-full items-center gap-3"
+      style={{ padding: "12px 14px" }}
+    >
+      <span
+        style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 99, border: `2px dashed ${C.hairline18}` }}
+      />
+      <span className="min-w-0 flex-1 font-semibold tracking-[-0.01em]" style={{ fontSize: 15, lineHeight: 1.3, color: C.ink }}>
+        {entry.title}
       </span>
-
-      {/* Heure */}
       {time && (
-        <span
-          className="shrink-0 font-bold tnum"
-          style={{ fontSize: 13, lineHeight: 1, color: done ? C.inkFaint : C.ink }}
-        >
+        <span className="shrink-0 font-bold tnum" style={{ fontSize: 13, lineHeight: 1, color: C.ink }}>
           {time}
         </span>
       )}
-    </button>
+    </div>
   );
-}
+});
+
+/* ------------------------------------------------------------------ *
+ * Un sous-groupe de la section « Aujourd'hui » (Tâches ou Rendez-vous),
+ * résolu depuis `todayAgenda` (AgendaItem[]) — jamais un second filtre
+ * indépendant de `items`.
+ * ------------------------------------------------------------------ */
+
+const TodayAgendaGroup = memo(function TodayAgendaGroup({
+  title,
+  entries,
+  itemById,
+  projectMap,
+  onToggle,
+  onOpen,
+}: {
+  title: string;
+  entries: AgendaItem[];
+  itemById: Map<string, Item>;
+  projectMap: Map<string, Project>;
+  onToggle: (id: string, completedAt?: string | null) => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col" style={{ gap: 8 }}>
+      <span
+        className="font-mono"
+        style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: C.inkMuted }}
+      >
+        {title.toUpperCase()}
+      </span>
+      <div
+        className="overflow-hidden perf-contain"
+        style={{
+          background: C.surface,
+          borderRadius: 20,
+          padding: "6px 4px",
+          border: `1px solid ${C.hairline}`,
+        }}
+      >
+        {entries.map((entry, i) => {
+          const item = entry.briefItemId ? itemById.get(entry.briefItemId) : undefined;
+          return (
+            <div key={entry.id}>
+              {item ? (
+                <TodayRow item={item} project={projectMap.get(item.projectId)} due={entry.due} onToggle={onToggle} onOpen={onOpen} />
+              ) : (
+                <TodayAgendaFallbackRow entry={entry} />
+              )}
+              {i < entries.length - 1 && <div style={{ height: 1, background: C.hairline, margin: "0 14px" }} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
 
 /* ------------------------------------------------------------------ *
  * Composant principal.
@@ -305,6 +439,8 @@ function TodayRow({
 
 export function HomeScreen({
   items,
+  todayAgenda,
+  ideaCount,
   projects,
   overview,
   loading,
@@ -315,55 +451,43 @@ export function HomeScreen({
   onOpenAccount,
   onCapture,
   onAskAI,
+  onHelp,
+  onNotifications,
 }: HomeScreenProps) {
   // Date du jour formatée « mar. 19 août » dans le fuseau Europe/Paris.
+  // Formateur module-level `dayLabelFmt` — pas de `new Intl.DateTimeFormat()` à chaque rendu.
   const todayLabel = useMemo(() => {
-    return new Intl.DateTimeFormat("fr-FR", {
-      weekday: "short",
-      day: "numeric",
-      month: "long",
-      timeZone: TIMEZONE,
-    }).format(new Date());
+    return dayLabelFmt.format(new Date());
   }, []);
 
-  // Items du jour : ce dont l'échéance tombe aujourd'hui dans le fuseau Paris.
-  // Triés par heure croissante (9:00 avant 14:30 avant 18:00).
-  const todayItems = useMemo(() => {
-    const nowParts = zonedParts(new Date());
-    return items
-      .filter((it) => {
-        if (it.status === "idea" || it.status === "archived") return false;
-        if (!it.due) return false;
-        const parts = zonedParts(new Date(it.due));
-        return parts.y === nowParts.y && parts.m === nowParts.m && parts.d === nowParts.d;
-      })
-      .sort((a, b) => {
-        const ta = a.due ? new Date(a.due).getTime() : Infinity;
-        const tb = b.due ? new Date(b.due).getTime() : Infinity;
-        return ta - tb;
-      });
+  // Index des items Brief par id, pour résoudre chaque entrée d'agenda vers
+  // l'Item complet (coche, sous-tâches, projet) quand il en existe un.
+  const itemById = useMemo(() => {
+    const m = new Map<string, Item>();
+    for (const it of items) m.set(it.id, it);
+    return m;
   }, [items]);
 
-  // Comptages pour les tuiles : aujourd'hui pour tâches et RDV, total pour idées.
-  const counts = useMemo(() => {
-    let tasks = 0;
-    let events = 0;
-    let ideas = 0;
-    const nowParts = zonedParts(new Date());
-    for (const it of items) {
-      if (it.status === "idea") {
-        ideas++;
-        continue;
-      }
-      if (it.status === "archived") continue;
-      if (it.kind === "event") events++;
-      else tasks++;
-    }
-    // Pour les tuiles, on compte "aujourd'hui"
-    const todayTasks = todayItems.filter((it) => it.kind === "task").length;
-    const todayEvents = todayItems.filter((it) => it.kind === "event").length;
-    return { tasks: todayTasks, events: todayEvents, ideas };
-  }, [items, todayItems]);
+  // Aujourd'hui, séparé en deux : Tâches et Rendez-vous — la MÊME source que
+  // l'onglet Rendez-vous (`todayAgenda`, voir la prop). "external" (événement
+  // calendrier pas encore adopté en item Brief) compte comme un rendez-vous :
+  // c'en est déjà un pour l'utilisateur, l'adoption suit dans les ~15 min.
+  const todayTaskAgenda = useMemo(
+    () => todayAgenda.filter((e) => e.kind === "task").sort(compareByDue),
+    [todayAgenda],
+  );
+  const todayEventAgenda = useMemo(
+    () => todayAgenda.filter((e) => e.kind !== "task").sort(compareByDue),
+    [todayAgenda],
+  );
+
+  // Comptages pour les tuiles : aujourd'hui pour tâches et RDV (agenda),
+  // total pour idées (`ideaCount`, calculé depuis la même liste `sent` que
+  // l'écran Idées — jamais un second calcul indépendant).
+  const counts = useMemo(
+    () => ({ tasks: todayTaskAgenda.length, events: todayEventAgenda.length, ideas: ideaCount }),
+    [todayTaskAgenda, todayEventAgenda, ideaCount],
+  );
 
   // Index des projets par id.
   const projectMap = useMemo(() => {
@@ -391,10 +515,10 @@ export function HomeScreen({
           onClick={onOpenAccount}
         />
         <div className="flex items-center gap-1">
-          <HeaderIconButton label="Aide" onClick={undefined}>
+          <HeaderIconButton label="Aide" onClick={onHelp}>
             <HelpIcon size={17} />
           </HeaderIconButton>
-          <HeaderIconButton label="Notifications" onClick={undefined}>
+          <HeaderIconButton label="Notifications" onClick={onNotifications}>
             <BellIcon size={19} />
             {/* Point rouge de notification */}
             <span
@@ -449,7 +573,7 @@ export function HomeScreen({
           bg={C.meet100}
           icon={<CalendarIcon size={20} />}
           label="Rendez-vous"
-          subtitle={`${counts.events} · Calendrier Apple`}
+          subtitle={`${counts.events} aujourd'hui`}
           onClick={onOpenAgenda}
         />
         <DestinationTile
@@ -487,10 +611,10 @@ export function HomeScreen({
           </span>
         </div>
 
-        {/* Contenu : loading → skeleton, empty → EmptyState, sinon liste */}
+        {/* Contenu : loading → skeleton, empty → EmptyState, sinon deux groupes */}
         {loading ? (
           <SkeletonList count={3} />
-        ) : todayItems.length === 0 ? (
+        ) : todayTaskAgenda.length === 0 && todayEventAgenda.length === 0 ? (
           <EmptyState
             icon={<IdeaIcon size={22} />}
             title="Journée libre"
@@ -499,29 +623,28 @@ export function HomeScreen({
             onAction={onCapture}
           />
         ) : (
-          <div
-            className="overflow-hidden"
-            style={{
-              background: C.surface,
-              borderRadius: 20,
-              padding: "6px 4px",
-              border: `1px solid ${C.hairline}`,
-            }}
-          >
-            {todayItems.map((item, i) => (
-              <div key={item.id}>
-                <TodayRow
-                  item={item}
-                  project={projectMap.get(item.projectId)}
-                  onToggle={onToggleDone}
-                  onOpen={onOpenTask}
-                />
-                {i < todayItems.length - 1 && (
-                  <div style={{ height: 1, background: C.hairline, margin: "0 14px" }} />
-                )}
-              </div>
-            ))}
-          </div>
+          <>
+            {todayTaskAgenda.length > 0 && (
+              <TodayAgendaGroup
+                title="Tâches"
+                entries={todayTaskAgenda}
+                itemById={itemById}
+                projectMap={projectMap}
+                onToggle={onToggleDone}
+                onOpen={onOpenTask}
+              />
+            )}
+            {todayEventAgenda.length > 0 && (
+              <TodayAgendaGroup
+                title="Rendez-vous"
+                entries={todayEventAgenda}
+                itemById={itemById}
+                projectMap={projectMap}
+                onToggle={onToggleDone}
+                onOpen={onOpenTask}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

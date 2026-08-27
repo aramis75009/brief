@@ -1,7 +1,7 @@
 "use client";
 
-import { PIN_HEADER, UnauthorizedError, clearPin, getPin } from "./pin";
-import type { DraftItem, Item, Overview, Project, SaveResult } from "./types";
+import type { AgendaItem } from "./agenda";
+import type { DraftItem, Item, KanbanBoard, Overview, Project, SaveResult, Tag } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -11,6 +11,21 @@ export class ApiError extends Error {
   }
 }
 
+/** 401 : session absente ou expirée — l'appelant doit réafficher AuthGate. */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Session expirée");
+    this.name = "UnauthorizedError";
+  }
+}
+
+/** fetch vers /api/* — les cookies de session suivent automatiquement (same-origin). */
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401) throw new UnauthorizedError();
+  return res;
+}
+
 const TIMEOUTS = {
   projects: 12_000,
   transcribe: 90_000,
@@ -18,13 +33,16 @@ const TIMEOUTS = {
   save: 30_000,
   items: 15_000,
   overview: 15_000,
+  agenda: 15_000,
+  caldavStatus: 10_000,
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
-  const pin = getPin();
   const headers = new Headers(init.headers);
-  if (pin) headers.set(PIN_HEADER, pin);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // Ne PAS forcer Content-Type sur FormData : le navigateur doit set
+  // multipart/form-data avec son boundary. Forcer application/json casse l'upload.
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
 
   let res: Response;
   try {
@@ -37,7 +55,6 @@ async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): 
   }
 
   if (res.status === 401) {
-    clearPin();
     throw new UnauthorizedError();
   }
 
@@ -94,6 +111,50 @@ export async function fetchOverview(): Promise<Overview> {
   return jsonFetch<Overview>("/api/overview", {}, TIMEOUTS.overview);
 }
 
+/**
+ * Le Rendez-vous d'UN jour (`AAAA-MM-JJ`), fusionné côté serveur : items
+ * Brief actifs + événements posés directement dans l'app Calendrier. Voir
+ * `src/lib/agenda.ts` — c'est la même fonction que la route appelle, jamais
+ * une seconde logique côté client.
+ */
+export async function fetchAgendaDay(date: string): Promise<AgendaItem[]> {
+  const data = await jsonFetch<{ events: AgendaItem[] }>(
+    `/api/agenda?date=${encodeURIComponent(date)}`,
+    {},
+    TIMEOUTS.agenda,
+  );
+  return data.events ?? [];
+}
+
+/** Âge réel du dernier passage CalDAV — `null` si jamais synchronisé. */
+export async function fetchCalDavStatus(): Promise<{ lastSyncAt: number | null }> {
+  return jsonFetch("/api/caldav-status", {}, TIMEOUTS.caldavStatus);
+}
+
+/**
+ * Envoie l'audio brut à `/api/audio` pour stockage persistant.
+ * Retourne l'id et l'URL de l'audio enregistré — à rattacher aux items.
+ */
+export async function uploadAudio(
+  blob: Blob,
+  mimeType: string,
+): Promise<{ id: string; url: string }> {
+  return jsonFetch<{ id: string; url: string }>(
+    "/api/audio",
+    {
+      method: "POST",
+      body: (() => {
+        const form = new FormData();
+        const ext = mimeType.includes("mp4") ? "m4a" : "webm";
+        form.append("file", blob, `note.${ext}`);
+        form.append("mimeType", mimeType);
+        return form;
+      })(),
+    },
+    TIMEOUTS.transcribe,
+  );
+}
+
 /** Les projets ne transitent plus par le client : le serveur les possède. */
 export async function parseNote(text: string): Promise<DraftItem[]> {
   const data = await jsonFetch<{ items: DraftItem[] }>(
@@ -117,6 +178,11 @@ export async function saveItems(
 /**
  * Coche ou décoche un item.
  *
+ * `completedAt` : l'occurrence PRÉCISE cochée (heure effective affichée dans
+ * la liste du jour). Sur une récurrence dont le rappel a déjà sonné, le cron
+ * a avancé `due` au-delà de l'occurrence qu'on coche — sans cette précision,
+ * le serveur enregistrerait la mauvaise occurrence comme faite.
+ *
  * Renvoie l'item tel que le serveur l'a écrit, jamais une reconstruction
  * locale : sur une tâche récurrente c'est le serveur qui calcule la nouvelle
  * échéance, et `outcome` dit laquelle des deux choses vient de se produire.
@@ -124,10 +190,14 @@ export async function saveItems(
 export async function setItemDone(
   id: string,
   done: boolean,
+  completedAt?: string | null,
 ): Promise<{ item: Item; outcome: "advanced" | "done" | "reopened" }> {
   return jsonFetch(
     "/api/items",
-    { method: "PATCH", body: JSON.stringify({ id, done }) },
+    {
+      method: "PATCH",
+      body: JSON.stringify(completedAt ? { id, done, completedAt } : { id, done }),
+    },
     TIMEOUTS.save,
   );
 }
@@ -139,6 +209,20 @@ export async function deleteItem(id: string): Promise<{ ok: boolean; id: string 
     { method: "DELETE" },
     TIMEOUTS.save,
   );
+}
+
+/**
+ * Envoie l'historique de conversation à l'assistant Brief et renvoie la
+ * réponse textuelle du modèle. Le contexte (tâches, projets) est construit
+ * côté serveur — le client ne fournit que les messages user/assistant.
+ */
+export async function chatWithAssistant(messages: { role: string; content: string }[]): Promise<string> {
+  const data = await jsonFetch<{ reply: string }>(
+    "/api/chat",
+    { method: "POST", body: JSON.stringify({ messages }) },
+    30_000,
+  );
+  return data.reply;
 }
 
 /**
@@ -178,9 +262,6 @@ export function transcribeAudio(
     xhr.open("POST", "/api/transcribe");
     xhr.timeout = TIMEOUTS.transcribe;
 
-    const pin = getPin();
-    if (pin) xhr.setRequestHeader(PIN_HEADER, pin);
-
     xhr.upload.onload = () => onUploaded();
 
     xhr.onload = () => {
@@ -191,7 +272,6 @@ export function transcribeAudio(
         /* réponse illisible : traitée ci-dessous */
       }
       if (xhr.status === 401) {
-        clearPin();
         reject(new UnauthorizedError());
         return;
       }
@@ -209,4 +289,72 @@ export function transcribeAudio(
 
     xhr.send(form);
   });
+}
+
+/* --- Board Kanban -------------------------------------------------------- */
+
+export async function fetchBoard(): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>("/api/board", {}, TIMEOUTS.projects);
+}
+
+export async function addColumn(name: string): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "add", name }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function renameColumn(id: string, name: string): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "rename", id, name }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function deleteColumn(id: string): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "delete", id }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function reorderColumns(ids: string[]): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "reorder", order: ids }) },
+    TIMEOUTS.projects,
+  );
+}
+
+/* --- Tags ---------------------------------------------------------------- */
+
+export async function fetchTags(): Promise<Tag[]> {
+  return jsonFetch<Tag[]>("/api/tags", {}, TIMEOUTS.projects);
+}
+
+export async function createTag(name: string, color: string): Promise<Tag> {
+  return jsonFetch<Tag>(
+    "/api/tags",
+    { method: "POST", body: JSON.stringify({ name, color }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function updateTag(id: string, patch: { name?: string; color?: string }): Promise<Tag> {
+  return jsonFetch<Tag>(
+    `/api/tags/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function deleteTag(id: string): Promise<{ ok: boolean }> {
+  return jsonFetch(
+    `/api/tags/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    TIMEOUTS.projects,
+  );
 }

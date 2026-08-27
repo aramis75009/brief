@@ -157,6 +157,59 @@ function done(date: Date, hasHour: boolean): { due: string; allDay: boolean } {
   return { due: toIsoWithOffset(date), allDay: !hasHour };
 }
 
+/**
+ * Vrai si `due` tombe le même jour calendaire que `now`, DANS `TIMEZONE` —
+ * quelle que soit l'heure. C'est la seule fonction que « Tâches aujourd'hui »
+ * doit appeler : comparer des `Date` directement (`toDateString()`, etc.) lit
+ * le fuseau de la machine, pas celui d'Europe/Paris (règle `zoned.ts`).
+ */
+export function isDueToday(due: string | null, now: Date = new Date()): boolean {
+  if (!due) return false;
+  const date = new Date(due);
+  if (Number.isNaN(date.getTime())) return false;
+  const a = zonedParts(date);
+  const b = zonedParts(now);
+  return a.y === b.y && a.m === b.m && a.d === b.d;
+}
+
+/**
+ * Compare deux items par échéance croissante (prochaine d'abord). Sans
+ * échéance — ou échéance illisible — toujours en dernier, dans leur ordre
+ * d'origine (`Array.prototype.sort` est stable).
+ */
+export function compareByDue(a: { due: string | null }, b: { due: string | null }): number {
+  const ta = a.due ? new Date(a.due).getTime() : NaN;
+  const tb = b.due ? new Date(b.due).getTime() : NaN;
+  const va = Number.isNaN(ta) ? Infinity : ta;
+  const vb = Number.isNaN(tb) ? Infinity : tb;
+  return va - vb;
+}
+
+/**
+ * Aller-retour avec un `<input type="datetime-local">`, pour les formulaires
+ * d'édition (fiche, capture). Comme partout ailleurs, tout passe par
+ * `zoned.ts` — jamais `new Date(value)` sur une chaîne sans fuseau, qui
+ * lirait celui de la machine plutôt qu'Europe/Paris.
+ */
+
+/** ISO+offset → valeur "AAAA-MM-JJTHH:mm" pour préremplir le champ. `null`/illisible → chaîne vide. */
+export function isoToLocalInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const p = zonedParts(date);
+  return `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+/** Valeur "AAAA-MM-JJTHH:mm" (fuseau Europe/Paris) → ISO+offset. `null` si illisible ou incomplète. */
+export function localInputToIso(value: string): string | null {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m.map(Number);
+  if (!isRealCalendarDate(`${y}-${pad(mo)}-${pad(d)}`)) return null;
+  return toIsoWithOffset(zonedTime(y, mo, d, h, mi));
+}
+
 /** Rend une date absolue lisible en français, pour l'affichage standard. */
 export function formatDue(due: string | null, allDay: boolean): string {
   if (!due) return "Pas d'échéance";

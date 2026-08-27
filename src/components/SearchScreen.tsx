@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
 import { VoiceBadge } from "./VoiceBadge";
 import { AccountAvatar } from "./AccountAvatar";
 import { SearchSmallIcon, MicIcon, ChevronLeftIcon } from "./icons";
+import { skinFor, shapeFor } from "@/lib/projects";
+import { compareByDue } from "@/lib/due";
+import { useRecorder, type Recording } from "@/lib/useRecorder";
+import { transcribeAudio } from "@/lib/api";
 import type { Item, Project } from "@/lib/types";
 
 /**
@@ -26,39 +30,64 @@ export function SearchScreen({
   items,
   projects,
   onOpenItem,
-  onVoiceSearch,
   onBack,
   onOpenAccount,
 }: {
   items: Item[];
   projects: Project[];
   onOpenItem: (id: string) => void;
-  onVoiceSearch: () => void;
   onBack: () => void;
   onOpenAccount: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [voiceActive, setVoiceActive] = useState(false);
+
+  const onRecorded = useCallback(async (rec: Recording) => {
+    setVoiceActive(false);
+    try {
+      const text = await transcribeAudio(rec.blob, rec.mimeType, () => {});
+      if (text.trim()) setQuery(text.trim());
+    } catch {
+      /* non bloquant */
+    }
+  }, []);
+
+  const recorder = useRecorder(onRecorded);
+
+  const toggleVoiceSearch = useCallback(() => {
+    if (recorder.recording) {
+      recorder.stop();
+    } else {
+      setVoiceActive(true);
+      void recorder.start();
+    }
+  }, [recorder]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter((item) => {
-      // Filter by type
-      if (filter === "task" && item.kind !== "task") return false;
-      if (filter === "event" && item.kind !== "event") return false;
-      if (filter === "idea" && item.status !== "idea") return false;
-      if (filter === "dictated" && !item.audioOrigin) return false;
+    return items
+      .filter((item) => {
+        // Filter by type
+        if (filter === "task" && item.kind !== "task") return false;
+        if (filter === "event" && item.kind !== "event") return false;
+        if (filter === "idea" && item.status !== "idea") return false;
+        if (filter === "dictated" && !item.audioOrigin) return false;
 
-      // Empty query = show all (browsing mode)
-      if (!q) return true;
+        // Navigation libre (pas de recherche tapée) : les tâches déjà
+        // terminées n'ont rien à faire dans une liste qu'on parcourt pour
+        // voir ce qui reste à faire. Elles restent trouvables par leur nom —
+        // la recherche par texte, elle, cherche aussi dans l'historique.
+        if (!q) return !item.doneAt;
 
-      // Search in title, notes, audioOrigin
-      const title = item.title.toLowerCase();
-      const notes = (item.notes || "").toLowerCase();
-      const audio = item.audioOrigin;
-      const audioText = audio ? (audio.text + " " + audio.highlight).toLowerCase() : "";
-      return title.includes(q) || notes.includes(q) || audioText.includes(q);
-    });
+        // Search in title, notes, audioOrigin
+        const title = item.title.toLowerCase();
+        const notes = (item.notes || "").toLowerCase();
+        const audio = item.audioOrigin;
+        const audioText = audio ? (audio.text + " " + audio.highlight).toLowerCase() : "";
+        return title.includes(q) || notes.includes(q) || audioText.includes(q);
+      })
+      .sort(compareByDue);
   }, [items, query, filter]);
 
   const projectMap = useMemo(() => {
@@ -93,7 +122,7 @@ export function SearchScreen({
         />
         <button
           aria-label="Dicter la recherche"
-          onClick={onVoiceSearch}
+          onClick={toggleVoiceSearch}
           className="flex size-10 flex-none items-center justify-center rounded-full bg-ink"
         >
           <MicIcon size={15} className="text-white" />
@@ -144,38 +173,56 @@ export function SearchScreen({
             const isIdea = item.status === "idea";
             const bgColor = isTask ? "var(--color-task-100)" : isIdea ? "var(--color-idea-100)" : "var(--color-meet-100)";
             const iconColor = isTask ? "var(--color-task-700)" : isIdea ? "var(--color-idea-700)" : "var(--color-meet-700)";
+            const skin = proj ? skinFor(proj) : null;
+            const shape = proj ? shapeFor(proj) : "disc";
 
             return (
               <button
                 key={item.id}
                 onClick={() => onOpenItem(item.id)}
-                className="flex items-center gap-3 rounded-20 border border-ink/[.06] bg-surface px-4 py-3.5 text-left"
+                className="flex items-center gap-3.5 rounded-20 border border-ink/[.06] bg-surface px-5 py-4.5 text-left"
               >
                 <span
-                  className="flex size-7 flex-none items-center justify-center rounded-full"
+                  className="flex size-9 flex-none items-center justify-center rounded-full"
                   style={{ background: bgColor }}
                 >
                   {isTask ? (
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.6} strokeLinecap="round">
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.6} strokeLinecap="round">
                       <path d="M4 12.5l5 5L20 6.5" />
                     </svg>
                   ) : isIdea ? (
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.4} strokeLinecap="round">
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.4} strokeLinecap="round">
                       <circle cx="12" cy="12" r="4" />
                       <path d="M12 4v2M12 18v2M4 12h2M18 12h2" />
                     </svg>
                   ) : (
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.2} strokeLinecap="round">
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2.2} strokeLinecap="round">
                       <rect x="3.5" y="5" width="17" height="15" rx="4" />
                       <path d="M8 3v4M16 3v4" />
                     </svg>
                   )}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                  <span className="truncate text-[15px] font-bold tracking-[-0.01em]">
+                <span className="flex min-w-0 flex-1 flex-col gap-[4px]">
+                  <span
+                    className="truncate text-[16px] font-bold tracking-[-0.01em]"
+                    style={item.doneAt ? { textDecoration: "line-through", color: "var(--color-ink-faint)" } : undefined}
+                  >
                     {highlightQuery(item.title, query)}
                   </span>
-                  <span className="flex items-center gap-[7px] text-[12px] font-semibold text-ink-faint">
+                  <span className="flex items-center gap-[7px] text-[13px] font-semibold text-ink-faint">
+                    {skin && (
+                      <span
+                        className="flex-none"
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: shape === "square" ? 2 : shape === "diamond" ? 2 : 99,
+                          background: skin.bg,
+                          transform: shape === "diamond" ? "rotate(45deg)" : "none",
+                        }}
+                      />
+                    )}
+                    {item.doneAt && "Terminé · "}
                     {item.audioOrigin && <VoiceBadge size="small" />}
                     {item.audioOrigin ? "Dictée" : proj?.name || "Sans projet"}
                     {item.due && ` · ${formatDateShort(item.due)}`}

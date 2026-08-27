@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { parseSubscription, readSubscriptions } from "@/lib/push-store";
 import { sendPushToAll } from "@/lib/webpush";
 
@@ -14,7 +14,7 @@ import { sendPushToAll } from "@/lib/webpush";
  */
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   let body: Record<string, unknown> = {};

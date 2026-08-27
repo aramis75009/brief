@@ -1,4 +1,4 @@
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { readItems } from "@/lib/store";
 import type { Item } from "@/lib/types";
 
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  * Retourne les items correspondants avec le type de match.
  */
 export async function GET(req: Request): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const url = new URL(req.url);

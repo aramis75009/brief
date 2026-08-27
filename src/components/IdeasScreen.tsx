@@ -6,6 +6,12 @@ import { VoiceBadge } from "./VoiceBadge";
 import { CheckIcon, ChevronLeftIcon, CloseIcon, IdeaIcon } from "./icons";
 import type { Item, Project } from "@/lib/types";
 
+/** Une idée de plus de 48 h est estompée (l'âge réel, pas l'index). */
+function isStale(createdAt: string | undefined): boolean {
+  const age = createdAt ? Date.now() - new Date(createdAt).getTime() : 0;
+  return age > 48 * 3600000;
+}
+
 /**
  * IdeasScreen — boîte à idées.
  * Cartes idée avec marqueur vocal, bouton "Convertir en tâche", archiver.
@@ -71,13 +77,11 @@ export function IdeasScreen({
       ) : (
         <div className="flex flex-col gap-3">
           {ideas.map((idea) => {
-            const age = idea.createdAt ? Date.now() - new Date(idea.createdAt).getTime() : 0;
-            const isOld = age > 48 * 3600000; // > 48h
+            const isOld = isStale(idea.createdAt);
             return (
               <div
                 key={idea.id}
-                className="rounded-20 border border-ink/[.06] bg-surface p-4"
-                style={{ opacity: isOld ? 0.65 : 1 }}
+                className={`rounded-20 border border-ink/[.06] p-4 ${isOld ? "bg-idea-100/50" : "bg-idea-100"}`}
               >
                 {/* Meta */}
                 <div className="mb-2.5 flex items-center gap-2">

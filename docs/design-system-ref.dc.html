@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#CFE0FF"/><rect x="30" y="42" width="4" height="16" rx="2" fill="#101010"/><rect x="39" y="32" width="4" height="36" rx="2" fill="#101010"/><rect x="48" y="38" width="4" height="24" rx="2" fill="#101010"/><rect x="57" y="28" width="4" height="44" rx="2" fill="#101010"/><rect x="66" y="44" width="4" height="12" rx="2" fill="#101010"/></svg></template>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EFEEEA;font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#1F4FA8;text-decoration:none}a:hover{color:#101010;text-decoration:underline}
+@keyframes brf-wave{0%,100%{transform:scaleY(.28)}50%{transform:scaleY(1)}}
+@keyframes brf-idle{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(.9)}}
+@keyframes brf-collapse{0%{transform:scaleY(1);opacity:1}70%{transform:scaleY(.05);opacity:.5}100%{transform:scaleY(.04);opacity:.18}}
+@keyframes brf-pop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes brf-rail{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes brf-shimmer{0%{background-position:-220px 0}100%{background-position:calc(220px + 100%) 0}}
+@keyframes brf-ping{0%{transform:scale(1);opacity:.35}100%{transform:scale(1.9);opacity:0}}
+@keyframes brf-fade{from{opacity:0}to{opacity:1}}
+@keyframes brf-sheet{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}}
+</style>
+</helmet>
+
+<div style="padding:44px 48px 64px;color:#101010">
+
+  <div style="display:flex;align-items:flex-end;gap:28px;flex-wrap:wrap;margin-bottom:10px">
+    <div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:38px;height:38px;border-radius:12px;background:#101010;display:flex;align-items:center;justify-content:center">
+          <div style="display:flex;align-items:flex-end;gap:2.5px;height:16px">
+            <div style="width:3px;height:7px;border-radius:99px;background:#fff"></div>
+            <div style="width:3px;height:14px;border-radius:99px;background:#fff"></div>
+            <div style="width:3px;height:10px;border-radius:99px;background:#fff"></div>
+            <div style="width:3px;height:16px;border-radius:99px;background:#fff"></div>
+          </div>
+        </div>
+        <h1 style="margin:0;font-size:32px;font-weight:800;letter-spacing:-.03em">Brief — Design system v1</h1>
+      </div>
+      <p style="margin:10px 0 0;font-size:15px;font-weight:500;color:#6E6E69;max-width:640px;text-wrap:pretty">Gestion personnelle iOS · 390 × 844 · mobile-first. Prototype navigable + tokens + recettes Tailwind prêtes pour Next.js.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;padding:14px 18px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.08);max-width:420px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#9A9A93">HYPOTHÈSE — IMAGE DE RÉFÉRENCE ABSENTE</span>
+      <span style="font-size:13px;font-weight:500;line-height:1.5;color:#4A4A46;text-wrap:pretty">L'image jointe n'est pas arrivée dans le projet. Direction reconstruite depuis ta description écrite (pastels, cercles noirs, pill de saisie, radius 20–24).</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;margin-top:36px">
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;background:#101010;color:#fff">01</span>
+        <span style="font-size:14px;font-weight:700">Prototype interactif</span>
+        <span style="font-size:12px;font-weight:500;color:#9A9A93">clique les tuiles, le micro, la nav</span>
+      </div>
+
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ deviceW }}" height="{{ deviceH }}" hint-size="390px,844px">
+
+        <div style="position:relative;height:844px;display:flex;flex-direction:column;background:#F4F4F2;font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;color:#101010;overflow:hidden">
+
+          <div style="height:58px;flex:none"></div>
+
+          <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+            <div style="flex:1;min-height:0;overflow:auto;padding:0 20px 8px">
+
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:26px">
+                <button aria-label="Compte et réglages" onClick="{{ openAccount }}" style="position:relative;width:46px;height:46px;border-radius:99px;border:none;padding:0;cursor:pointer;background:#CFE0FF;font-family:inherit;display:flex;align-items:center;justify-content:center" style-hover="filter:brightness(.96)" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="font-size:16px;font-weight:800;color:#1F4FA8;letter-spacing:-.02em">LM</span>
+                  <span style="position:absolute;inset:-3px;border-radius:99px;border:2px solid rgba(16,16,16,.12)"></span>
+                </button>
+                <div style="display:flex;gap:8px">
+                <button aria-label="Aide" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;color:#101010;font-family:inherit;font-size:17px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">?</button>
+                <button aria-label="Notifications" style="position:relative;width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"></path><path d="M10.5 20a2 2 0 0 0 3 0"></path></svg>
+                  <span style="position:absolute;top:8px;right:9px;width:9px;height:9px;border-radius:99px;background:#E23A2E;border:2px solid #fff"></span>
+                </button>
+                </div>
+              </div>
+
+              <h2 style="margin:0;font-size:34px;line-height:1.08;font-weight:800;letter-spacing:-.035em">Salut Léa,</h2>
+              <h2 style="margin:2px 0 24px;font-size:34px;line-height:1.08;font-weight:800;letter-spacing:-.035em;color:#A9A9A2;text-wrap:balance">Qu'est-ce qu'on organise&nbsp;?</h2>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button onClick="{{ goTask }}" style="text-align:left;border:none;cursor:pointer;font-family:inherit;background:#CFE0FF;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:34px;min-height:132px" style-hover="filter:brightness(.97)" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="width:44px;height:44px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4FA8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l2.5 2.5L11 5"></path><path d="M4 17l2.5 2.5L11 15"></path><path d="M14 7h6M14 17h6"></path></svg>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Tâches</span>
+                    <span style="font-size:13px;font-weight:500;color:rgba(16,16,16,.5)">2 aujourd'hui</span>
+                  </span>
+                </button>
+                <button onClick="{{ goAgenda }}" style="text-align:left;border:none;cursor:pointer;font-family:inherit;background:#CBE9D6;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:34px;min-height:132px" style-hover="filter:brightness(.97)" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="width:44px;height:44px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F6B45" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="4"></rect><path d="M8 3v4M16 3v4M3.5 10.5h17"></path></svg>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Rendez-vous</span>
+                    <span style="font-size:13px;font-weight:500;color:rgba(16,16,16,.5)">2 aujourd'hui</span>
+                  </span>
+                </button>
+                <button onClick="{{ goIdeas }}" style="text-align:left;border:none;cursor:pointer;font-family:inherit;background:#FBE2AE;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:34px;min-height:132px" style-hover="filter:brightness(.97)" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="width:44px;height:44px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A5A10" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Idées</span>
+                    <span style="font-size:13px;font-weight:500;color:rgba(16,16,16,.5)">7 à trier</span>
+                  </span>
+                </button>
+                <button onClick="{{ openSheet }}" style="text-align:left;border:none;cursor:pointer;font-family:inherit;background:#101010;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:34px;min-height:132px" style-hover="background:#242422" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="width:44px;height:44px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#101010"><path d="M12 2.6l1.7 6.7 6.7 1.7-6.7 1.7L12 19.4l-1.7-6.7L3.6 11l6.7-1.7z"></path></svg>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:17px;font-weight:700;letter-spacing:-.02em;color:#fff">Demander à l'IA</span>
+                    <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.55)">Assistant</span>
+                  </span>
+                </button>
+              </div>
+
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin:28px 0 12px">
+                <span style="font-size:20px;font-weight:700;letter-spacing:-.02em">Aujourd'hui</span>
+                <span style="font-size:13px;font-weight:600;color:#9A9A93">mar. 19 août</span>
+              </div>
+
+              <sc-if value="{{ listFilled }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:14px">
+
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;color:#8A8A84">TÂCHES</span>
+                    <div style="background:#fff;border-radius:20px;padding:6px 4px;border:1px solid rgba(16,16,16,.06)">
+
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                        <button aria-label="Marquer fait" onClick="{{ t0 }}" style="flex:none;width:26px;height:26px;border-radius:99px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;border:2px solid rgba(16,16,16,.18);background:#fff" style-hover="border-color:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                          <sc-if value="{{ done0 }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if>
+                        </button>
+                        <button onClick="{{ goTask }}" style="flex:1;min-width:0;text-align:left;border:none;background:none;cursor:pointer;font-family:inherit;padding:0;display:flex;flex-direction:column;gap:3px" style-focus="outline:2px solid #101010;outline-offset:3px">
+                          <span style="font-size:15px;font-weight:600;letter-spacing:-.01em">Relancer le devis Duval</span>
+                          <span style="display:flex;align-items:center;gap:6px">
+                            <span style="flex:none;width:6px;height:6px;border-radius:99px;background:#1F4FA8"></span>
+                            <span style="font-size:13px;font-weight:500;color:#8A8A84">Clients</span>
+                            <span style="display:flex;align-items:flex-end;gap:1.5px;height:10px" title="Créée à la voix">
+                              <span style="width:2px;height:4px;border-radius:99px;background:rgba(16,16,16,.25)"></span>
+                              <span style="width:2px;height:9px;border-radius:99px;background:rgba(16,16,16,.25)"></span>
+                              <span style="width:2px;height:6px;border-radius:99px;background:rgba(16,16,16,.25)"></span>
+                            </span>
+                          </span>
+                        </button>
+                        <span style="flex:none;font-size:13px;font-weight:700;color:#101010;font-variant-numeric:tabular-nums">14:30</span>
+                      </div>
+
+                      <div style="height:1px;background:rgba(16,16,16,.06);margin:0 14px"></div>
+
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                        <button aria-label="Marquer fait" onClick="{{ t1 }}" style="flex:none;width:26px;height:26px;border-radius:99px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;border:2px solid rgba(16,16,16,.18);background:#fff" style-hover="border-color:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                          <sc-if value="{{ done1 }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if>
+                        </button>
+                        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                          <span style="font-size:15px;font-weight:600;letter-spacing:-.01em">Pharmacie — ordonnance</span>
+                          <span style="display:flex;align-items:center;gap:6px">
+                            <span style="flex:none;width:6px;height:6px;border-radius:1px;background:#8A5A10"></span>
+                            <span style="font-size:13px;font-weight:500;color:#8A8A84">Perso</span>
+                          </span>
+                        </span>
+                        <span style="flex:none;font-size:13px;font-weight:700;color:#9A9A93;font-variant-numeric:tabular-nums">18:00</span>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;color:#8A8A84">RENDEZ-VOUS</span>
+                    <div style="background:#fff;border-radius:20px;padding:6px 4px;border:1px solid rgba(16,16,16,.06)">
+
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                        <span style="flex:none;width:26px;height:26px;box-sizing:border-box;border-radius:99px;border:2px solid rgba(16,16,16,.18);background:#fff;display:flex;align-items:center;justify-content:center">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1F6B45" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5V12l3 2"></path></svg>
+                        </span>
+                        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                          <span style="font-size:15px;font-weight:600;letter-spacing:-.01em">Point hebdo équipe</span>
+                          <span style="display:flex;align-items:center;gap:6px">
+                            <span style="flex:none;width:6px;height:6px;border-radius:99px;background:#1F6B45"></span>
+                            <span style="font-size:13px;font-weight:500;color:#8A8A84">Équipe</span>
+                          </span>
+                        </span>
+                        <span style="flex:none;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums">16:00</span>
+                      </div>
+
+                      <div style="height:1px;background:rgba(16,16,16,.06);margin:0 14px"></div>
+
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                        <span style="flex:none;width:26px;height:26px;box-sizing:border-box;border-radius:99px;border:2px dashed rgba(16,16,16,.18)" title="Événement du calendrier, pas encore adopté"></span>
+                        <span style="flex:1;min-width:0;font-size:15px;font-weight:600;letter-spacing:-.01em">Dentiste</span>
+                        <span style="flex:none;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums">journée</span>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listEmpty }}">
+                <div style="background:#fff;border-radius:20px;border:1px solid rgba(16,16,16,.06);padding:30px 22px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;animation:brf-fade .3s both">
+                  <span style="width:52px;height:52px;border-radius:99px;border:2px dashed rgba(16,16,16,.18);display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.2" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+                  </span>
+                  <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Journée libre</span>
+                  <span style="font-size:13px;font-weight:500;color:#8A8A84;max-width:210px;line-height:1.45">Dicte ce que tu as en tête, Brief le transforme en tâches datées.</span>
+                  <button onClick="{{ startListen }}" style="margin-top:4px;border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:14px;font-weight:700;padding:11px 20px;border-radius:99px;min-height:44px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">Capturer une idée</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listLoading }}">
+                <div style="background:#fff;border-radius:20px;border:1px solid rgba(16,16,16,.06);padding:8px 4px;animation:brf-fade .3s both">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                    <span style="width:26px;height:26px;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span>
+                    <span style="flex:1;display:flex;flex-direction:column;gap:7px">
+                      <span style="height:11px;width:72%;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span>
+                      <span style="height:9px;width:38%;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span>
+                    </span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                    <span style="width:26px;height:26px;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.2s"></span>
+                    <span style="flex:1;display:flex;flex-direction:column;gap:7px">
+                      <span style="height:11px;width:54%;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.2s"></span>
+                      <span style="height:9px;width:30%;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.2s"></span>
+                    </span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                    <span style="width:26px;height:26px;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.4s"></span>
+                    <span style="flex:1;display:flex;flex-direction:column;gap:7px">
+                      <span style="height:11px;width:64%;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.4s"></span>
+                      <span style="height:9px;width:34%;border-radius:99px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.4s"></span>
+                    </span>
+                  </div>
+                </div>
+              </sc-if>
+
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTask }}">
+            <div style="flex:1;min-height:0;overflow:auto;padding:0 20px 8px;animation:brf-fade .25s both">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
+                <button aria-label="Retour" onClick="{{ goHome }}" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5L8 12l6.5 7"></path></svg>
+                </button>
+                <button aria-label="Plus d'options" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="width:4px;height:4px;border-radius:99px;background:#101010"></span>
+                  <span style="width:4px;height:4px;border-radius:99px;background:#101010"></span>
+                  <span style="width:4px;height:4px;border-radius:99px;background:#101010"></span>
+                </button>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-bottom:12px">
+                <span style="display:inline-flex;align-items:center;gap:6px;background:#CFE0FF;color:#1F4FA8;font-size:12px;font-weight:700;padding:7px 12px;border-radius:99px">Travail</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid rgba(16,16,16,.08);color:#101010;font-size:12px;font-weight:700;padding:7px 12px;border-radius:99px">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5V12l3 2"></path></svg>Aujourd'hui 14:30
+                </span>
+              </div>
+
+              <h2 style="margin:0 0 16px;font-size:28px;line-height:1.14;font-weight:800;letter-spacing:-.03em;text-wrap:pretty">Relancer le devis Duval</h2>
+
+              <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:16px;margin-bottom:14px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">FIL D'ORIGINE · 19 AOÛT · 12 S</span>
+                  <button aria-label="Écouter l'extrait" style="flex:none;width:32px;height:32px;border-radius:99px;border:none;background:#101010;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M8 5l11 7-11 7z"></path></svg>
+                  </button>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:2.5px;height:34px;margin-bottom:7px">
+                  <span style="width:3px;height:9px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:16px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:12px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:22px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:8px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:14px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:18px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:30px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:24px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:34px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:20px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:28px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:15px;border-radius:99px;background:#101010"></span>
+                  <span style="width:3px;height:11px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:19px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:26px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:13px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:8px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:21px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:15px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:10px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:17px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:9px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:23px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:12px;border-radius:99px;background:#DCDBD5"></span>
+                  <span style="width:3px;height:7px;border-radius:99px;background:#DCDBD5"></span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                  <span style="width:33px"></span>
+                  <span style="width:37px;height:2px;background:#101010;border-radius:99px"></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#101010">0:03 → 0:07</span>
+                </div>
+                <p style="margin:0 0 12px;font-size:13px;font-weight:600;line-height:1.5;color:#8A8A84;text-wrap:pretty">« …<span style="color:#101010;background:#FBE2AE;border-radius:5px;padding:1px 4px">faut que je relance Duval demain à 14 h 30, vérifier la remise</span>, et penser au cadeau de Camille… »</p>
+                <button onClick="{{ goIdeas }}" style="width:100%;border:none;border-top:1px solid rgba(16,16,16,.07);background:none;cursor:pointer;font-family:inherit;text-align:left;padding:12px 0 0;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="font-size:12.5px;font-weight:700;color:#101010">2 autres items de cette dictée</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5L16 12l-6.5 7"></path></svg>
+                </button>
+              </div>
+
+              <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:16px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+                  <span style="font-size:15px;font-weight:700">Sous-tâches</span>
+                  <span style="font-size:12px;font-weight:700;color:#9A9A93">{{ subCount }}/3</span>
+                </div>
+                <div style="height:5px;border-radius:99px;background:rgba(16,16,16,.07);overflow:hidden;margin-bottom:14px">
+                  <div style="height:100%;border-radius:99px;background:#101010;width:{{ subPct }}%;transition:width .35s cubic-bezier(.2,.9,.3,1)"></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:9px 0">
+                    <button aria-label="Cocher" onClick="{{ s0 }}" style="flex:none;width:24px;height:24px;border-radius:99px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;border:2px solid rgba(16,16,16,.18);background:#fff" style-hover="border-color:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                      <sc-if value="{{ sub0 }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="3.4" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if>
+                    </button>
+                    <sc-if value="{{ sub0 }}"><span style="font-size:14.5px;font-weight:600;color:#A9A9A2;text-decoration:line-through">Retrouver le PDF v2</span></sc-if>
+                    <sc-if value="{{ nsub0 }}" hint-placeholder-val="{{ true }}"><span style="font-size:14.5px;font-weight:600">Retrouver le PDF v2</span></sc-if>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:9px 0">
+                    <button aria-label="Cocher" onClick="{{ s1 }}" style="flex:none;width:24px;height:24px;border-radius:99px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;border:2px solid rgba(16,16,16,.18);background:#fff" style-hover="border-color:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                      <sc-if value="{{ sub1 }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="3.4" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if>
+                    </button>
+                    <sc-if value="{{ sub1 }}"><span style="font-size:14.5px;font-weight:600;color:#A9A9A2;text-decoration:line-through">Vérifier la remise 12 %</span></sc-if>
+                    <sc-if value="{{ nsub1 }}" hint-placeholder-val="{{ true }}"><span style="font-size:14.5px;font-weight:600">Vérifier la remise 12 %</span></sc-if>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:9px 0">
+                    <button aria-label="Cocher" onClick="{{ s2 }}" style="flex:none;width:24px;height:24px;border-radius:99px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;border:2px solid rgba(16,16,16,.18);background:#fff" style-hover="border-color:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                      <sc-if value="{{ sub2 }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="3.4" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if>
+                    </button>
+                    <sc-if value="{{ sub2 }}"><span style="font-size:14.5px;font-weight:600;color:#A9A9A2;text-decoration:line-through">Envoyer le mail de relance</span></sc-if>
+                    <sc-if value="{{ nsub2 }}" hint-placeholder-val="{{ true }}"><span style="font-size:14.5px;font-weight:600">Envoyer le mail de relance</span></sc-if>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+                <button onClick="{{ goHome }}" style="border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:15.5px;font-weight:700;padding:0 20px;height:52px;border-radius:99px;display:flex;align-items:center;justify-content:center;gap:9px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>Terminer
+                </button>
+                <div style="display:flex;gap:10px">
+                  <button style="flex:1;border:1px solid rgba(16,16,16,.12);cursor:pointer;font-family:inherit;background:#fff;color:#101010;font-size:14.5px;font-weight:700;height:48px;border-radius:99px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Reporter</button>
+                  <button style="flex:1;border:1px solid rgba(226,58,46,.25);cursor:pointer;font-family:inherit;background:#fff;color:#E23A2E;font-size:14.5px;font-weight:700;height:48px;border-radius:99px" style-hover="background:#FDF1F0" style-focus="outline:2px solid #E23A2E;outline-offset:2px">Supprimer</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isAgenda }}">
+            <div style="flex:1;min-height:0;overflow:auto;padding:0 20px 8px;animation:brf-fade .25s both">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+                <button aria-label="Retour" onClick="{{ goHome }}" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5L8 12l6.5 7"></path></svg>
+                </button>
+                <span style="display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <span style="font-size:15px;font-weight:700">Août 2026</span>
+                  <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:#1F6B45"><span style="width:5px;height:5px;border-radius:99px;background:#1F6B45"></span>Calendrier Apple</span>
+                </span>
+                <button aria-label="Semaine suivante" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5L16 12l-6.5 7"></path></svg>
+                </button>
+              </div>
+
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:22px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#A9A9A2">L</span><span style="width:38px;height:44px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">18</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#101010">M</span><span style="width:38px;height:44px;border-radius:16px;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">19</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#A9A9A2">M</span><span style="width:38px;height:44px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">20</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#A9A9A2">J</span><span style="width:38px;height:44px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">21</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#A9A9A2">V</span><span style="width:38px;height:44px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">22</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#A9A9A2">S</span><span style="width:38px;height:44px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#C4C4BD">23</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><span style="font-size:11px;font-weight:700;color:#A9A9A2">D</span><span style="width:38px;height:44px;border-radius:16px;background:#fff;border:1px solid rgba(16,16,16,.06);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#C4C4BD">24</span></div>
+              </div>
+
+              <sc-if value="{{ listFilled }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#A9A9A2;margin-bottom:6px">MATIN</span>
+                  <div style="display:flex;gap:12px">
+                    <div style="flex:none;width:46px;padding-top:14px;font-size:13px;font-weight:700;color:#9A9A93">09:00</div>
+                    <div style="flex:1;background:#fff;border:1px solid rgba(16,16,16,.06);border-left:4px solid #1F6B45;border-radius:20px;padding:14px 16px">
+                      <div style="font-size:15px;font-weight:700;letter-spacing:-.01em">Café avec Marc</div>
+                      <div style="font-size:12.5px;font-weight:600;color:#9A9A93;margin-top:3px">Le Comptoir · 30 min</div>
+                    </div>
+                  </div>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#A9A9A2;margin:16px 0 6px">APRÈS-MIDI</span>
+                  <div style="display:flex;gap:12px;margin-bottom:4px">
+                    <div style="flex:none;width:46px;padding-top:14px;font-size:13px;font-weight:700;color:#9A9A93">14:30</div>
+                    <div style="flex:1;background:#fff;border:1px solid rgba(16,16,16,.06);border-left:4px solid #1F4FA8;border-radius:20px;padding:14px 16px">
+                      <div style="font-size:15px;font-weight:700;letter-spacing:-.01em">Relance devis Duval</div>
+                      <div style="font-size:12.5px;font-weight:600;color:#9A9A93;margin-top:3px">Tâche · 3 sous-tâches</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:12px">
+                    <div style="flex:none;width:46px;padding-top:14px;font-size:13px;font-weight:700;color:#9A9A93">16:00</div>
+                    <div style="flex:1;background:#fff;border:1px solid rgba(16,16,16,.06);border-left:4px solid #1F6B45;border-radius:20px;padding:14px 16px">
+                      <div style="font-size:15px;font-weight:700;letter-spacing:-.01em">Point hebdo équipe</div>
+                      <div style="font-size:12.5px;font-weight:600;color:#9A9A93;margin-top:3px">Visio · 45 min</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listEmpty }}">
+                <div style="background:#fff;border-radius:20px;border:1px solid rgba(16,16,16,.06);padding:34px 22px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;animation:brf-fade .3s both">
+                  <span style="width:52px;height:52px;border-radius:99px;border:2px dashed rgba(16,16,16,.18);display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="4"></rect><path d="M8 3v4M16 3v4"></path></svg>
+                  </span>
+                  <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Aucun rendez-vous</span>
+                  <span style="font-size:13px;font-weight:500;color:#8A8A84;max-width:200px;line-height:1.45">Mercredi 20 est entièrement libre.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listLoading }}">
+                <div style="display:flex;flex-direction:column;gap:12px;animation:brf-fade .3s both">
+                  <div style="display:flex;gap:12px"><span style="width:46px;height:12px;border-radius:99px;margin-top:16px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span><span style="flex:1;height:72px;border-radius:20px;background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;border:1px solid rgba(16,16,16,.05)"></span></div>
+                  <div style="display:flex;gap:12px"><span style="width:46px;height:12px;border-radius:99px;margin-top:16px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.25s"></span><span style="flex:1;height:72px;border-radius:20px;background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.25s;border:1px solid rgba(16,16,16,.05)"></span></div>
+                  <div style="display:flex;gap:12px"><span style="width:46px;height:12px;border-radius:99px;margin-top:16px;background:linear-gradient(90deg,#EFEEEA 8%,#E2E1DC 18%,#EFEEEA 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.5s"></span><span style="flex:1;height:72px;border-radius:20px;background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.5s;border:1px solid rgba(16,16,16,.05)"></span></div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isIdeas }}">
+            <div style="flex:1;min-height:0;overflow:auto;padding:0 20px 8px;animation:brf-fade .25s both">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                <button aria-label="Retour" onClick="{{ goHome }}" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5L8 12l6.5 7"></path></svg>
+                </button>
+                <span style="background:#FBE2AE;color:#8A5A10;font-size:12px;font-weight:700;padding:8px 14px;border-radius:99px">7 à trier</span>
+              </div>
+
+              <h2 style="margin:0 0 4px;font-size:30px;font-weight:800;letter-spacing:-.035em">Idées</h2>
+              <p style="margin:0 0 20px;font-size:13.5px;font-weight:500;color:#8A8A84;line-height:1.45">Tout ce que tu as capturé sans le ranger. Convertis en tâche d'un geste.</p>
+
+              <sc-if value="{{ listFilled }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:16px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                      <span style="width:7px;height:7px;border-radius:99px;background:#8A5A10"></span>
+                      <span style="font-size:11.5px;font-weight:700;color:#9A9A93">Vocal 8 s · il y a 2 h</span>
+                    </div>
+                    <p style="margin:0 0 14px;font-size:15px;font-weight:600;line-height:1.42;letter-spacing:-.01em;text-wrap:pretty">Tester un créneau de travail profond le matin, sans notifications avant 11 h.</p>
+                    <div style="display:flex;gap:8px">
+                      <button onClick="{{ goTask }}" style="border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:13px;font-weight:700;height:44px;padding:0 16px;border-radius:99px;display:flex;align-items:center;gap:7px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>Convertir en tâche
+                      </button>
+                      <button aria-label="Archiver" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.1);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8A84" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:16px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                      <span style="width:7px;height:7px;border-radius:99px;background:#8A5A10"></span>
+                      <span style="font-size:11.5px;font-weight:700;color:#9A9A93">Texte · hier</span>
+                    </div>
+                    <p style="margin:0 0 14px;font-size:15px;font-weight:600;line-height:1.42;letter-spacing:-.01em;text-wrap:pretty">Cadeau anniversaire Camille — regarder l'atelier céramique du 11e.</p>
+                    <div style="display:flex;gap:8px">
+                      <button onClick="{{ goTask }}" style="border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:13px;font-weight:700;height:44px;padding:0 16px;border-radius:99px;display:flex;align-items:center;gap:7px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>Convertir en tâche
+                      </button>
+                      <button aria-label="Archiver" style="width:44px;height:44px;border-radius:99px;border:1px solid rgba(16,16,16,.1);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8A84" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:16px;opacity:.55">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                      <span style="width:7px;height:7px;border-radius:99px;background:#C4C4BD"></span>
+                      <span style="font-size:11.5px;font-weight:700;color:#9A9A93">Vocal 21 s · lundi</span>
+                    </div>
+                    <p style="margin:0;font-size:15px;font-weight:600;line-height:1.42;letter-spacing:-.01em">Idée d'atelier interne sur la relecture de contrats…</p>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listEmpty }}">
+                <div style="background:#fff;border-radius:20px;border:1px solid rgba(16,16,16,.06);padding:34px 22px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;animation:brf-fade .3s both">
+                  <span style="width:52px;height:52px;border-radius:99px;border:2px dashed rgba(16,16,16,.18);display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2"></path></svg>
+                  </span>
+                  <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Boîte à idées vide</span>
+                  <span style="font-size:13px;font-weight:500;color:#8A8A84;max-width:210px;line-height:1.45">Une pensée en passant ? Appuie sur le micro, on la range plus tard.</span>
+                  <button onClick="{{ startListen }}" style="margin-top:4px;border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:14px;font-weight:700;padding:11px 20px;border-radius:99px;min-height:44px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">Dicter une idée</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listLoading }}">
+                <div style="display:flex;flex-direction:column;gap:12px;animation:brf-fade .3s both">
+                  <span style="height:112px;border-radius:20px;border:1px solid rgba(16,16,16,.05);background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span>
+                  <span style="height:112px;border-radius:20px;border:1px solid rgba(16,16,16,.05);background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.3s"></span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSearch }}">
+            <div style="flex:1;min-height:0;overflow:auto;padding:0 20px 8px;animation:brf-fade .25s both">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+                <span style="font-size:22px;font-weight:800;letter-spacing:-.03em">Rechercher</span>
+                <button aria-label="Compte et réglages" onClick="{{ openAccount }}" style="position:relative;width:46px;height:46px;border-radius:99px;border:none;padding:0;cursor:pointer;background:#CFE0FF;font-family:inherit;display:flex;align-items:center;justify-content:center" style-hover="filter:brightness(.96)" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="font-size:16px;font-weight:800;color:#1F4FA8;letter-spacing:-.02em">LM</span>
+                  <span style="position:absolute;inset:-3px;border-radius:99px;border:2px solid rgba(16,16,16,.12)"></span>
+                </button>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:99px;height:52px;padding:0 6px 0 16px;margin-bottom:16px">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9A9A93" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path></svg>
+                <input value="duval" placeholder="Chercher une tâche, un RDV, une idée…" style="flex:1;min-width:0;border:none;background:none;outline:none;font-family:inherit;font-size:14.5px;font-weight:600;color:#101010" style-focus="outline:2px solid #101010;outline-offset:6px">
+                <button aria-label="Dicter la recherche" onClick="{{ startListen }}" style="flex:none;width:40px;height:40px;border-radius:99px;border:none;background:#101010;cursor:pointer;display:flex;align-items:center;justify-content:center" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"></path></svg>
+                </button>
+              </div>
+
+              <div style="display:flex;gap:7px;margin-bottom:20px;overflow:auto">
+                <button style="flex:none;border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:12.5px;font-weight:700;height:36px;padding:0 14px;border-radius:99px" style-focus="outline:2px solid #101010;outline-offset:2px">Tout</button>
+                <button style="flex:none;border:1px solid rgba(16,16,16,.1);cursor:pointer;font-family:inherit;background:#fff;color:#101010;font-size:12.5px;font-weight:700;height:36px;padding:0 14px;border-radius:99px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Tâches</button>
+                <button style="flex:none;border:1px solid rgba(16,16,16,.1);cursor:pointer;font-family:inherit;background:#fff;color:#101010;font-size:12.5px;font-weight:700;height:36px;padding:0 14px;border-radius:99px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Idées</button>
+                <button style="flex:none;border:1px solid rgba(16,16,16,.1);cursor:pointer;font-family:inherit;background:#fff;color:#101010;font-size:12.5px;font-weight:700;height:36px;padding:0 12px;border-radius:99px;display:flex;align-items:center;gap:7px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                  <span style="display:flex;align-items:flex-end;gap:1.5px;height:11px">
+                    <span style="width:2px;height:5px;border-radius:99px;background:#101010"></span>
+                    <span style="width:2px;height:10px;border-radius:99px;background:#101010"></span>
+                    <span style="width:2px;height:7px;border-radius:99px;background:#101010"></span>
+                  </span>Dicté
+                </button>
+              </div>
+
+              <sc-if value="{{ listFilled }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:#A9A9A2">3 RÉSULTATS · « DUVAL »</span>
+                  <button onClick="{{ goTask }}" style="text-align:left;font-family:inherit;cursor:pointer;background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:14px 16px;display:flex;align-items:center;gap:12px" style-hover="border-color:rgba(16,16,16,.2)" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <span style="flex:none;width:28px;height:28px;border-radius:99px;background:#CFE0FF;display:flex;align-items:center;justify-content:center">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1F4FA8" stroke-width="2.6" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+                    </span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-size:15px;font-weight:700;letter-spacing:-.01em">Relancer le devis <span style="background:#FBE2AE;border-radius:4px;padding:0 3px">Duval</span></span>
+                      <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#9A9A93">
+                        <span style="display:flex;align-items:flex-end;gap:1.5px;height:10px">
+                          <span style="width:2px;height:4px;border-radius:99px;background:#C4C4BD"></span>
+                          <span style="width:2px;height:9px;border-radius:99px;background:#C4C4BD"></span>
+                          <span style="width:2px;height:6px;border-radius:99px;background:#C4C4BD"></span>
+                        </span>Dictée du 19 août · aujourd'hui 14:30
+                      </span>
+                    </span>
+                  </button>
+                  <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+                    <span style="flex:none;width:28px;height:28px;border-radius:99px;background:#CBE9D6;display:flex;align-items:center;justify-content:center">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1F6B45" stroke-width="2.2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="4"></rect><path d="M8 3v4M16 3v4"></path></svg>
+                    </span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-size:15px;font-weight:700;letter-spacing:-.01em">Signature contrat <span style="background:#FBE2AE;border-radius:4px;padding:0 3px">Duval</span></span>
+                      <span style="font-size:12px;font-weight:600;color:#9A9A93">Calendrier Apple · ven. 22 août 11:00</span>
+                    </span>
+                  </div>
+                  <div style="background:#fff;border:1px solid rgba(16,16,16,.06);border-radius:20px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+                    <span style="flex:none;width:28px;height:28px;border-radius:99px;background:#FBE2AE;display:flex;align-items:center;justify-content:center">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A5A10" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 4v2M12 18v2M4 12h2M18 12h2"></path></svg>
+                    </span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-size:15px;font-weight:700;letter-spacing:-.01em">Proposer un forfait à <span style="background:#FBE2AE;border-radius:4px;padding:0 3px">Duval</span></span>
+                      <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#9A9A93">
+                        <span style="display:flex;align-items:flex-end;gap:1.5px;height:10px">
+                          <span style="width:2px;height:4px;border-radius:99px;background:#C4C4BD"></span>
+                          <span style="width:2px;height:9px;border-radius:99px;background:#C4C4BD"></span>
+                          <span style="width:2px;height:6px;border-radius:99px;background:#C4C4BD"></span>
+                        </span>Dictée du 12 août · idée
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listEmpty }}">
+                <div style="background:#fff;border-radius:20px;border:1px solid rgba(16,16,16,.06);padding:34px 22px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;animation:brf-fade .3s both">
+                  <span style="width:52px;height:52px;border-radius:99px;border:2px dashed rgba(16,16,16,.18);display:flex;align-items:center;justify-content:center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path></svg>
+                  </span>
+                  <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">Rien trouvé</span>
+                  <span style="font-size:13px;font-weight:500;color:#8A8A84;max-width:210px;line-height:1.45">Essaie un mot de la dictée d'origine : Brief cherche aussi dans les transcriptions.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ listLoading }}">
+                <div style="display:flex;flex-direction:column;gap:10px;animation:brf-fade .3s both">
+                  <span style="height:66px;border-radius:20px;border:1px solid rgba(16,16,16,.05);background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span>
+                  <span style="height:66px;border-radius:20px;border:1px solid rgba(16,16,16,.05);background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.25s"></span>
+                  <span style="height:66px;border-radius:20px;border:1px solid rgba(16,16,16,.05);background:linear-gradient(90deg,#fff 8%,#F1F0EC 18%,#fff 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.5s"></span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <div style="flex:none;padding:10px 20px 0">
+            <button onClick="{{ startListen }}" style="width:100%;border:1px solid rgba(16,16,16,.07);cursor:pointer;font-family:inherit;background:#fff;border-radius:99px;height:56px;padding:0 6px 0 18px;display:flex;align-items:center;gap:12px;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="border-color:rgba(16,16,16,.18)" style-focus="outline:2px solid #101010;outline-offset:2px">
+              <span style="display:flex;align-items:flex-end;gap:2.5px;height:18px;flex:none">
+                <span style="width:3px;height:6px;border-radius:99px;background:#101010;animation:brf-idle 1.6s ease-in-out infinite"></span>
+                <span style="width:3px;height:14px;border-radius:99px;background:#101010;animation:brf-idle 1.6s ease-in-out infinite;animation-delay:-.2s"></span>
+                <span style="width:3px;height:10px;border-radius:99px;background:#101010;animation:brf-idle 1.6s ease-in-out infinite;animation-delay:-.4s"></span>
+                <span style="width:3px;height:17px;border-radius:99px;background:#101010;animation:brf-idle 1.6s ease-in-out infinite;animation-delay:-.6s"></span>
+                <span style="width:3px;height:8px;border-radius:99px;background:#101010;animation:brf-idle 1.6s ease-in-out infinite;animation-delay:-.8s"></span>
+              </span>
+              <span style="flex:1;text-align:left;font-size:14.5px;font-weight:600;color:#9A9A93">Dis-moi ce que tu as en tête…</span>
+              <span style="flex:none;width:44px;height:44px;border-radius:99px;background:#101010;display:flex;align-items:center;justify-content:center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"></path></svg>
+              </span>
+            </button>
+          </div>
+
+          <div style="flex:none;display:flex;justify-content:center;align-items:flex-end;padding:14px 20px 30px">
+            <div style="position:relative;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid rgba(16,16,16,.07);border-radius:99px;padding:7px;box-shadow:0 10px 28px rgba(16,16,16,.1)">
+              <button aria-label="Accueil" onClick="{{ goHome }}" style="width:52px;height:48px;border-radius:99px;border:none;cursor:pointer;background:#F4F4F2;display:flex;align-items:center;justify-content:center" style-hover="background:#E9E8E3" style-focus="outline:2px solid #101010;outline-offset:2px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5V20h-5v-5.5H9V20H4z"></path></svg>
+              </button>
+              <button aria-label="Rechercher" onClick="{{ goSearch }}" style="width:52px;height:48px;border-radius:99px;border:none;cursor:pointer;background:none;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path></svg>
+              </button>
+              <button aria-label="Ajouter" onClick="{{ openSheet }}" style="position:relative;width:60px;height:60px;margin:-14px 2px 0;border-radius:99px;border:none;cursor:pointer;background:#101010;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(16,16,16,.28)" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:3px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+              </button>
+              <button aria-label="Idées" onClick="{{ goIdeas }}" style="width:52px;height:48px;border-radius:99px;border:none;cursor:pointer;background:none;display:flex;align-items:center;justify-content:center" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <sc-if value="{{ accountOpen }}">
+            <div style="position:absolute;inset:0;z-index:90;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(16,16,16,.34);animation:brf-fade .22s both">
+              <div style="background:#fff;border-radius:30px 30px 0 0;padding:12px 20px 34px;animation:brf-sheet .3s cubic-bezier(.2,.9,.3,1) both">
+                <div style="display:flex;justify-content:center;margin-bottom:16px"><span style="width:42px;height:5px;border-radius:99px;background:rgba(16,16,16,.14)"></span></div>
+
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+                  <span style="flex:none;width:56px;height:56px;border-radius:99px;background:#CFE0FF;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;color:#1F4FA8;letter-spacing:-.02em">LM</span>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                    <span style="font-size:19px;font-weight:800;letter-spacing:-.025em">Léa Martin</span>
+                    <span style="font-size:13px;font-weight:600;color:#8A8A84">lea@exemple.fr · Brief Plus</span>
+                  </span>
+                  <button aria-label="Fermer" onClick="{{ closeAccount }}" style="flex:none;width:44px;height:44px;border-radius:99px;border:none;background:#F4F4F2;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#E9E8E3" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                  </button>
+                </div>
+
+                <div style="background:#F4F4F2;border-radius:20px;padding:4px;margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                    <span style="flex:none;width:32px;height:32px;border-radius:10px;background:#CBE9D6;display:flex;align-items:center;justify-content:center">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1F6B45" stroke-width="2.2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="4"></rect><path d="M8 3v4M16 3v4"></path></svg>
+                    </span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <span style="font-size:14.5px;font-weight:700">Calendrier Apple</span>
+                      <span style="font-size:12px;font-weight:600;color:#8A8A84">Synchronisé il y a 4 min</span>
+                    </span>
+                    <span style="flex:none;width:48px;height:29px;border-radius:99px;background:#101010;display:flex;align-items:center;justify-content:flex-end;padding:3px"><span style="width:23px;height:23px;border-radius:99px;background:#fff"></span></span>
+                  </div>
+                  <div style="height:1px;background:rgba(16,16,16,.06);margin:0 14px"></div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                    <span style="flex:none;width:32px;height:32px;border-radius:10px;background:#101010;display:flex;align-items:center;justify-content:center">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"></path></svg>
+                    </span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <span style="font-size:14.5px;font-weight:700">Structuration auto</span>
+                      <span style="font-size:12px;font-weight:600;color:#8A8A84">Découper la dictée sans confirmation</span>
+                    </span>
+                    <span style="flex:none;width:48px;height:29px;border-radius:99px;background:rgba(16,16,16,.14);display:flex;align-items:center;padding:3px"><span style="width:23px;height:23px;border-radius:99px;background:#fff"></span></span>
+                  </div>
+                  <div style="height:1px;background:rgba(16,16,16,.06);margin:0 14px"></div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                    <span style="flex:none;width:32px;height:32px;border-radius:10px;background:#FBE2AE;display:flex;align-items:center;justify-content:center">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A5A10" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"></path><path d="M10.5 20a2 2 0 0 0 3 0"></path></svg>
+                    </span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <span style="font-size:14.5px;font-weight:700">Rappels du matin</span>
+                      <span style="font-size:12px;font-weight:600;color:#8A8A84">Tous les jours à 8:00</span>
+                    </span>
+                    <span style="flex:none;width:48px;height:29px;border-radius:99px;background:#101010;display:flex;align-items:center;justify-content:flex-end;padding:3px"><span style="width:23px;height:23px;border-radius:99px;background:#fff"></span></span>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:16px">
+                  <button style="border:none;background:none;cursor:pointer;font-family:inherit;text-align:left;padding:13px 14px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <span style="font-size:14.5px;font-weight:700">Voix, langue &amp; transcription</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5L16 12l-6.5 7"></path></svg>
+                  </button>
+                  <button style="border:none;background:none;cursor:pointer;font-family:inherit;text-align:left;padding:13px 14px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <span style="font-size:14.5px;font-weight:700">Confidentialité des notes vocales</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5L16 12l-6.5 7"></path></svg>
+                  </button>
+                  <button style="border:none;background:none;cursor:pointer;font-family:inherit;text-align:left;padding:13px 14px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <span style="font-size:14.5px;font-weight:700">Abonnement</span>
+                    <span style="display:flex;align-items:center;gap:8px"><span style="font-size:12.5px;font-weight:700;color:#8A8A84">Plus</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A9A9A2" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5L16 12l-6.5 7"></path></svg></span>
+                  </button>
+                </div>
+
+                <button onClick="{{ closeAccount }}" style="width:100%;border:1px solid rgba(16,16,16,.12);cursor:pointer;font-family:inherit;background:#fff;color:#101010;font-size:15px;font-weight:700;height:52px;border-radius:99px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Fermer</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ sheetOpen }}">
+            <div style="position:absolute;inset:0;z-index:80;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(16,16,16,.34);animation:brf-fade .22s both">
+              <div style="background:#fff;border-radius:30px 30px 0 0;padding:12px 20px 34px;animation:brf-sheet .3s cubic-bezier(.2,.9,.3,1) both">
+                <div style="display:flex;justify-content:center;margin-bottom:14px"><span style="width:42px;height:5px;border-radius:99px;background:rgba(16,16,16,.14)"></span></div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+                  <span style="font-size:20px;font-weight:800;letter-spacing:-.025em">Capturer</span>
+                  <button aria-label="Fermer" onClick="{{ closeSheet }}" style="width:44px;height:44px;border-radius:99px;border:none;background:#F4F4F2;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#E9E8E3" style-focus="outline:2px solid #101010;outline-offset:2px">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                  </button>
+                </div>
+
+                <sc-if value="{{ stageIdle }}">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:18px 0 6px">
+                    <button aria-label="Démarrer la dictée" onClick="{{ startListen }}" style="position:relative;width:104px;height:104px;border-radius:99px;border:none;cursor:pointer;background:#101010;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(16,16,16,.26)" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:4px">
+                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"></path></svg>
+                    </button>
+                    <span style="font-size:16px;font-weight:700">Appuie pour parler</span>
+                    <span style="font-size:13px;font-weight:500;color:#8A8A84;text-align:center;max-width:250px;line-height:1.45">Brief écoute, transcrit, puis découpe en tâches, RDV ou idées.</span>
+                    <div style="width:100%;display:flex;align-items:center;gap:10px;margin-top:6px">
+                      <span style="flex:1;height:1px;background:rgba(16,16,16,.08)"></span>
+                      <span style="font-size:11px;font-weight:700;color:#A9A9A2">OU</span>
+                      <span style="flex:1;height:1px;background:rgba(16,16,16,.08)"></span>
+                    </div>
+                    <div style="width:100%;display:flex;align-items:center;gap:10px;background:#F4F4F2;border-radius:99px;height:52px;padding:0 6px 0 18px">
+                      <input placeholder="Écrire à la place…" style="flex:1;min-width:0;border:none;background:none;outline:none;font-family:inherit;font-size:14.5px;font-weight:600;color:#101010" style-focus="outline:2px solid #101010;outline-offset:6px">
+                      <button aria-label="Valider" style="width:40px;height:40px;border-radius:99px;border:none;background:#101010;cursor:pointer;display:flex;align-items:center;justify-content:center" style-focus="outline:2px solid #101010;outline-offset:2px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ stageListen }}">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:10px 0 6px;animation:brf-fade .2s both">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <span style="position:relative;width:9px;height:9px;display:flex;align-items:center;justify-content:center">
+                        <span style="position:absolute;inset:0;border-radius:99px;background:#E23A2E;animation:brf-ping 1.4s ease-out infinite"></span>
+                        <span style="position:absolute;inset:0;border-radius:99px;background:#E23A2E"></span>
+                      </span>
+                      <span style="font-size:14px;font-weight:700">J'écoute…</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;color:#9A9A93">{{ timer }}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:4px;height:88px;width:100%">
+                      <span style="width:5px;height:16px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.05s"></span>
+                      <span style="width:5px;height:30px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.15s"></span>
+                      <span style="width:5px;height:48px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.3s"></span>
+                      <span style="width:5px;height:26px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.45s"></span>
+                      <span style="width:5px;height:62px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.6s"></span>
+                      <span style="width:5px;height:38px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.75s"></span>
+                      <span style="width:5px;height:20px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.9s"></span>
+                      <span style="width:5px;height:52px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.05s"></span>
+                      <span style="width:5px;height:74px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.2s"></span>
+                      <span style="width:5px;height:34px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.35s"></span>
+                      <span style="width:5px;height:18px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.5s"></span>
+                      <span style="width:5px;height:44px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.65s"></span>
+                      <span style="width:5px;height:66px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.8s"></span>
+                      <span style="width:5px;height:28px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.95s"></span>
+                      <span style="width:5px;height:14px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.1s"></span>
+                      <span style="width:5px;height:40px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.25s"></span>
+                      <span style="width:5px;height:56px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.4s"></span>
+                      <span style="width:5px;height:24px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.55s"></span>
+                      <span style="width:5px;height:36px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.7s"></span>
+                      <span style="width:5px;height:15px;border-radius:99px;background:#101010;animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.85s"></span>
+                    </div>
+                    <button onClick="{{ stopListen }}" style="width:100%;border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:15.5px;font-weight:700;height:52px;border-radius:99px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">Terminer</button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ stageTrans }}">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:10px 0 6px;animation:brf-fade .2s both">
+                    <span style="font-size:14px;font-weight:700;color:#8A8A84">Transcription…</span>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:4px;height:88px;width:100%">
+                      <span style="width:5px;height:16px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both"></span>
+                      <span style="width:5px;height:30px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.03s"></span>
+                      <span style="width:5px;height:48px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.06s"></span>
+                      <span style="width:5px;height:26px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.09s"></span>
+                      <span style="width:5px;height:62px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.12s"></span>
+                      <span style="width:5px;height:38px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.15s"></span>
+                      <span style="width:5px;height:20px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.18s"></span>
+                      <span style="width:5px;height:52px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.21s"></span>
+                      <span style="width:5px;height:74px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.24s"></span>
+                      <span style="width:5px;height:34px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.27s"></span>
+                      <span style="width:5px;height:18px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.3s"></span>
+                      <span style="width:5px;height:44px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.33s"></span>
+                      <span style="width:5px;height:66px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.36s"></span>
+                      <span style="width:5px;height:28px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.39s"></span>
+                      <span style="width:5px;height:14px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.42s"></span>
+                      <span style="width:5px;height:40px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.45s"></span>
+                      <span style="width:5px;height:56px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.48s"></span>
+                      <span style="width:5px;height:24px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.51s"></span>
+                      <span style="width:5px;height:36px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.54s"></span>
+                      <span style="width:5px;height:15px;border-radius:99px;background:#101010;transform-origin:center;animation:brf-collapse .7s cubic-bezier(.4,0,.2,1) both;animation-delay:.57s"></span>
+                    </div>
+                    <div style="width:100%;display:flex;flex-direction:column;gap:8px">
+                      <span style="height:12px;width:92%;border-radius:99px;background:linear-gradient(90deg,#F4F4F2 8%,#E4E3DE 18%,#F4F4F2 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite"></span>
+                      <span style="height:12px;width:74%;border-radius:99px;background:linear-gradient(90deg,#F4F4F2 8%,#E4E3DE 18%,#F4F4F2 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.2s"></span>
+                      <span style="height:12px;width:48%;border-radius:99px;background:linear-gradient(90deg,#F4F4F2 8%,#E4E3DE 18%,#F4F4F2 33%);background-size:220px 100%;animation:brf-shimmer 1.1s linear infinite;animation-delay:-.4s"></span>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ stageDone }}">
+                  <div style="display:flex;flex-direction:column;gap:14px;padding:2px 0 0;animation:brf-fade .2s both">
+                    <div style="display:flex;gap:11px;align-items:flex-start;background:#F4F4F2;border-radius:18px;padding:13px 15px">
+                      <span style="display:flex;align-items:flex-end;gap:2px;height:16px;flex:none;margin-top:2px">
+                        <span style="width:2.5px;height:6px;border-radius:99px;background:#A9A9A2"></span>
+                        <span style="width:2.5px;height:12px;border-radius:99px;background:#A9A9A2"></span>
+                        <span style="width:2.5px;height:8px;border-radius:99px;background:#A9A9A2"></span>
+                        <span style="width:2.5px;height:15px;border-radius:99px;background:#A9A9A2"></span>
+                        <span style="width:2.5px;height:7px;border-radius:99px;background:#A9A9A2"></span>
+                      </span>
+                      <span style="font-size:13px;font-weight:600;line-height:1.45;color:#4A4A46;text-wrap:pretty">« Faut que je relance Duval demain à 14 h 30, vérifier la remise, et penser au cadeau de Camille. »</span>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <span style="height:2px;flex:1;background:#101010;transform-origin:left;animation:brf-rail .5s cubic-bezier(.4,0,.2,1) both"></span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">3 ÉLÉMENTS STRUCTURÉS</span>
+                    </div>
+
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid rgba(16,16,16,.09);border-radius:18px;padding:13px 15px;animation:brf-pop .45s cubic-bezier(.2,.9,.3,1) both;animation-delay:.1s">
+                        <span style="flex:none;width:24px;height:24px;border-radius:99px;border:2px solid rgba(16,16,16,.2)"></span>
+                        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                          <span style="font-size:14.5px;font-weight:700;letter-spacing:-.01em">Relancer Duval</span>
+                          <span style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1F4FA8">
+                            <span style="width:6px;height:6px;border-radius:99px;background:#1F4FA8"></span>Tâche · demain 14:30
+                          </span>
+                        </span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid rgba(16,16,16,.09);border-radius:18px;padding:13px 15px;animation:brf-pop .45s cubic-bezier(.2,.9,.3,1) both;animation-delay:.25s">
+                        <span style="flex:none;width:24px;height:24px;border-radius:99px;border:2px solid rgba(16,16,16,.2)"></span>
+                        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                          <span style="font-size:14.5px;font-weight:700;letter-spacing:-.01em">Vérifier la remise 12 %</span>
+                          <span style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1F4FA8">
+                            <span style="width:6px;height:6px;border-radius:99px;background:#1F4FA8"></span>Sous-tâche
+                          </span>
+                        </span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid rgba(16,16,16,.09);border-radius:18px;padding:13px 15px;animation:brf-pop .45s cubic-bezier(.2,.9,.3,1) both;animation-delay:.4s">
+                        <span style="flex:none;width:24px;height:24px;border-radius:8px;background:#FBE2AE;display:flex;align-items:center;justify-content:center">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A5A10" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 4v2M12 18v2M4 12h2M18 12h2"></path></svg>
+                        </span>
+                        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                          <span style="font-size:14.5px;font-weight:700;letter-spacing:-.01em">Cadeau de Camille</span>
+                          <span style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#8A5A10">
+                            <span style="width:6px;height:6px;border-radius:99px;background:#8A5A10"></span>Idée · à trier
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style="display:flex;gap:10px;margin-top:2px">
+                      <button onClick="{{ resetDemo }}" style="flex:none;border:1px solid rgba(16,16,16,.12);cursor:pointer;font-family:inherit;background:#fff;color:#101010;font-size:14.5px;font-weight:700;height:52px;padding:0 20px;border-radius:99px" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Rejouer</button>
+                      <button onClick="{{ closeSheet }}" style="flex:1;border:none;cursor:pointer;font-family:inherit;background:#101010;color:#fff;font-size:15.5px;font-weight:700;height:52px;border-radius:99px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">Ajouter les 3</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+      </x-import>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:22px;width:300px">
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:18px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">PILOTER LE PROTOTYPE</span>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 16px">
+          <button onClick="{{ goHome }}" style="border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Home</button>
+          <button onClick="{{ goTask }}" style="border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Détail tâche</button>
+          <button onClick="{{ goAgenda }}" style="border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Agenda</button>
+          <button onClick="{{ goIdeas }}" style="border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Idées</button>
+          <button onClick="{{ goSearch }}" style="border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Recherche</button>
+          <button onClick="{{ openAccount }}" style="border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Compte</button>
+          <button onClick="{{ startListen }}" style="border:none;background:#101010;color:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 13px;border-radius:99px;min-height:38px" style-hover="background:#2C2C29" style-focus="outline:2px solid #101010;outline-offset:2px">▶ Voix → tâches</button>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">ÉTAT DES LISTES</span>
+        <div style="display:flex;gap:7px;margin-top:12px">
+          <button onClick="{{ setFilled }}" style="flex:1;border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;padding:9px 6px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Rempli</button>
+          <button onClick="{{ setEmpty }}" style="flex:1;border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;padding:9px 6px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Vide</button>
+          <button onClick="{{ setLoading }}" style="flex:1;border:1px solid rgba(16,16,16,.12);background:#fff;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;padding:9px 6px;border-radius:99px;min-height:38px" style-hover="background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Chargement</button>
+        </div>
+      </div>
+
+      <div style="background:#101010;color:#fff;border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:rgba(255,255,255,.5)">ÉLÉMENT SIGNATURE</span>
+        <h3 style="margin:10px 0 8px;font-size:20px;font-weight:800;letter-spacing:-.025em">Le rail vocal</h3>
+        <p style="margin:0 0 12px;font-size:13px;font-weight:500;line-height:1.5;color:rgba(255,255,255,.7);text-wrap:pretty">La waveform ne disparaît pas : elle s'effondre en un rail horizontal, et le rail « déplie » les items structurés un par un. Voix → structure devient un seul geste visuel, pas deux écrans.</p>
+        <div style="display:flex;flex-direction:column;gap:9px;padding:14px;border-radius:14px;background:rgba(255,255,255,.06)">
+          <span style="display:flex;align-items:center;justify-content:center;gap:3px;height:26px">
+            <span style="width:3px;height:10px;border-radius:99px;background:#fff;animation:brf-wave 1s ease-in-out infinite"></span>
+            <span style="width:3px;height:20px;border-radius:99px;background:#fff;animation:brf-wave 1s ease-in-out infinite;animation-delay:-.2s"></span>
+            <span style="width:3px;height:26px;border-radius:99px;background:#fff;animation:brf-wave 1s ease-in-out infinite;animation-delay:-.4s"></span>
+            <span style="width:3px;height:16px;border-radius:99px;background:#fff;animation:brf-wave 1s ease-in-out infinite;animation-delay:-.6s"></span>
+            <span style="width:3px;height:22px;border-radius:99px;background:#fff;animation:brf-wave 1s ease-in-out infinite;animation-delay:-.8s"></span>
+          </span>
+          <span style="height:2px;background:#fff;transform-origin:left;animation:brf-rail 1.6s cubic-bezier(.4,0,.2,1) infinite"></span>
+          <span style="display:flex;flex-direction:column;gap:6px">
+            <span style="display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;animation:brf-pop 1.6s ease-out infinite"><span style="width:14px;height:14px;border-radius:99px;border:2px solid rgba(255,255,255,.5)"></span>Relancer Duval</span>
+            <span style="display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;color:rgba(255,255,255,.75);animation:brf-pop 1.6s ease-out infinite;animation-delay:.2s"><span style="width:14px;height:14px;border-radius:99px;border:2px solid rgba(255,255,255,.35)"></span>Vérifier la remise</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:22px;width:380px">
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;background:#101010;color:#fff">02</span>
+          <span style="font-size:14px;font-weight:700">Design tokens</span>
+        </div>
+
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">COULEURS</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 18px">
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#F4F4F2;border:1px solid rgba(16,16,16,.1)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">bg<br>#F4F4F2</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#FFFFFF;border:1px solid rgba(16,16,16,.1)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">surface<br>#FFFFFF</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#101010"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">ink<br>#101010</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#8A8A84"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">ink-muted<br>#8A8A84</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#CFE0FF"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">task-100<br>#CFE0FF</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#1F4FA8"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">task-700<br>#1F4FA8</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#CBE9D6"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">meet-100<br>#CBE9D6</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#1F6B45"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">meet-700<br>#1F6B45</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#FBE2AE"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">idea-100<br>#FBE2AE</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#8A5A10"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">idea-700<br>#8A5A10</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#E23A2E"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">danger<br>#E23A2E</span></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:#fff;border:1px solid rgba(16,16,16,.08)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.3">hairline<br>ink/8%</span></div>
+        </div>
+
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">TYPOGRAPHIE — PLUS JAKARTA SANS</span>
+        <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0 18px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-size:26px;font-weight:800;letter-spacing:-.035em">Display</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9A9A93">34/37 · 800 · -3.5%</span></div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-size:22px;font-weight:800;letter-spacing:-.03em">Titre écran</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9A9A93">28/32 · 800</span></div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-size:17px;font-weight:700">Section / tuile</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9A9A93">20 / 17 · 700</span></div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-size:15px;font-weight:600">Corps de liste</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9A9A93">15/21 · 600</span></div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-size:12.5px;font-weight:600;color:#8A8A84">Meta secondaire</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9A9A93">12.5 · 600</span></div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em">LABEL MONO</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9A9A93">10 · .09em</span></div>
+        </div>
+
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">RADIUS &amp; ESPACEMENT</span>
+        <div style="display:flex;gap:10px;align-items:flex-end;margin:12px 0 10px">
+          <span style="width:52px;height:40px;background:#F4F4F2;border:1px solid rgba(16,16,16,.1);border-radius:12px;display:flex;align-items:flex-end;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding-bottom:3px">12</span>
+          <span style="width:52px;height:44px;background:#F4F4F2;border:1px solid rgba(16,16,16,.1);border-radius:18px;display:flex;align-items:flex-end;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding-bottom:3px">18</span>
+          <span style="width:52px;height:48px;background:#F4F4F2;border:1px solid rgba(16,16,16,.1);border-radius:20px;display:flex;align-items:flex-end;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding-bottom:3px">20</span>
+          <span style="width:52px;height:52px;background:#F4F4F2;border:1px solid rgba(16,16,16,.1);border-radius:24px;display:flex;align-items:flex-end;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding-bottom:3px">24</span>
+          <span style="width:52px;height:52px;background:#F4F4F2;border:1px solid rgba(16,16,16,.1);border-radius:99px;display:flex;align-items:flex-end;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding-bottom:6px">pill</span>
+        </div>
+        <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.7;color:#6E6E69">space: 4 · 8 · 12 · 16 · 20 · 24 · 28 · 34<br>gutter écran: 20px · hit-area min: 44px<br>shadow-card: 0 6px 20px ink/7%<br>shadow-fab: 0 8px 20px ink/28%</p>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;background:#101010;color:#fff">03</span>
+          <span style="font-size:14px;font-weight:700">Recettes Tailwind</span>
+        </div>
+        <p style="margin:0 0 14px;font-size:12.5px;font-weight:500;color:#6E6E69;line-height:1.5">Classes utilitaires à coller dans les composants Next.js. Les tokens ci-dessus vont dans <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:2px 5px;border-radius:5px">tailwind.config.ts</code> sous <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:2px 5px;border-radius:5px">theme.extend</code>.</p>
+        <pre style="margin:0;font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.75;color:#2A2A28;background:#F4F4F2;border-radius:14px;padding:14px;overflow:auto;white-space:pre-wrap">&lt;ActionTile&gt;   // 4 tuiles home
+bg-task-100 rounded-[24px] p-4 min-h-[132px]
+flex flex-col justify-between text-left
+focus-visible:outline focus-visible:outline-2
+
+&lt;TileIcon&gt;
+size-11 rounded-full bg-white grid place-items-center
+
+&lt;CaptureBar&gt;   // pill signature
+h-14 w-full rounded-full bg-white pl-[18px] pr-1.5
+border border-ink/[.07] shadow-[0_6px_20px_rgba(16,16,16,.07)]
+flex items-center gap-3
+
+&lt;ListRow&gt;
+flex items-center gap-3 px-3.5 py-3
+divide-y divide-ink/[.06] (sur le parent)
+
+&lt;Card&gt;
+bg-white border border-ink/[.06] rounded-[20px] p-4
+
+&lt;Chip&gt;
+h-8 px-3 rounded-full text-xs font-bold bg-task-100 text-task-700
+
+&lt;BottomNav&gt;
+fixed bottom-7 inset-x-5 mx-auto w-fit p-1.5
+rounded-full bg-white border border-ink/[.07]
+shadow-[0_10px_28px_rgba(16,16,16,.1)] flex items-center gap-1.5
+
+&lt;Fab&gt;
+size-[60px] -mt-3.5 rounded-full bg-ink text-white
+shadow-[0_8px_20px_rgba(16,16,16,.28)] grid place-items-center
+
+&lt;Sheet&gt;
+rounded-t-[30px] bg-white px-5 pt-3 pb-8
+motion-safe:animate-[sheet_.3s_cubic-bezier(.2,.9,.3,1)]
+
+&lt;Skeleton&gt;
+h-3 rounded-full bg-[linear-gradient(90deg,#F4F4F2_8%,#E4E3DE_18%,#F4F4F2_33%)]
+bg-[length:220px_100%] animate-shimmer</pre>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;background:#101010;color:#fff">04</span>
+          <span style="font-size:14px;font-weight:700">Décisions appliquées</span>
+        </div>
+        <ul style="margin:0 0 14px;padding-left:18px;font-size:13px;font-weight:500;line-height:1.6;color:#4A4A46">
+          <li style="margin-bottom:7px"><b>Rail vocal persistant</b> — chaque item garde son fil d'origine : extrait surligné, segment exact (0:03 → 0:07), lien vers les autres items de la même dictée. Marqueur 3 barres dans les listes.</li>
+          <li style="margin-bottom:7px"><b>Nav basse</b> — Accueil · Recherche · FAB · Idées. La recherche cherche aussi <i>dans les transcriptions</i>, ce que le calendrier Apple ne sait pas faire.</li>
+          <li style="margin-bottom:7px"><b>Agenda</b> — écran en lecture seule, badge « Calendrier Apple », plus d'onglet dédié : il vit dans la tuile verte et dans « Aujourd'hui ».</li>
+          <li style="margin-bottom:7px"><b>Widget iOS + Live Activity</b> — hors périmètre (compte Apple Developer payant). Équivalents gratuits en 05.</li>
+          <li><b>Verrouillage par code</b> — écran PIN 6 chiffres ajouté en 06, plus deux composants remontés du code (TypeSegmented, Toast).</li>
+        </ul>
+        <p style="margin:0;font-size:12.5px;font-weight:600;line-height:1.5;color:#8A8A84"><b style="color:#101010">Compte &amp; réglages</b> — avatar 46px (initiales, anneau ink/12 %) en header Accueil et Recherche, ouvre une feuille : identité, sync Calendrier Apple, structuration auto, rappels, voix &amp; confidentialité, abonnement.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<div style="padding:0 48px 72px;color:#101010">
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;background:#101010;color:#fff">05</span>
+    <span style="font-size:14px;font-weight:700">Le rail vocal hors de l'app</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#8A5A10;background:#FBE2AE;padding:4px 9px;border-radius:99px">Widget natif &amp; Live Activity = compte Apple Developer payant → hors périmètre</span>
+  </div>
+
+  <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">ÉCRAN D'ACCUEIL — POUR MÉMOIRE, NON DÉVELOPPÉ</span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ deviceW }}" height="{{ deviceH }}" hint-size="390px,844px">
+        <div style="height:844px;display:flex;flex-direction:column;background:linear-gradient(165deg,#E9E6DE 0%,#DCD8CE 55%,#CFCBC0 100%);font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;padding:66px 20px 30px;box-sizing:border-box">
+
+          <div style="background:rgba(255,255,255,.92);border-radius:26px;padding:16px;box-shadow:0 10px 26px rgba(16,16,16,.12)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+              <span style="display:flex;align-items:center;gap:8px">
+                <span style="width:20px;height:20px;border-radius:7px;background:#101010;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;gap:1.5px">
+                  <span style="width:2px;height:5px;border-radius:99px;background:#fff"></span>
+                  <span style="width:2px;height:9px;border-radius:99px;background:#fff"></span>
+                  <span style="width:2px;height:7px;border-radius:99px;background:#fff"></span>
+                </span>
+                <span style="font-size:12.5px;font-weight:800;letter-spacing:-.01em">Aujourd'hui</span>
+              </span>
+              <span style="font-size:11.5px;font-weight:700;color:#9A9A93">mar. 19 · 3 items</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:none;width:20px;height:20px;border-radius:99px;border:2px solid rgba(16,16,16,.2)"></span>
+                <span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Relancer le devis Duval</span>
+                <span style="display:flex;align-items:flex-end;gap:1.5px;height:9px;flex:none">
+                  <span style="width:2px;height:4px;border-radius:99px;background:#C4C4BD"></span>
+                  <span style="width:2px;height:8px;border-radius:99px;background:#C4C4BD"></span>
+                  <span style="width:2px;height:6px;border-radius:99px;background:#C4C4BD"></span>
+                </span>
+                <span style="flex:none;font-size:12px;font-weight:800">14:30</span>
+              </div>
+              <div style="height:1px;background:rgba(16,16,16,.07)"></div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:none;width:20px;height:20px;border-radius:6px;background:#CBE9D6;display:flex;align-items:center;justify-content:center">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1F6B45" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5V12l3 2"></path></svg>
+                </span>
+                <span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;letter-spacing:-.01em">Point hebdo équipe</span>
+                <span style="flex:none;font-size:12px;font-weight:800">16:00</span>
+              </div>
+              <div style="height:1px;background:rgba(16,16,16,.07)"></div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:none;width:20px;height:20px;border-radius:99px;border:2px solid rgba(16,16,16,.2)"></span>
+                <span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;letter-spacing:-.01em;color:#6E6E69">Pharmacie — ordonnance</span>
+                <span style="flex:none;font-size:12px;font-weight:800;color:#9A9A93">18:00</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:16px;margin-top:16px">
+            <div style="flex:1;aspect-ratio:1;background:#101010;border-radius:26px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 10px 26px rgba(16,16,16,.18)">
+              <span style="width:46px;height:46px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"></path></svg>
+              </span>
+              <span style="display:flex;align-items:flex-end;gap:3px;height:26px">
+                <span style="width:4px;height:9px;border-radius:99px;background:rgba(255,255,255,.55)"></span>
+                <span style="width:4px;height:18px;border-radius:99px;background:rgba(255,255,255,.55)"></span>
+                <span style="width:4px;height:26px;border-radius:99px;background:#fff"></span>
+                <span style="width:4px;height:14px;border-radius:99px;background:rgba(255,255,255,.55)"></span>
+                <span style="width:4px;height:21px;border-radius:99px;background:rgba(255,255,255,.55)"></span>
+                <span style="width:4px;height:11px;border-radius:99px;background:rgba(255,255,255,.4)"></span>
+              </span>
+              <span style="font-size:14.5px;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1.2">Dicter<br>maintenant</span>
+            </div>
+            <div style="flex:1;aspect-ratio:1;background:#FBE2AE;border-radius:26px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 10px 26px rgba(16,16,16,.12)">
+              <span style="width:46px;height:46px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A5A10" stroke-width="2.1" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"></path></svg>
+              </span>
+              <span style="font-size:34px;font-weight:800;letter-spacing:-.04em;color:#8A5A10;line-height:1">7</span>
+              <span style="font-size:14.5px;font-weight:800;letter-spacing:-.02em;color:#101010;line-height:1.2">Idées<br>à trier</span>
+            </div>
+          </div>
+
+          <div style="flex:1"></div>
+
+          <div style="display:flex;justify-content:space-between;padding:0 4px 22px">
+            <span style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <span style="width:58px;height:58px;border-radius:16px;background:#101010;display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px;gap:3px">
+                <span style="width:3.5px;height:10px;border-radius:99px;background:#fff"></span>
+                <span style="width:3.5px;height:20px;border-radius:99px;background:#fff"></span>
+                <span style="width:3.5px;height:14px;border-radius:99px;background:#fff"></span>
+                <span style="width:3.5px;height:24px;border-radius:99px;background:#fff"></span>
+              </span>
+              <span style="font-size:10.5px;font-weight:600;color:#3A3A34">Brief</span>
+            </span>
+            <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.22)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(16,16,16,.4)">app</span></span>
+            <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.22)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(16,16,16,.4)">app</span></span>
+            <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.22)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(16,16,16,.4)">app</span></span>
+          </div>
+
+          <div style="background:rgba(255,255,255,.42);border-radius:30px;padding:12px;display:flex;justify-content:space-around">
+            <span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.2)"></span>
+            <span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.2)"></span>
+            <span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.2)"></span>
+            <span style="width:58px;height:58px;border-radius:16px;border:1.5px dashed rgba(16,16,16,.2)"></span>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">ÉCRAN VERROUILLÉ — POUR MÉMOIRE, NON DÉVELOPPÉ</span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ deviceW }}" height="{{ deviceH }}" dark="{{ true }}" hint-size="390px,844px">
+        <div style="height:844px;display:flex;flex-direction:column;background:linear-gradient(170deg,#1E1E1A 0%,#111110 60%,#080807 100%);font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;color:#fff;padding:60px 20px 34px;box-sizing:border-box">
+
+          <div style="display:flex;justify-content:center;margin-bottom:26px">
+            <div style="display:flex;align-items:center;gap:10px;background:#000;border-radius:24px;padding:9px 16px;min-width:200px">
+              <span style="display:flex;align-items:flex-end;gap:2px;height:16px;flex:none">
+                <span style="width:3px;height:6px;border-radius:99px;background:#fff;animation:brf-wave .95s ease-in-out infinite"></span>
+                <span style="width:3px;height:13px;border-radius:99px;background:#fff;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.15s"></span>
+                <span style="width:3px;height:16px;border-radius:99px;background:#fff;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.3s"></span>
+                <span style="width:3px;height:9px;border-radius:99px;background:#fff;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.45s"></span>
+                <span style="width:3px;height:14px;border-radius:99px;background:#fff;animation:brf-wave .95s ease-in-out infinite;animation-delay:-.6s"></span>
+              </span>
+              <span style="flex:1;font-size:12px;font-weight:700">Brief écoute</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:rgba(255,255,255,.65)">0:14</span>
+            </div>
+          </div>
+
+          <div style="text-align:center;margin-bottom:34px">
+            <div style="font-size:15px;font-weight:600;color:rgba(255,255,255,.65)">mardi 19 août</div>
+            <div style="font-size:76px;font-weight:700;letter-spacing:-.04em;line-height:1.05">22:41</div>
+          </div>
+
+          <div style="background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.13);border-radius:26px;padding:16px;backdrop-filter:blur(20px)">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+              <span style="width:22px;height:22px;border-radius:7px;background:#fff;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;gap:1.5px">
+                <span style="width:2px;height:5px;border-radius:99px;background:#101010"></span>
+                <span style="width:2px;height:10px;border-radius:99px;background:#101010"></span>
+                <span style="width:2px;height:7px;border-radius:99px;background:#101010"></span>
+              </span>
+              <span style="flex:1;font-size:12.5px;font-weight:800;letter-spacing:.01em">BRIEF</span>
+              <span style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#FF6B60">
+                <span style="width:7px;height:7px;border-radius:99px;background:#FF6B60"></span>Enregistrement
+              </span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:3px;height:46px;margin-bottom:14px">
+              <span style="width:4px;height:12px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.05s"></span>
+              <span style="width:4px;height:24px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.2s"></span>
+              <span style="width:4px;height:38px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.35s"></span>
+              <span style="width:4px;height:18px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.5s"></span>
+              <span style="width:4px;height:46px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.65s"></span>
+              <span style="width:4px;height:26px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.8s"></span>
+              <span style="width:4px;height:14px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-.95s"></span>
+              <span style="width:4px;height:34px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.1s"></span>
+              <span style="width:4px;height:20px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.25s"></span>
+              <span style="width:4px;height:42px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.4s"></span>
+              <span style="width:4px;height:16px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.55s"></span>
+              <span style="width:4px;height:30px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.7s"></span>
+              <span style="width:4px;height:22px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-1.85s"></span>
+              <span style="width:4px;height:36px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-2s"></span>
+              <span style="width:4px;height:13px;border-radius:99px;background:rgba(255,255,255,.85);animation:brf-wave .95s ease-in-out infinite;animation-delay:-2.15s"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="flex:1;font-size:12.5px;font-weight:600;color:rgba(255,255,255,.6);line-height:1.4">Note vocale en cours · 0:14<br>Brief structurera à l'arrêt</span>
+              <button aria-label="Arrêter la dictée" style="flex:none;width:44px;height:44px;border-radius:99px;border:none;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-focus="outline:2px solid #fff;outline-offset:3px">
+                <span style="width:14px;height:14px;border-radius:4px;background:#101010"></span>
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:26px;padding:15px 16px;display:flex;align-items:center;gap:12px">
+            <span style="flex:none;width:34px;height:34px;border-radius:99px;background:#CFE0FF;display:flex;align-items:center;justify-content:center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1F4FA8" stroke-width="2.8" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+            </span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:13px;font-weight:700">3 éléments prêts</span>
+              <span style="font-size:11.5px;font-weight:600;color:rgba(255,255,255,.55)">Glisse pour confirmer dans Brief</span>
+            </span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5L16 12l-6.5 7"></path></svg>
+          </div>
+
+          <div style="flex:1"></div>
+        </div>
+      </x-import>
+    </div>
+
+    <div style="width:340px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">ÉQUIVALENTS 100 % GRATUITS</span>
+        <ul style="margin:12px 0 0;padding-left:18px;font-size:13px;font-weight:500;line-height:1.6;color:#4A4A46">
+          <li style="margin-bottom:7px"><b>PWA installée</b> — icône sur l'écran d'accueil, plein écran, hors ligne. Déjà en place (manifest + service worker).</li>
+          <li style="margin-bottom:7px"><b>Widget Raccourcis</b> (app Apple gratuite) — un raccourci « Dicter dans Brief » qui ouvre <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">/?capture=1</code>, plus « Aujourd'hui » → <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">/?screen=home</code>. Dictée aussi déclenchable à la voix via Siri.</li>
+          <li><b>Badge d'app</b> — <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">navigator.setAppBadge(idées)</code> sur PWA installée : le compteur « à trier » sans widget.</li>
+        </ul>
+      </div>
+      <div style="background:#101010;color:#fff;border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:rgba(255,255,255,.5)">REMPLACE LA LIVE ACTIVITY — GRATUIT</span>
+        <ul style="margin:12px 0 0;padding-left:18px;font-size:13px;font-weight:500;line-height:1.6;color:rgba(255,255,255,.75)">
+          <li style="margin-bottom:7px"><b style="color:#fff">Bandeau d'enregistrement persistant</b> — pill ink 40px collée sous la barre d'état, waveform 5 barres + minuteur + stop 44px. Elle survit à la navigation dans la PWA : c'est la Live Activity, mais à l'intérieur de l'app.</li>
+          <li style="margin-bottom:7px"><b style="color:#fff">Web Push</b> — « Transcription terminée · 3 éléments prêts », tap → <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(255,255,255,.1);padding:1px 5px;border-radius:5px">/?review=1</code>. Déjà branché côté serveur.</li>
+          <li><b style="color:#fff">Digest 8:00</b> — la notification du matin remplace le widget « Aujourd'hui ».</li>
+        </ul>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">RECETTES TAILWIND — 05</span>
+        <pre style="margin:12px 0 0;font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.75;color:#2A2A28;background:#F4F4F2;border-radius:14px;padding:14px;overflow:auto;white-space:pre-wrap">&lt;Widget&gt;
+rounded-[26px] p-4 shadow-[0_10px_26px_rgba(16,16,16,.12)]
+bg-white/[.92] · bg-ink · bg-idea-100
+
+&lt;VoiceBadge&gt;   // marqueur item dicté
+flex items-end gap-[1.5px] h-2.5
+[&amp;&gt;span]:w-0.5 [&amp;&gt;span]:rounded-full [&amp;&gt;span]:bg-ink/25
+
+&lt;LiveActivityCard&gt;
+rounded-[26px] border border-white/[.13] bg-white/[.11]
+backdrop-blur-xl p-4 text-white</pre>
+      </div>
+    </div>
+
+  </div>
+</div>
+<div style="padding:0 48px 72px;color:#101010">
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;background:#101010;color:#fff">06</span>
+    <span style="font-size:14px;font-weight:700">Nouveautés remontées du code</span>
+    <span style="font-size:12px;font-weight:500;color:#9A9A93">sync 20 août · branche feat/ui-redesign-claude</span>
+  </div>
+
+  <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">VERROUILLAGE — CODE À 6 CHIFFRES</span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ deviceW }}" height="{{ deviceH }}" hint-size="390px,844px">
+        <div style="height:844px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#F4F4F2;font-family:'Plus Jakarta Sans',-apple-system,system-ui,sans-serif;color:#101010;padding:78px 24px 40px;box-sizing:border-box">
+
+          <div style="display:flex;flex-direction:column;align-items:center">
+            <span style="width:64px;height:64px;border-radius:20px;background:#101010;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(16,16,16,.18)">
+              <span style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.03em">B</span>
+            </span>
+            <h2 style="margin:18px 0 0;font-size:28px;font-weight:800;letter-spacing:-.03em">Brief</h2>
+            <p style="margin:8px 0 0;font-size:13px;font-weight:500;color:#8A8A84;text-align:center;max-width:240px;line-height:1.45;text-wrap:pretty">Une seule fois sur cet appareil — ensuite Brief s'ouvre direct.</p>
+
+            <div style="display:flex;gap:14px;margin-top:28px">
+              <span style="width:14px;height:14px;border-radius:99px;background:#101010"></span>
+              <span style="width:14px;height:14px;border-radius:99px;background:#101010"></span>
+              <span style="width:14px;height:14px;border-radius:99px;background:#101010"></span>
+              <span style="width:14px;height:14px;border-radius:99px;border:1.5px solid rgba(16,16,16,.18);box-sizing:border-box"></span>
+              <span style="width:14px;height:14px;border-radius:99px;border:1.5px solid rgba(16,16,16,.18);box-sizing:border-box"></span>
+              <span style="width:14px;height:14px;border-radius:99px;border:1.5px solid rgba(16,16,16,.18);box-sizing:border-box"></span>
+            </div>
+
+            <div style="height:20px;display:flex;align-items:center;margin-top:14px">
+              <span style="font-size:12px;font-weight:700;color:#E23A2E">Code incorrect.</span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 16px;width:100%;max-width:280px">
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">1</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">2</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">3</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">4</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">5</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">6</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">7</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">8</button>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">9</button>
+            <span></span>
+            <button style="height:66px;border-radius:18px;border:1px solid rgba(16,16,16,.08);background:#fff;cursor:pointer;font-family:inherit;font-size:24px;font-weight:700;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">0</button>
+            <button aria-label="Effacer le dernier chiffre" style="height:66px;border-radius:18px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#8A8A84" style-hover="color:#101010" style-focus="outline:2px solid #101010;outline-offset:2px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5.5H9.6a2 2 0 0 0-1.5.7l-4.3 5a1.2 1.2 0 0 0 0 1.6l4.3 5a2 2 0 0 0 1.5.7H20a1.5 1.5 0 0 0 1.5-1.5V7A1.5 1.5 0 0 0 20 5.5z"></path><path d="M12.5 9.8l4.7 4.4M17.2 9.8l-4.7 4.4"></path></svg>
+            </button>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div style="width:360px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">PINGATE — À CORRIGER EN PRIORITÉ</span>
+        <p style="margin:12px 0 0;font-size:13px;font-weight:500;line-height:1.55;color:#4A4A46;text-wrap:pretty">L'écran de code est le <b>seul</b> qui n'utilise pas le design system : il référence des tokens d'un ancien thème « Bento » qui n'existent nulle part dans <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">globals.css</code> — <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">--color-page</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">--color-action</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">--e1/--e2</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">--line/--line-2</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">bg-tile</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">text-ink-2</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">text-error</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">text-24/27/13/12</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">animate-br-spin</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">animate-br-in</code>. Résultat : touches sans fond ni ombre, points de saisie invisibles, message d'erreur non rouge, spinner figé.</p>
+        <p style="margin:12px 0 0;font-size:13px;font-weight:500;line-height:1.55;color:#4A4A46">La maquette ci-contre est la version conforme : tuile ink 64/radius 20, titre 28/800, 6 points 14px (plein ink / contour ink 18 %), touches 66px radius 18 surface + <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">shadow-card</code>, erreur en <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">text-danger</code>, effacement en icône ink-muted sans fond. Le shake ±6px et le retour haptique restent tels quels.</p>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">DEUX COMPOSANTS À ADOPTER DANS LE DS</span>
+        <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0 10px">
+          <span style="font-size:12.5px;font-weight:700">TypeSegmented — Tâche / Rendez-vous / Idée</span>
+          <div style="display:flex;gap:7px" role="radiogroup" aria-label="Type d'item">
+            <button role="radio" aria-checked="true" style="flex:none;height:36px;padding:0 14px;border-radius:99px;border:none;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;background:#101010;color:#fff" style-focus="outline:2px solid #101010;outline-offset:2px">Tâche</button>
+            <button role="radio" aria-checked="false" style="flex:none;height:36px;padding:0 14px;border-radius:99px;border:1px solid rgba(16,16,16,.1);cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;background:#fff;color:#101010" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Rendez-vous</button>
+            <button role="radio" aria-checked="false" style="flex:none;height:36px;padding:0 14px;border-radius:99px;border:1px solid rgba(16,16,16,.1);cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;background:#fff;color:#101010" style-hover="background:#F4F4F2" style-focus="outline:2px solid #101010;outline-offset:2px">Idée</button>
+          </div>
+          <span style="font-size:12px;font-weight:500;color:#8A8A84;line-height:1.5">Même pilule que les filtres de Recherche. Dans la capture (avant envoi) et la fiche (changer le type). L'IA propose, l'utilisateur tranche : c'est la soupape du rail vocal.</span>
+        </div>
+        <div style="height:1px;background:rgba(16,16,16,.07);margin:14px 0"></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <span style="font-size:12.5px;font-weight:700">Toast — confirmation éphémère</span>
+          <div style="display:flex;justify-content:center">
+            <span style="display:inline-flex;align-items:center;gap:9px;background:#fff;border:1px solid rgba(16,16,16,.07);border-radius:99px;padding:13px 18px;font-size:13px;font-weight:600;color:#101010;box-shadow:0 6px 20px rgba(16,16,16,.07)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1F6B45" stroke-width="3" stroke-linecap="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+              Idée convertie en tâche
+            </span>
+          </div>
+          <span style="font-size:12px;font-weight:500;color:#8A8A84;line-height:1.5">Pill surface, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">bottom-24</code> au-dessus de la nav, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">role="status"</code>. Icône verte succès / rouge danger.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:380px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:#101010;color:#fff;border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:rgba(255,255,255,.5)">DS MIS À JOUR D'APRÈS LE CODE</span>
+        <ul style="margin:12px 0 0;padding-left:18px;font-size:13px;font-weight:500;line-height:1.6;color:rgba(255,255,255,.75)">
+          <li style="margin-bottom:7px"><b style="color:#fff">« Aujourd'hui » en deux groupes</b> — intertitres mono 11/700/.08em <span style="font-family:'JetBrains Mono',monospace;font-size:11px">TÂCHES</span> et <span style="font-family:'JetBrains Mono',monospace;font-size:11px">RENDEZ-VOUS</span>, une carte par groupe. Fini la liste unique mélangée.</li>
+          <li style="margin-bottom:7px"><b style="color:#fff">Pastille de projet</b> — 6px, disque ou carré (r 1px) selon le projet, + son nom en 13/500 ink-muted. Remplace les tags catégorie en dur.</li>
+          <li style="margin-bottom:7px"><b style="color:#fff">Ligne « pas encore adoptée »</b> — cercle 26px en pointillé pour un événement Calendrier que Brief n'a pas encore repris en item. Non cochable, non cliquable.</li>
+          <li style="margin-bottom:7px"><b style="color:#fff">Heures en chiffres tabulaires</b> + libellé <span style="font-weight:700">journée</span> pour le tout-au-long-du-jour.</li>
+          <li><b style="color:#fff">Compteurs de tuiles</b> — tâches et RDV du jour depuis l'agenda fusionné, idées depuis la liste Idées. Une seule source par compteur.</li>
+        </ul>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(16,16,16,.08);border-radius:20px;padding:20px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A9A93">AUDIT PRÉCÉDENT — SOLDÉ</span>
+        <p style="margin:12px 0 0;font-size:13px;font-weight:500;line-height:1.55;color:#4A4A46;text-wrap:pretty">Corrigés côté code : focus-visible global, boutons d'en-tête 44px, coche blanche à bord ink/18, <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">pl-[18px] pr-1.5</code> sur la barre de capture, token <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">--radius-8</code>, tuiles cliquables, « Aujourd'hui » filtré sur le jour, opacité des idées liée à l'âge (48 h), <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">tailwind.config.ts</code> supprimé.</p>
+        <p style="margin:12px 0 0;font-size:13px;font-weight:500;line-height:1.55;color:#4A4A46">Restent ouverts : espace fine avant le « ? » du titre d'accueil (<span style="font-family:'JetBrains Mono',monospace;font-size:11px">organise&amp;nbsp;?</span>), et l'échelle <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:#F4F4F2;padding:1px 5px;border-radius:5px">--text-*</code> toujours contournée par des tailles en dur (13.5, 14.5, 15.5…) — soit on ajoute les crans manquants, soit on arrondit.</p>
+      </div>
+    </div>
+
+  </div>
+</div></x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1580,&quot;height&quot;:1200},&quot;initialScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;home&quot;,&quot;task&quot;,&quot;agenda&quot;,&quot;ideas&quot;],&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;listState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;filled&quot;,&quot;empty&quot;,&quot;loading&quot;],&quot;default&quot;:&quot;filled&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;autoTranscribe&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      screen: props.initialScreen || 'home',
+      list: props.listState || 'filled',
+      sheet: false,
+      stage: 'idle',
+      secs: 0,
+      done: [false, false, false],
+      subs: [true, false, false],
+    };
+    this.timers = [];
+  }
+
+  componentWillUnmount() { this.clear(); }
+
+  clear() { this.timers.forEach(clearTimeout); this.timers = []; if (this.tick) clearInterval(this.tick); }
+
+  later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+
+  runDemo() {
+    this.clear();
+    this.setState({ sheet: true, stage: 'listening', secs: 0 });
+    this.tick = setInterval(() => this.setState(s => ({ secs: s.secs + 1 })), 1000);
+    if (this.props.autoTranscribe !== false) {
+      this.later(() => this.stop(), 3400);
+    }
+  }
+
+  stop() {
+    this.clear();
+    this.setState({ stage: 'transcribing' });
+    this.later(() => this.setState({ stage: 'done' }), 1500);
+  }
+
+  toggle(key, i) {
+    this.setState(s => {
+      const next = s[key].slice();
+      next[i] = !next[i];
+      return { [key]: next };
+    });
+  }
+
+  renderVals() {
+    const { screen, list, sheet, stage, secs, done, subs } = this.state;
+    const subCount = subs.filter(Boolean).length;
+    const mm = Math.floor(secs / 60);
+    const ss = String(secs % 60).padStart(2, '0');
+    return {
+      deviceW: 390, deviceH: 844,
+      isHome: screen === 'home', isTask: screen === 'task',
+      isAgenda: screen === 'agenda', isIdeas: screen === 'ideas', isSearch: screen === 'search',
+      listFilled: list === 'filled', listEmpty: list === 'empty', listLoading: list === 'loading',
+      sheetOpen: sheet,
+      accountOpen: this.state.account === true,
+      openAccount: () => this.setState({ account: true }),
+      closeAccount: () => this.setState({ account: false }),
+      stageIdle: sheet && stage === 'idle',
+      stageListen: sheet && stage === 'listening',
+      stageTrans: sheet && stage === 'transcribing',
+      stageDone: sheet && stage === 'done',
+      timer: mm + ':' + ss,
+      done0: done[0], done1: done[1],
+      sub0: subs[0], sub1: subs[1], sub2: subs[2],
+      nsub0: !subs[0], nsub1: !subs[1], nsub2: !subs[2],
+      subCount, subPct: Math.round((subCount / 3) * 100),
+      goHome: () => this.setState({ screen: 'home', sheet: false }),
+      goTask: () => this.setState({ screen: 'task', sheet: false }),
+      goAgenda: () => this.setState({ screen: 'agenda', sheet: false }),
+      goIdeas: () => this.setState({ screen: 'ideas', sheet: false }),
+      goSearch: () => this.setState({ screen: 'search', sheet: false }),
+      openSheet: () => { this.clear(); this.setState({ sheet: true, stage: 'idle' }); },
+      closeSheet: () => { this.clear(); this.setState({ sheet: false, stage: 'idle' }); },
+      startListen: () => this.runDemo(),
+      stopListen: () => this.stop(),
+      resetDemo: () => this.runDemo(),
+      t0: () => this.toggle('done', 0),
+      t1: () => this.toggle('done', 1),
+      s0: () => this.toggle('subs', 0),
+      s1: () => this.toggle('subs', 1),
+      s2: () => this.toggle('subs', 2),
+      setFilled: () => this.setState({ list: 'filled' }),
+      setEmpty: () => this.setState({ list: 'empty' }),
+      setLoading: () => this.setState({ list: 'loading' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

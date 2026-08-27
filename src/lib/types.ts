@@ -96,11 +96,33 @@ export type DraftItem = {
    * sinon le PUT suivant du sync les réécrit et l'occurrence réapparaît.
    */
   exdates?: string[];
+  /**
+   * Occurrences DÉCALÉES d'une série récurrente, adoptées depuis le
+   * calendrier quand Aramis déplace une occurrence dans l'app Calendrier
+   * (VEVENT override avec `RECURRENCE-ID` dans le même ICS que le master).
+   *
+   * Clé = `RECURRENCE-ID` (UTC RFC 5545, `YYYYMMDDTHHMMSSZ`) — l'occurrence
+   * d'origine ; valeur = le nouveau DTSTART (UTC RFC 5545). Sans ce champ,
+   * Brief ne voit que le master (premier VEVENT) et considère la série
+   * « identique » → l'édition n'est jamais adoptée, l'agenda affiche
+   * l'ancienne heure, les rappels sonnent à l'ancienne heure, et un PUT
+   * réécrirait l'ICS SANS les overrides (perte définitive). Constaté en
+   * prod le 2026-08-20 (Séance push, Poster/Reposter 10).
+   */
+  overrides?: Record<string, string>;
   notes?: string;
   /** Sous-tâches d'un item. */
   subtasks?: SubTask[];
+  /** Tags / étiquettes (IDs de Tag). */
+  tags?: string[];
+  /** IDs d'items prédécesseurs — cette tâche ne peut pas démarrer avant. */
+  dependsOn?: string[];
+  /** ID de colonne Kanban (null = non placée). */
+  columnId?: string | null;
   /** Fil d'origine vocal — la dictée d'où provient cet item. */
   audioOrigin?: AudioOrigin;
+  /** Identifiant de l'audio persisté (`audio_…`) — pour rejouer l'enregistrement. */
+  audioId?: string;
   /** Statut : "active" par défaut. "idea" pour la boîte à idées. */
   status?: ItemStatus;
 };
@@ -111,6 +133,24 @@ export type Item = DraftItem & {
   /** Horodatage du dernier rappel envoyé — empêche le double envoi. */
   remindedAt: string | null;
   doneAt: string | null;
+  /**
+   * Instant (ISO) de l'occurrence qu'une COCHE UTILISATEUR vient de terminer
+   * sur une récurrence — posé UNIQUEMENT par `completionPatch` (jamais par le
+   * cron des rappels, qui avance aussi `due` mais pour une tout autre raison :
+   * planifier le prochain envoi, pas marquer quoi que ce soit comme fait).
+   *
+   * Distinguer les deux est le seul rôle de ce champ. `due` avance dans les
+   * deux cas et ne permet donc pas de savoir si l'occurrence du jour reste à
+   * faire. Sans lui, `buildDayAgenda` a dû choisir entre deux bugs
+   * symétriques : cacher toute occurrence antérieure à `due` (coche « Séance
+   * push » enfin respectée, MAIS « Reposter 10 articles »/« Poster 10
+   * articles » — qui recouraient à `due` uniquement parce que leur rappel
+   * avait déjà sonné, jamais cochés — disparaissaient du jour sans que rien
+   * ne soit fait) ; ou tout montrer (l'inverse). Constaté en prod le
+   * 2026-08-20. `buildDayAgenda` n'exclut plus qu'une occurrence dont
+   * l'instant correspond EXACTEMENT à ce champ.
+   */
+  lastCompletedOccurrenceAt?: string | null;
   /**
    * Horodatage de mise en file LOCALE, `null` ou absent dès que le serveur a
    * confirmé l'enregistrement.
@@ -138,6 +178,35 @@ export type Item = DraftItem & {
    * la contourner. Écrit uniquement par `src/lib/caldav.ts`.
    */
   caldavSyncedDue?: string | null;
+  /**
+   * DTSTART stable d'une série récurrente CRÉÉE PAR BRIEF (`rrule` posé),
+   * figé au premier PUT réussi et jamais avancé — contrairement à `due`, que
+   * le cron des rappels déplace à chaque envoi. `buildEventIcs` écrit CE
+   * champ comme DTSTART pour une série, jamais `due` : en RFC 5545 aucune
+   * occurrence n'existe avant DTSTART, donc réécrire le DTSTART à chaque
+   * avance de `due` efface du calendrier l'occurrence du jour dès l'envoi de
+   * son rappel — bug du 2026-08-19 (« Aller courir » en double, Reposter/
+   * Poster disparus du jour sur le vrai calendrier alors que Brief les
+   * montrait encore). `null`/absent pour un item non récurrent, ou une série
+   * pas encore synchronisée. Écrit uniquement par `src/lib/caldav.ts`.
+   */
+  seriesAnchor?: string | null;
+  /**
+   * UID de l'événement Apple Calendar dont cet item a été ADOPTÉ — posé
+   * directement dans l'app Calendrier, pas par Brief (décision Aramis du
+   * 2026-08-19 : « adopte tout, on verra à l'usage » — aucun tri fiable
+   * n'existe entre bruit et vraie tâche dans un même calendrier).
+   *
+   * Change tout le sens de la synchro pour CET item : Brief ne le PUT
+   * jamais sous `brief-<id>` (`buildEventIcs` retourne `null`) — l'événement
+   * garde son UID d'origine, que Brief suit et édite à sa place. Cocher
+   * l'item dans Brief SUPPRIME l'événement original (pas de statut
+   * « terminé » côté iCalendar) ; l'événement disparu du calendrier adopte
+   * l'item comme terminé. Écrit uniquement par `src/lib/caldav.ts`.
+   */
+  externalUid?: string | null;
+  /** Le calendrier iCloud où vit l'événement de `externalUid`. */
+  externalCalendar?: string | null;
 };
 
 /** Résultat d'enregistrement, item par item. */
@@ -180,6 +249,52 @@ export type AudioOrigin = {
  * - "archived" : archivée
  */
 export type ItemStatus = "active" | "idea" | "archived";
+
+/**
+ * Une colonne du board Kanban — nom libre, position définie par l'utilisateur.
+ * Comme Trello : l'utilisateur crée, nomme et réordonne ses colonnes.
+ */
+export type KanbanColumn = {
+  id: string;
+  name: string;
+  /** Position dans le board (0 = gauche). */
+  order: number;
+};
+
+/**
+ * Le board Kanban complet — persisté dans `boards.json`.
+ */
+export type KanbanBoard = {
+  columns: KanbanColumn[];
+  updatedAt: string;
+};
+
+/**
+ * Palette de couleurs des tags (style Trello).
+ */
+export const TAG_COLORS = [
+  "yellow",
+  "orange",
+  "red",
+  "purple",
+  "blue",
+  "green",
+  "teal",
+  "brown",
+  "pink",
+  "sky",
+] as const;
+
+export type TagColor = (typeof TAG_COLORS)[number];
+
+/**
+ * Un tag / étiquette — comme Trello. Couleur dans une palette fixe.
+ */
+export type Tag = {
+  id: string;
+  name: string;
+  color: TagColor;
+};
 
 /**
  * Écran de l'app (design system Claude Design v1).

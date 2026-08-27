@@ -15,11 +15,11 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    // Alignés sur --color-page (DESIGN.md). Le manifest n'accepte qu'une seule
-    // valeur : on prend celle du mode clair, le mode sombre étant géré par la
-    // balise theme-color du layout.
-    background_color: "#F5F3F0",
-    theme_color: "#F5F3F0",
+    // Alignés sur --color-bg (globals.css, design system Claude Design v1).
+    // Le manifest n'accepte qu'une seule valeur : on prend celle du mode
+    // clair, le mode sombre étant géré par la balise theme-color du layout.
+    background_color: "#F4F4F2",
+    theme_color: "#F4F4F2",
     lang: "fr",
     dir: "ltr",
     categories: ["productivity", "utilities"],

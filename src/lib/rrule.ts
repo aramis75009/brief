@@ -127,6 +127,71 @@ export function nextOccurrence(start: Date, rrule: string, from: Date = start): 
   return candidate;
 }
 
+/** Une occurrence en moins d'une période complète (`FREQ`×`INTERVAL`) avant `cal`. */
+function stepBack(cal: CalendarDate, rule: ParsedRrule): CalendarDate {
+  if (rule.freq === "DAILY") return shiftDays(cal, -rule.interval);
+  if (rule.freq === "WEEKLY") return shiftDays(cal, -7 * rule.interval);
+  if (rule.freq === "MONTHLY") return shiftMonths(cal, -rule.interval);
+  return shiftMonths(cal, -12 * rule.interval);
+}
+
+/**
+ * Toutes les occurrences d'une règle dans `[rangeStart, rangeEnd)`, heure de
+ * départ conservée. Sert à l'affichage (semaine de l'agenda) : contrairement
+ * à `nextOccurrence`, qui avance une seule fois pour le planificateur de
+ * rappels, une vue calendrier doit montrer TOUTES les occurrences de la
+ * fenêtre visible — une série hebdomadaire du lundi et jeudi doit apparaître
+ * les DEUX jours dans la même semaine, pas une seule fois.
+ *
+ * ⚠️ `start` n'est PAS le début de la série : pour un item Brief récurrent,
+ * c'est l'occurrence COURANTE, et `reminders.ts` l'avance dès l'ENVOI du
+ * rappel — pas seulement quand la tâche est cochée. `start` peut donc déjà
+ * pointer après la fenêtre demandée (on regarde un jour dont le rappel est
+ * déjà parti). On recule d'abord jusqu'à couvrir `rangeStart`, PUIS on avance
+ * — sinon une série dont l'ancre a sauté au samedi ne montrerait plus jamais
+ * son occurrence du mercredi qu'on est justement en train de regarder.
+ *
+ * `start` (ou son ancre reculée) compte même pour une règle non comprise ou
+ * déjà expirée (`UNTIL` dépassé) : mieux vaut montrer l'occurrence telle que
+ * le calendrier la connaît que la faire disparaître sur un doute
+ * d'interprétation RFC 5545 — même principe que `isRealCalendarDate` ailleurs
+ * dans Brief. Bornée : le recul ne dépasse jamais 10 ans, l'avance jamais 60
+ * occurrences — une vue calendrier n'en affiche jamais plus, et ça protège
+ * contre une règle malformée qui boucherait.
+ */
+export function occurrencesInRange(start: Date, rrule: string, rangeStart: Date, rangeEnd: Date): Date[] {
+  const rule = parseRrule(rrule);
+  if (!rule) return start >= rangeStart && start < rangeEnd ? [start] : [];
+
+  // Dédoublonné par horodatage : `start` et l'ancre reculée ci-dessous
+  // peuvent coïncider (cas simple, comportement historique), et le recul
+  // peut aussi sortir entièrement de la fenêtre pour une période longue
+  // (YEARLY) — `start` reste alors le seul point sûr, on le garde toujours
+  // s'il est dans la fenêtre, indépendamment de ce que le recul trouve.
+  const out = new Map<number, Date>();
+  if (start >= rangeStart && start < rangeEnd) out.set(start.getTime(), start);
+
+  const origin = zonedParts(start);
+  const { hour, minute } = origin;
+  let cal: CalendarDate = { y: origin.y, m: origin.m, d: origin.d };
+  let anchor = zonedTime(cal.y, cal.m, cal.d, hour, minute);
+
+  for (let i = 0; i < 520 && anchor > rangeStart; i++) {
+    cal = stepBack(cal, rule);
+    anchor = zonedTime(cal.y, cal.m, cal.d, hour, minute);
+  }
+  if (anchor >= rangeStart && anchor < rangeEnd) out.set(anchor.getTime(), anchor);
+
+  let candidate = anchor;
+  for (let i = 0; i < 60; i++) {
+    const next = nextOccurrence(anchor, rrule, candidate);
+    if (!next || next >= rangeEnd) break;
+    if (next >= rangeStart) out.set(next.getTime(), next);
+    candidate = next;
+  }
+  return [...out.keys()].sort((a, b) => a - b).map((t) => out.get(t)!);
+}
+
 /** Décrit la règle en français, pour l'affichage. `null` si non comprise. */
 export function describeRrule(rrule: string): string | null {
   const rule = parseRrule(rrule);

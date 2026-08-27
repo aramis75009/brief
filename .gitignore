@@ -52,3 +52,13 @@ Thumbs.db
 
 # Données serveur locales (abonnements push, avant Postgres)
 .data/
+
+# --- Coordination multi-agents -------------------------------------------------
+# Artéfacts locaux de preview et sauvegardes : jamais commités, jamais écrasés
+backups/
+public/preview-*/
+*.tar.gz
+
+# Worktrees git locaux (superpowers:using-git-worktrees, subagent-driven-development)
+.worktrees/
+.superpowers/

@@ -33,6 +33,26 @@
   /* Sémantique */
   --color-danger: #E23A2E;
 
+  /* Couleurs de projet — alignées sur les couleurs des calendriers Apple
+   * d'Aramis (vérifiées le 22/08/2026 dans l'app Calendrier iPhone).
+   * Ordre = tint 1-6, correspond à l'ordre des projets dans projects.ts. */
+  --color-p1: #007AFF;        /* Frip & Trend — bleu (calendrier Vinted Frip&Trend) */
+  --color-p1-ink: #003E80;
+  --color-p2: #FF9500;        /* My Flip — orange (calendrier My Flip) */
+  --color-p2-ink: #7A4400;
+  --color-p3: #FF3B30;        /* Web@cadémie — rouge (calendrier Web@académie) */
+  --color-p3-ink: #7A1A14;
+  --color-p4: #AF52DE;        /* Perso — violet (calendrier Personnel) */
+  --color-p4-ink: #4A1A6B;
+  --color-p5: #FFCC00;        /* Sport — jaune (calendrier Sport) */
+  --color-p5-ink: #6B5A00;
+  --color-p6: #34C759;        /* IA — vert (calendrier IA) */
+  --color-p6-ink: #0A6B2E;
+  --color-p7: #FF9500;        /* Permis — orange (calendrier Permis) */
+  --color-p7-ink: #7A4400;
+  --color-p8: #A2845E;        /* Fake — marron (calendrier Fake) */
+  --color-p8-ink: #5C4A2E;
+
   /* Rayons — le rayon grandit avec l'élément. */
   --radius-8: 8px;
   --radius-12: 12px;
@@ -121,6 +141,10 @@
   from { transform: translateY(30px); opacity: .6; }
   to { transform: none; opacity: 1; }
 }
+@keyframes chatdot {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
 
 /* ---------------------------------------------------------------------------
  * Safe areas — classes écrites à la main VOLONTAIREMENT.
@@ -166,6 +190,13 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
+    /* Élimine le délai de 300ms sur les éléments tactiles anciens et
+     * permet au navigateur de commencer le scroll immédiatement. */
+    touch-action: manipulation;
+    /* Optimisation GPU : indique au navigateur que les transformations et
+     * opacités seront animées, pour qu'il promeut les couches sans
+     * repaint du contenu sous-jacent. */
+    text-rendering: optimizeLegibility;
   }
 
   input,
@@ -208,4 +239,16 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* --------------------------------------------------------------------------- *
+ * Optimisations de scroll fluide sur iPhone.
+ *
+ * `.perf-contain` : `contain: layout style` isole le sous-arbre du reste de
+ * la page — le navigateur sait qu'un repaint à l'intérieur d'une carte
+ * n'invalide pas ses voisines. On retire `paint` et `content-visibility`
+ * qui causaient un flou de rendu sub-pixel sur iOS Safari.
+ * ------------------------------------------------------------------------ */
+.perf-contain {
+  contain: layout style;
 }

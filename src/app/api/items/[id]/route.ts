@@ -1,7 +1,8 @@
+import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
-import { requirePin } from "@/lib/guard";
+import { requireSession } from "@/lib/guard";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
-import { deleteItem, patchItem, readProjects } from "@/lib/store";
+import { deleteItem, patchItem, readItems, readProjects } from "@/lib/store";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
 
 /**
@@ -21,7 +22,7 @@ import type { ItemKind, Item, Priority, Project } from "@/lib/types";
  * Une date illisible devient « pas d'échéance », une priorité inconnue devient 4,
  * un projet inconnu bascule sur le repli : jamais de données bricolées.
  */
-function sanitizePatch(
+export function sanitizePatch(
   input: unknown,
   knownProjects: Set<string>,
   fallback: string,
@@ -35,6 +36,14 @@ function sanitizePatch(
   // inatteignable et `PATCH {"title":"   "}` répondrait 200 sans rien changer.
   if (typeof v.title === "string") out.title = v.title.trim();
   if (v.kind === "event" || v.kind === "task") out.kind = v.kind as ItemKind;
+  // Le type "idée" est un statut, pas un `kind` — voir `itemType()`. Sans
+  // cette branche, `updateItem(id, { status: "idea" })` (bouton « Convertir
+  // en tâche »/« Archiver » de l'écran Idées) était silencieusement vidé par
+  // ce sanitizer : la conversion ne persistait jamais côté serveur.
+  if (v.status === "active" || v.status === "idea" || v.status === "archived") {
+    out.status = v.status;
+  }
+  if (typeof v.notes === "string") out.notes = v.notes;
   if (typeof v.projectId === "string") {
     out.projectId = knownProjects.has(v.projectId) ? v.projectId : fallback;
   }
@@ -82,6 +91,52 @@ function sanitizePatch(
     );
     out.exdates = clean.length > 0 ? clean : undefined;
   }
+  // Occurrences décalées (adoptées depuis le calendrier) : objet
+  // `RECURRENCE-ID` → nouveau DTSTART (UTC RFC 5545). `null` = effacement
+  // explicite ; ABSENT = on ne touche pas (même règle que `exdates`).
+  if (v.overrides === null) {
+    out.overrides = undefined;
+  } else if (typeof v.overrides === "object" && v.overrides !== null && !Array.isArray(v.overrides)) {
+    const clean: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v.overrides as Record<string, unknown>)) {
+      if (/^\d{8}T\d{6}Z$/.test(k) && typeof val === "string" && /^\d{8}T\d{6}Z$/.test(val)) {
+        clean[k] = val;
+      }
+    }
+    out.overrides = Object.keys(clean).length > 0 ? clean : undefined;
+  }
+  // Sous-tâches : tableau de { id, title, done }.
+  if (Array.isArray(v.subtasks)) {
+    out.subtasks = v.subtasks
+      .filter((s): s is Record<string, unknown> => typeof s === "object" && s !== null)
+      .map((s) => ({
+        id: String(s.id ?? ""),
+        title: String(s.title ?? "").trim().slice(0, 200),
+        done: !!s.done,
+      }))
+      .filter((s) => s.id && s.title)
+      .slice(0, 50);
+  }
+  // Tags : tableau de strings (IDs de tags), max 10.
+  if (Array.isArray(v.tags)) {
+    out.tags = v.tags
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim())
+      .slice(0, 10);
+  }
+  // Dépendances : tableau de strings (IDs d'items), max 20.
+  if (Array.isArray(v.dependsOn)) {
+    out.dependsOn = v.dependsOn
+      .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+      .map((d) => d.trim())
+      .slice(0, 20);
+  }
+  // Colonne Kanban : string (ID de colonne) ou null (non placée).
+  if (v.columnId === null) {
+    out.columnId = null;
+  } else if (typeof v.columnId === "string" && v.columnId.trim()) {
+    out.columnId = v.columnId.trim();
+  }
   return out;
 }
 
@@ -89,7 +144,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;
@@ -153,7 +208,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = requirePin(req);
+  const denied = await requireSession();
   if (denied) return denied;
 
   const { id } = await params;
@@ -162,6 +217,18 @@ export async function DELETE(
   }
 
   try {
+    // Un item ADOPTÉ (`externalUid` — posé directement dans l'app Calendrier,
+    // décision Aramis du 2026-08-19) garde son événement source sur iCloud
+    // même après suppression côté Brief. Sans mémoire de cette suppression,
+    // le prochain passage CalDAV ne voit qu'un événement sans item Brief —
+    // indiscernable d'un événement jamais adopté — et RECRÉE l'item avec le
+    // même id déterministe. Lu AVANT `deleteItem` : après, l'item n'existe
+    // plus nulle part pour retrouver son `externalUid`.
+    const before = (await readItems()).find((i) => i.id === id);
+    if (before?.externalUid) {
+      await recordDeletedExternalUid(before.externalUid);
+    }
+
     const deleted = await deleteItem(id);
     if (!deleted) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
