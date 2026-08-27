@@ -265,7 +265,7 @@ describe("weekOccurrenceRows", () => {
     expect(rows[0].key).toBe("simple");
   });
 
-  it("exclut les items faits, idées et archivés", () => {
+  it("exclut les idées et archivés, garde une ligne pour un item fait (pour le filtre « Faites »)", () => {
     const now = new Date("2026-08-27T10:00:00+02:00");
     const items = [
       item({ id: "done", due: "2026-08-28T09:00:00+02:00", doneAt: "2026-08-27T10:00:00+02:00" }),
@@ -273,7 +273,51 @@ describe("weekOccurrenceRows", () => {
       item({ id: "arch", due: "2026-08-28T09:00:00+02:00", status: "archived" }),
       item({ id: "ok", due: "2026-08-28T09:00:00+02:00" }),
     ];
-    expect(weekOccurrenceRows(items, now).map((r) => r.key)).toEqual(["ok"]);
+    // `weekOccurrenceRows` garde l'item fait (une ligne à son due) : c'est
+    // `filterRowsByState` qui l'écarte du filtre par défaut et le garde pour
+    // « Faites ». L'exclure ici rendait « Faites » toujours vide (bug 27/08).
+    expect(weekOccurrenceRows(items, now).map((r) => r.key)).toEqual(["done", "ok"]);
+  });
+
+  it("une série faite garde UNE ligne à son due, sans occurrences résiduelles", () => {
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({
+        id: "serie-faite",
+        due: "2026-08-28T16:00:00.000Z",
+        rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=FR,SA,SU",
+        seriesAnchor: "2026-08-21T16:00:00Z",
+        doneAt: "2026-08-27T10:00:00+02:00",
+      }),
+    ];
+    const rows = weekOccurrenceRows(items, now);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe("serie-faite");
+    expect(rows[0].due).toBe("2026-08-28T16:00:00.000Z");
+  });
+
+  it("trie les lignes par date d'occurrence croissante, toutes séries confondues", () => {
+    // Cas de la capture du 27/08 (écran Tâches & RDV, groupe Sport) : les
+    // items arrivent dans l'ordre de `items.json` (Aller courir sam 29 en
+    // premier), mais l'affichage doit être chronologique : jeu 27, ven 28,
+    // sam 29.
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({
+        id: "courir",
+        due: "2026-08-29T16:00:00.000Z",
+        rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=SA",
+        seriesAnchor: "2026-08-22T16:00:00Z",
+      }),
+      item({ id: "push", due: "2026-08-27T16:00:00.000Z" }),
+      item({ id: "pull", due: "2026-08-28T16:00:00.000Z" }),
+    ];
+    const rows = weekOccurrenceRows(items, now);
+    expect(rows.map((r) => r.due)).toEqual([
+      "2026-08-27T16:00:00.000Z",
+      "2026-08-28T16:00:00.000Z",
+      "2026-08-29T16:00:00.000Z",
+    ]);
   });
 });
 

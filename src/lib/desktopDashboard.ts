@@ -164,8 +164,15 @@ export function weekOccurrenceRows(items: Item[], now: Date): OccurrenceRow[] {
   const rows: OccurrenceRow[] = [];
   for (const it of items) {
     if (it.status === "idea" || it.status === "archived") continue;
-    if (it.doneAt) continue;
     if (!it.due) continue;
+    // Les items faits restent dans `rows` : `filterRowsByState` les écarte du
+    // filtre par défaut et les garde pour « Faites » (les exclure ici rendait
+    // « Faites » toujours vide — bug 27/08). Une série faite garde UNE ligne à
+    // son `due` courant, sans développer d'occurrences résiduelles.
+    if (it.doneAt) {
+      rows.push({ item: it, due: it.due, key: it.id });
+      continue;
+    }
     const due = new Date(it.due);
     if (Number.isNaN(due.getTime())) continue;
 
@@ -196,7 +203,10 @@ export function weekOccurrenceRows(items: Item[], now: Date): OccurrenceRow[] {
       rows.push({ item: it, due: it.due, key: it.id });
     }
   }
-  return rows;
+  // Tri chronologique : une liste de RDV se lit par date croissante, pas par
+  // ordre d'insertion dans items.json (capture Aramis 27/08 — « Aller courir »
+  // samedi affiché avant « Séance push » jeudi).
+  return rows.sort((a, b) => a.due.localeCompare(b.due));
 }
 
 /** Tâches (jamais les RDV) filtrées pour l'écran Tâches du desktop. */

@@ -82,8 +82,8 @@ export function DesktopTasks({
   const rows = useMemo(() => weekOccurrenceRows(kindFiltered, now), [kindFiltered, now]);
   const filtered = useMemo(() => filterRowsByState(rows, filter, now), [rows, filter, now]);
   const groups = useMemo(() => {
-    const byProject = new Map<string, typeof rows>();
-    for (const row of rows) {
+    const byProject = new Map<string, typeof filtered>();
+    for (const row of filtered) {
       const list = byProject.get(row.item.projectId) ?? [];
       list.push(row);
       byProject.set(row.item.projectId, list);
@@ -91,7 +91,7 @@ export function DesktopTasks({
     return projects
       .map((project) => ({ project, rows: byProject.get(project.id) ?? [] }))
       .filter((g) => g.rows.length > 0);
-  }, [rows, projects]);
+  }, [filtered, projects]);
   const filterCounts = useMemo(
     () => Object.fromEntries(TASK_FILTERS.map((f) => [f.key, filterRowsByState(rows, f.key, now).length])),
     [rows, now],
