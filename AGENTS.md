@@ -2,7 +2,8 @@
 
 Organiseur personnel piloté à la voix. Tu parles, Whisper transcrit, un LLM
 découpe la note en tâches et rendez-vous datés, tu relis, Brief les garde. Les
-rappels partent en Web Push depuis le serveur.
+rappels partent en Web Push depuis le serveur. L'app est **mobile ET desktop**
+(PWA installée à l'écran d'accueil iOS + site responsive ≥ 1024 px).
 
 **Ce fichier est lu par Claude Code, par Hermes et par Codex.** C'est le seul
 que tous chargent. Une règle qui n'est pas ici n'est appliquée par personne.
@@ -14,14 +15,14 @@ que tous chargent. Une règle qui n'est pas ici n'est appliquée par personne.
 | `AGENTS.md` | Ce fichier. Les règles qui ne changent pas. |
 | `TODOS.md` | Ce qui est différé. Rien de différé ne vit ailleurs. |
 | `README.md` | Fonctionnement, routes, déploiement, variables d'environnement. |
+| `DESIGN.md` | **Tokens et composants du design system v1 (mobile + desktop), écrit à partir de `globals.css` + `src/components/`.** |
 | `CLAUDE.md` / `HERMES.md` | Le spécifique à ton agent. |
 | `docs/handoffs/` | Les passations passées, à la demande. |
 
 > **Design** : la source de vérité visuelle est le **design system Claude
-> Design v1** (`/opt/data/brief-design-claude/Brief Design System.dc.html`,
-> implémenté dans `globals.css` + `src/components/`). L'ancien `DESIGN.md`
-> (système corail/General Sans) a été **supprimé le 2026-08-20** — ne plus
-> jamais s'y référer (voir `DECISIONS.md`).
+> Design v1** (`docs/design-system-ref.dc.html` = prototype iOS, `DESIGN.md` =
+> tokens + composants actuels mobile + desktop). L'ancien système corail /
+> General Sans a été abandonné le 2026-08-20 — ne pas le ressusciter.
 
 ---
 
@@ -42,19 +43,20 @@ projets.
 
 | | |
 |---|---|
-| Stockage | fichiers JSON, écriture atomique (`temp` + `rename`), file d'écritures sérialisée — `src/lib/store.ts`. Chemin par `BRIEF_DATA_DIR`. |
-| Rappels | conteneur `cron` → `/api/cron/reminders` toutes les 60 s → Web Push — `src/lib/reminders.ts`, `src/lib/webpush.ts`. |
-| Hébergement | VPS Hostinger, `docker-compose.yml` (app + cron + volume `brief-data`), sauvegarde par `deploy/backup.sh`. |
-| Client | PWA installée sur iPhone. |
-| Stack | Next.js 16 (App Router), React 19, Tailwind v4, Vitest. |
+| **Stockage** | fichiers JSON, écriture atomique (`temp` + `rename`), file d'écritures sérialisée — `src/lib/store.ts`. Chemin par `BRIEF_DATA_DIR`. |
+| **Rappels** | conteneur `cron` → `/api/cron/reminders` toutes les 60 s → Web Push — `src/lib/reminders.ts`, `src/lib/webpush.ts`. |
+| **Synchro calendrier** | Bidirectionnelle **CalDAV ↔ Apple Calendrier** (source de vérité pour horaires et récurrences) + lecture des éditions faites dans Apple — `src/lib/caldav.ts`, `/api/cron/caldav-sync`. Latence ~15 min. |
+| **Hébergement** | VPS Hostinger, `docker-compose.yml` (app + cron + volume `brief-data`), sauvegarde par `deploy/backup.sh`. |
+| **Client** | PWA iPhone installée sur l'écran d'accueil + site desktop responsive. |
+| **Stack** | Next.js 16 (App Router), React 19, Tailwind v4, Vitest, Supabase Auth (email + mot de passe). |
 
-### ⚠️ La production tourne sur `feat/ui-redesign-claude`, pas sur `main`
+### ⚠️ La branche de production — lis `status.sh`, ne suppose pas
 
-Le VPS (`/docker/brief`) est branché sur **`feat/ui-redesign-claude`** depuis
-le 2026-08-19. `main` est en retard ; l'ancienne branche
-`feat/task-completion` est obsolète. **Ne jamais supposer la branche de prod
-d'après sa mémoire** — elle a changé deux fois en une semaine. Vérifie avec
-`bash scripts/coord/status.sh`, qui lit la branche réelle du VPS.
+La prod tourne sur `/docker/brief` (VPS) et est servie par Docker. La branche
+de production **a changé plusieurs fois en août** — la seule méthode fiable
+est : `bash scripts/coord/status.sh`. Ce script lit la branche **réelle** du
+VPS et la compare à `origin`. Ne déduis jamais la branche de prod de ta
+mémoire ou d'un vieux doc — vérifie en live.
 
 **Multi-agents** : ce projet est travaillé par Claude Code (Mac d'Aramis) et
 Hermes Agent (VPS) en parallèle. Avant de coder, lis
@@ -69,23 +71,31 @@ la fois ; GitHub est la vérité centrale.
 **Aucun de ces points ne lève d'erreur quand on le viole.** C'est pour ça
 qu'ils sont écrits.
 
-### Sécurité
+### Sécurité — Supabase Auth (email + mot de passe), pas de PIN
 
-**Toute route sous `/api/` commence par la garde PIN.** Sans exception :
+**Toute route sous `/api/` commence par la garde de session Supabase.** Sans
+exception :
 
 ```ts
-const denied = requirePin(req);
+const denied = await requireSession();
 if (denied) return denied;
 ```
 
 L'URL de déploiement est publique ; `src/lib/guard.ts` est la seule barrière.
-L'écran PIN et la mémorisation locale (localStorage) ne sont que de l'UX, ils ne
-protègent rien — depuis le 2026-08-17, le code est saisi une fois par appareil
-puis mémorisé (`DECISIONS.md`).
+`requireSession()` vérifie le JWT Supabase **localement** (clé publique ES256 ,
+pas d'appel réseau). Le rafraîchissement du jeton, quand nécessaire, est géré
+par `src/proxy.ts` (middleware) avant que la route ne s'exécute.
 
-`/api/cron/reminders` et `/api/capture` portent un **jeton machine**, pas le
-PIN : un secret déposé dans une crontab ou un raccourci iOS ne doit pas ouvrir
-la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
+**L'ancien mécanisme PIN (`BRIEF_PIN`, `x-brief-pin`, `requirePin()`) est
+supprimé** depuis le 2026-08-26. Les commentaires et snippets qui le citent
+dans le code sont obsolètes — à signaler pour nettoyage (voir leçon du
+2026-08-19 sur les docs qui dérivent du code).
+
+`/api/cron/reminders`, `/api/capture` et `/api/digest` portent un **jeton
+machine** (Bearer), pas la session utilisateur : un secret déposé dans une
+crontab ou un raccourci iOS ne doit pas ouvrir la même porte que le code
+qu'on tape, et doit pouvoir être révoqué seul. Chaque jeton est le sien :
+pour l'un, révoquer n'éteint pas les autres. Voir `src/lib/cron-auth.ts`.
 
 ### Données et dates
 
@@ -112,8 +122,9 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
 - **Aucun calcul de date ne passe par les méthodes locales de `Date`.** Ni
   `setHours`, ni `getDay`, ni `setDate`, ni `getMonth` : elles lisent le fuseau
   de la **machine**, et la production tourne en UTC. Tout passe par
-  `src/lib/zoned.ts`, qui travaille dans `Europe/Paris`. Quatre fichiers ont dû
-  être corrigés le 2026-08-14 pour cette raison, dont trois sans aucun test.
+  `src/lib/zoned.ts`, qui travaille dans `Europe/Paris`. Quatre fichiers ont
+  dû être corrigés le 2026-08-14 pour cette raison, dont trois sans aucun
+  test.
 - **L'`id` d'un item est généré avant le premier envoi et réutilisé.** Un
   second envoi écrase au lieu de dupliquer : double-clic et rejeu sont
   inoffensifs.
@@ -130,129 +141,85 @@ la même porte que le code qu'on tape, et doit pouvoir être révoqué seul.
   notification programmée à une PWA — ni Notification Triggers, ni Background
   Sync, ni Periodic Background Sync, ni Background Fetch.
 
-### Interface
+### Interface — mobile et desktop
 
-- **Tailwind v4 ne compile pas les utilitaires arbitraires contenant `env()`.**
-  Les safe areas passent par `.safe-top` / `.safe-bottom` dans `globals.css`.
-- **Le reset CSS doit rester dans `@layer base`.** Hors layer, il l'emporte sur
-  les utilitaires Tailwind — c'est ce qui affichait un bouton noir sur noir.
+- **Tailwind v4 ne compile pas les utilitaires arbitraires contenant
+  `env()`.** Les safe areas passent par `.safe-top` / `.safe-bottom` dans
+  `globals.css`.
+- **Le reset CSS doit rester dans `@layer base`.** Hors layer, il l'emporte
+  sur les utilitaires Tailwind — c'est ce qui affichait un bouton noir sur
+  noir.
 - **iOS ne notifie que les PWA installées à l'écran d'accueil.** En onglet
   Safari, l'abonnement peut réussir sans qu'aucune notification n'arrive.
-- Le design system Claude Design v1 est la source de vérité visuelle — l'ancien
-  `DESIGN.md` est supprimé (20/08), ne plus s'y référer.
+- **La bascule mobile ↔ desktop se fait à `1024 px`** via `useIsDesktop()` :
+  les composants `src/components/desktop/` (Shell, Header, Calendar, Kanban,
+  TaskDetail, Dashboard, Ideas, Tasks, Settings, Command palette, Dependency
+  graph) ne s'affichent qu'en vue desktop ; les composants mobiles restent
+  inchangés.
+- Le design system Claude Design v1 est la source de vérité visuelle : les
+  tokens viennent de `docs/design-system-ref.dc.html` (iOS) et les recettes
+  du desktop (Kanban, calendar lanes, fiche) sont dans `DESIGN.md`.
 
 ### Déploiement
 
-- **`--env-file .env.production` n'est pas facultatif.** `env_file:` injecte des
-  variables dans un conteneur au démarrage ; il n'alimente pas l'interpolation
-  `${...}` du `docker-compose.yml`.
+- **`--env-file .env.production` n'est pas facultatif.** `env_file:` injecte
+  des variables dans un conteneur au démarrage ; il n'alimente pas
+  l'interpolation `${...}` du `docker-compose.yml`.
 - **Les variables `NEXT_PUBLIC_*` doivent être passées AU BUILD.** Le
-  compilateur les inline dans le bundle. Absente au build, la clé VAPID publique
-  vaut `undefined` dans le navigateur et l'abonnement échoue sans que le serveur
-  ne voie rien.
-- **Traefik tourne en `exposedbydefault=false`.** Sans les labels, le conteneur
-  démarre et reste invisible depuis Internet : aucune erreur, juste un 404.
-- **Le volume `brief-data` reste l'unique copie de l'état complet des items**
-  (titre, projet, priorité, fait/non-fait, rappels). Le calendrier Apple ne
-  reflète que le **planning** (horaires/récurrences) des items datés — c'est
-  une vue autoritaire sur les horaires (décision 18/08), pas l'état complet.
-  Aucun téléphone n'en garde de réplique complète.
+  compilateur les inline dans le bundle. Absente au build, la clé VAPID
+  publique vaut `undefined` dans le navigateur et l'abonnement échoue sans
+  que le serveur ne voie rien. Même chose pour
+  `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+- **Traefik tourne en `exposedbydefault=false`.** Sans les labels, le
+  conteneur démarre et reste invisible depuis Internet : aucune erreur, juste
+  un 404.
 
 ---
 
-## Vérifier avant d'affirmer
-
-**Ne jamais écrire « c'est corrigé » sans avoir lancé la commande qui le prouve
-et montré sa sortie.** Distinguer explicitement ce qui est *vérifié* de ce qui
-est *supposé*.
+## Commandes
 
 ```bash
-npx vitest run          # la suite complète — tourne en UTC, voir ci-dessous
-npx tsc --noEmit        # types
-npx eslint .            # lint
+npm run dev       # développement local (Next dev server, http://localhost:3000)
+npm run build     # build de production (sortie standalone pour Docker)
+npm test          # la suite Vitest complète (374 tests au 2026-08-29)
+npx vitest run    # même chose, sans le script npm
+npx tsc --noEmit  # typecheck strict
+npx eslint .      # lint
 ```
 
-**La suite tourne en UTC, pas dans ton fuseau** — `vitest.config.mts` le force.
-Ce n'est pas un détail de configuration : les conteneurs n'ont pas de `TZ` et
-tournent en UTC, alors que le développement se fait à Paris. Le 2026-08-14, la
-suite était verte sur le Mac et rouge à 7 tests en UTC, et c'était la production
-qui avait raison. **Ne retire pas cette ligne pour « réparer » un test.**
-
-**Ne jamais lancer `npm run build` si un `npm run dev` tourne** : ça corrompt
-`.next`. Utiliser `npx tsc --noEmit`, puis vérifier dans le navigateur.
+**Avant chaque commit : les trois commandes** (`eslint`, `tsc`, `vitest`).
+Un « petit correctif d'UI » n'exempte pas les tests.
 
 ---
 
-## Git
+## Avant de pousser — le réflexe de synchronisation
 
-- **Ne jamais commiter sur `main` directement.** Brancher d'abord.
-- Ne pas commiter ni pousser sans demande explicite d'Aramis.
-- **Lister les remotes avant de pousser** (`git remote -v`).
-- Messages de commit **en anglais**, format `type: sujet` (`feat:`, `fix:`,
-  `chore:`, `docs:`, `deploy:`). Le code, les noms de variables et les messages
-  de commit sont en anglais ; les commentaires, la documentation et l'interface
-  sont en français.
-- **Signer son travail.** Les commits d'agent portent aujourd'hui l'identité
-  d'Aramis et sont indistinguables des siens. En attendant mieux, c'est
-  `HANDOFF.md` qui porte l'attribution — d'où la ligne **Agent** obligatoire.
+```bash
+git fetch origin --prune
+bash scripts/coord/status.sh       # compare GitHub / ta copie / prod VPS
+# lis HANDOFF.md
+# si la prod a avancé, fast-forward AVANT de coder
+```
+
+Règles complètes : [`docs/coordination.md`](docs/coordination.md). **Un agent
+= une branche à la fois. Jamais de `push --force`, `reset --hard` ou `rebase`
+sur une branche partagée sans accord explicite d'Aramis.**
 
 ---
 
 ## Terminer une session — la passation
 
-**Une session n'est pas finie tant que la passation n'est pas écrite.** Ça vaut
-pour une session de dix minutes comme pour une journée.
+**Une tâche n'est pas finie tant que `HANDOFF.md` n'est pas à jour.**
 
-1. **Archiver la passation en place** — déplacer le contenu de `HANDOFF.md`
-   vers `docs/handoffs/AAAA-MM-JJ-sujet-court.md`. Ne jamais l'écraser.
-2. **Écrire la nouvelle** dans `HANDOFF.md`, avec les sept sections ci-dessous.
-3. **Ajouter une ligne** au tableau « Historique des passations », en haut.
-4. **Reporter dans `TODOS.md`** ce qui est différé — `HANDOFF.md` dit *où on en
-   est*, `TODOS.md` dit *ce qu'on n'a pas fait*.
+1. Remplace `HANDOFF.md` par la nouvelle passation (la dernière, pas deux).
+2. Archive l'ancienne dans `docs/handoffs/YYYY-MM-DD-<sujet>.md`.
+3. Remplis : **Agent** (qui tu es, modèle, version), **Branche**, **Base**,
+   **Goal**, **Current state**, **Decisions**, **Blockers**, **Next action**,
+   **Validations** (les trois états : passant / échoué / **non lancé**).
+4. Si un autre agent avait la main, reprends-la explicitement dans la ligne
+   *Agent* : « je reprends la main (passation précédente : X) ».
 
-### Le gabarit
-
-```markdown
-# Passation — AAAA-MM-JJ · <sujet en cinq mots>
-
-| | |
-|---|---|
-| **Agent** | Claude Code / Hermes + modèle / Aramis |
-| **Branche** | <branche> |
-| **Commits** | <sha courts> |
-
-## Goal — l'objectif
-Une phrase. Ce que la session cherchait à obtenir.
-
-## Current state — ce qui a été fait
-Ce qui marche. **Et ce qui n'a pas été fait alors qu'on croyait le faire.**
-
-## Decisions — choix critiques ou irréversibles
-Chaque décision avec son POURQUOI. Sans le pourquoi, la prochaine session la
-re-débat. Ne rien mettre ici qui ne soit ni critique ni irréversible.
-
-## Changed — fichiers et composants
-Tableau fichier → nature du changement. Les chemins exacts.
-
-## Validations — passants / échoués / non lancés
-**Trois états, pas deux.** « Non lancé » est l'information la plus utile de la
-passation : elle dit où regarder en premier quand ça casse.
-Coller la sortie réelle des commandes, pas un résumé.
-
-## Blockers — ce qui bloque
-Ce qui empêche d'avancer, et ce qu'il faudrait pour débloquer. Écrire
-« rien » si rien ne bloque — une section vide se lit comme un oubli.
-
-## Next — la prochaine action
-Concrète et immédiate. Pas « améliorer l'UX » mais « relire la branche X ».
-```
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+Le gabarit exact est dans la section « Terminer une session » de
+`docs/coordination.md`. La section *Validations* est lue par Aramis en premier
+quand quelque chose casse — une validation inventée coûte plus cher qu'un
+aveu.

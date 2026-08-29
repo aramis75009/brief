@@ -59,6 +59,8 @@ rien d'autre.
 6. **Purge code mort** : commentaire PIN dans `src/lib/cron-auth.ts`, comment
    DESIGN.md dans `DesktopHeader.tsx`, suppression de `data/items.json`
    (sample obsolète au format `dueAt`/`completedAt`).
+7. **Absorption** : `docs/audit-incoherences-2026-08-28.md` précédent
+   (non commité) — mon audit actuel le remplace, pas de doublon.
 
 ## Decisions — choix critiques
 
@@ -86,9 +88,9 @@ rien d'autre.
 | `npx vitest run` | ✅ **374 / 374 tests passent** (29 fichiers, 13.7 s) |
 | `bash scripts/coord/status.sh` | ✅ sortie cohérente, dynamique, plus de hardcoded `feat/ui-redesign-claude` |
 
-Non testé : comportement runtime de l'app (un ménage de doc ne change pas le
-code — tests Vitest suffisent), le déploiement prod (reporté, voir « Next
-steps »).
+Non testé : comportement runtime de l'app (un ménage de doc ne change pas
+le code — tests Vitest suffisent), le déploiement prod (reporté, voir
+« Next steps »).
 
 ## Next steps
 
@@ -102,8 +104,8 @@ steps »).
    origin main && docker compose --env-file .env.production up -d --build'
    ```
 3. **Purger les branches mergées** (locales + origin) après validation du
-   merge : 11 branches locales sont mergées dans `main` (voir cette
-   passation archivée).
+   merge : 11 branches locales sont mergées dans `main` (liste dans
+   `docs/handoffs/2026-08-29-grand-menage-repo.md`).
 4. **Landing SaaS multi-user** : `docs/landing/multi-user-v1.html` reste en
    v1 (voir `docs/landing/README.md` / `TODOS.md`). Prix à trancher avec
    Aramis, CTA à brancher sur le futur signup.

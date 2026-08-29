@@ -2,8 +2,8 @@
 
 /**
  * Bandeau desktop — marque, nav horizontale, ⌘K, cloche, avatar, Dicter.
- * Prolonge les tokens Claude Design v1 (DESIGN.md) ; ne réinvente aucune
- * couleur, aucun rayon.
+ * Prolonge les tokens du design system v1 (voir `DESIGN.md` à la racine) ;
+ * ne réinvente aucune couleur, aucun rayon.
  */
 
 import { AccountAvatar } from "../AccountAvatar";

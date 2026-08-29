@@ -3,11 +3,12 @@ import "server-only";
 /**
  * Garde des routes déclenchées par une machine.
  *
- * Le cron et le raccourci iOS ne peuvent pas saisir le PIN de l'app : ils
- * portent un secret dédié. C'est délibérément un secret DIFFÉRENT de
- * `BRIEF_PIN` — un secret stocké en clair dans un raccourci iOS ou dans une
- * crontab ne doit pas ouvrir la même porte que le code que tu tapes.
- * Le révoquer n'oblige alors pas à changer le code de l'app.
+ * Le cron et le raccourci iOS ne peuvent pas s'authentifier comme un humain
+ * (pas de navigation vers /auth/login) : ils portent un secret dédié, passé
+ * en Bearer. C'est délibérément un secret DIFFÉRENT de la session Supabase
+ * Auth — un secret stocké en clair dans un raccourci iOS ou une crontab ne
+ * doit pas ouvrir la même porte que la session utilisateur, et doit pouvoir
+ * être révoqué seul sans invalider les sessions en cours.
  */
 
 function safeEqual(a: string, b: string): boolean {

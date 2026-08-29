@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brief — Ta journée, dictée en une phrase.</title>
+<meta name="description" content="Brief écoute ce que tu as en tête et le transforme en tâches, rendez-vous et idées datés. Crée ton compte, ton Brief est à toi.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F4F2;
+    --surface:#FFFFFF;
+    --ink:#101010;
+    --ink-muted:#8A8A84;
+    --task-100:#CFE0FF; --task-700:#1F4FA8;
+    --meet-100:#CBE9D6; --meet-700:#1F6B45;
+    --idea-100:#FBE2AE; --idea-700:#8A5A10;
+    --danger:#E23A2E;
+    --hairline:rgba(16,16,16,.08);
+    --r-card:20px; --r-tile:24px; --r-pill:999px;
+    --shadow-card:0 6px 20px rgba(16,16,16,.07);
+    --shadow-float:0 10px 28px rgba(16,16,16,.1);
+    --gutter:20px;
+    --maxw:1120px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *,*::before,*::after{animation:none!important;transition:none!important}
+  }
+  body{
+    font-family:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    font-size:15px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    text-wrap:pretty;
+  }
+  ::selection{background:var(--task-100)}
+  a{color:inherit;text-decoration:none}
+  :focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:6px}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 var(--gutter)}
+
+  /* ---------- type ---------- */
+  .mono{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted)}
+  h1{font-size:clamp(38px,6vw,58px);line-height:1.04;font-weight:800;letter-spacing:-.035em}
+  h2{font-size:clamp(26px,3.4vw,34px);line-height:1.12;font-weight:800;letter-spacing:-.025em}
+  h3{font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .lede{font-size:17px;color:var(--ink-muted);font-weight:500;max-width:56ch}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    height:48px;padding:0 24px;border-radius:var(--r-pill);
+    font-weight:700;font-size:15px;border:1px solid transparent;
+    cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,background .15s ease;
+  }
+  .btn:active{transform:scale(.97)}
+  .btn-ink{background:var(--ink);color:#fff;box-shadow:0 8px 20px rgba(16,16,16,.24)}
+  .btn-ink:hover{box-shadow:0 10px 26px rgba(16,16,16,.32);transform:translateY(-1px)}
+  .btn-ghost{background:transparent;border-color:var(--hairline)}
+  .btn-ghost:hover{background:rgba(16,16,16,.05)}
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(244,244,242,.86);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--hairline);
+  }
+  .nav{display:flex;align-items:center;gap:24px;height:64px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em}
+  .logo-mark{
+    width:30px;height:30px;border-radius:10px;background:var(--ink);
+    color:#fff;display:grid;place-items:center;font-size:14px;font-weight:800;
+  }
+  .nav-links{display:flex;gap:22px;margin-left:auto;font-weight:600;font-size:14px;color:var(--ink-muted)}
+  .nav-links a:hover{color:var(--ink)}
+  .nav .btn{height:40px;padding:0 18px;font-size:14px}
+  @media (max-width:760px){.nav-links{display:none}}
+
+  /* ---------- hero ---------- */
+  .hero{padding-block:72px 40px}
+  .hero-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
+  @media (max-width:920px){.hero-grid{grid-template-columns:1fr;gap:48px}}
+  .hero-eyebrow{display:inline-flex;align-items:center;gap:8px;margin-bottom:20px;
+    padding:7px 14px;border-radius:var(--r-pill);background:var(--surface);
+    border:1px solid var(--hairline);box-shadow:var(--shadow-card)}
+  .hero-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--meet-700)}
+  .hero h1{margin-bottom:20px}
+  .hero .lede{margin-bottom:28px}
+  .hero-ctas{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .hero-note{font-size:12.5px;color:var(--ink-muted);font-weight:600}
+
+  /* ---------- phone mockup ---------- */
+  .phone-zone{display:flex;justify-content:center;position:relative}
+  .phone{
+    width:330px;background:var(--surface);border:1px solid var(--hairline);
+    border-radius:38px;padding:16px 14px 18px;box-shadow:var(--shadow-float);
+  }
+  .phone-greet{display:flex;align-items:center;gap:10px;margin:4px 4px 14px}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--idea-100);
+    display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--idea-700);
+    box-shadow:0 0 0 3px rgba(16,16,16,.06)}
+  .phone-greet b{font-size:16px;font-weight:800}
+  .phone-greet span{display:block;font-size:11.5px;color:var(--ink-muted);font-weight:600}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .tile{border-radius:18px;padding:10px 12px;min-height:78px;display:flex;flex-direction:column;justify-content:space-between}
+  .tile .t-label{font-size:12.5px;font-weight:700}
+  .tile .t-meta{font-size:10.5px;font-weight:600;opacity:.72}
+  .tile .t-ico{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.85);display:grid;place-items:center;font-size:11px}
+  .tile-task{background:var(--task-100);color:var(--task-700)}
+  .tile-meet{background:var(--meet-100);color:var(--meet-700)}
+  .tile-idea{background:var(--idea-100);color:var(--idea-700)}
+  .tile-ia{background:var(--surface);border:1px solid var(--hairline);color:var(--ink);box-shadow:var(--shadow-card)}
+  .today{background:var(--surface);border:1px solid var(--hairline);border-radius:18px;padding:4px 0;margin-bottom:12px}
+  .today-head{padding:8px 12px 6px;display:flex;justify-content:space-between;align-items:baseline}
+  .today-head b{font-size:13px;font-weight:800}
+  .today-head span{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted)}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-top:1px solid rgba(16,16,16,.05)}
+  .row .r-t{font-size:12.5px;font-weight:700}
+  .row .r-s{font-size:10.5px;color:var(--ink-muted);font-weight:600;margin-top:1px}
+  .row .r-time{font-size:11.5px;font-weight:800;color:var(--task-700)}
+  .chip-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  .capture{
+    height:52px;border-radius:var(--r-pill);background:var(--surface);
+    border:1px solid var(--hairline);box-shadow:var(--shadow-card);
+    display:flex;align-items:center;padding:0 6px 0 16px;gap:10px;
+    font-size:13px;color:var(--ink-muted);font-weight:600;
+  }
+  .mic{margin-left:auto;width:40px;height:40px;border-radius:50%;background:var(--ink);
+    display:grid;place-items:center;box-shadow:0 8px 20px rgba(16,16,16,.28)}
+  .mic svg{width:16px;height:16px;fill:#fff}
+
+  /* ---------- sections ---------- */
+  section{padding:84px 0}
+  .sec-head{max-width:640px;margin-bottom:44px}
+  .sec-head .mono{display:block;margin-bottom:12px}
+  .sec-head h2{margin-bottom:14px}
+  .sec-head p{color:var(--ink-muted);font-weight:500}
+
+  /* pains */
+  .pains{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media (max-width:860px){.pains{grid-template-columns:1fr}}
+  .pain{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-card);padding:24px;box-shadow:var(--shadow-card)}
+  .pain h3{font-size:17px;margin-bottom:8px}
+  .pain p{font-size:14px;color:var(--ink-muted);font-weight:500}
+
+  /* feature grid : asymétrique, pas de grille de tuiles égales */
+  .feat-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-tile);padding:28px;box-shadow:var(--shadow-card)}
+  .card h3{margin:0 0 10px}
+  .card p{font-size:14.5px;color:var(--ink-muted);font-weight:500}
+  .card .mono{display:block;margin-bottom:10px}
+  .f-hero{grid-column:span 7;display:flex;flex-direction:column}
+  .f-side{grid-column:span 5;display:flex;flex-direction:column}
+  .f-cell{grid-column:span 4}
+  @media (max-width:920px){
+    .f-hero,.f-side{grid-column:span 12}
+    .f-cell{grid-column:span 6}
+  }
+  @media (max-width:600px){.f-cell{grid-column:span 12}}
+
+  /* rail vocal (featured demo) */
+  .rail{margin-top:22px;background:var(--bg);border:1px solid var(--hairline);border-radius:16px;padding:16px}
+  .rail-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .rail-label span{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted)}
+  .wave{display:flex;align-items:flex-end;gap:2.5px;height:16px}
+  .wave i{width:3px;border-radius:99px;background:var(--ink);opacity:.85}
+  .wav-play{height:5px}.wav-play i:nth-child(1){height:5px}.wav-play i:nth-child(2){height:10px}
+  .wav-play i:nth-child(3){height:14px}.wav-play i:nth-child(4){height:9px}.wav-play i:nth-child(5){height:13px}
+  .wav-play i:nth-child(6){height:7px}.wav-play i:nth-child(7){height:12px}.wav-play i:nth-child(8){height:5px}
+  .wav-play i:nth-child(9){height:11px}.wav-play i:nth-child(10){height:8px}.wav-play i:nth-child(11){height:14px}
+  .quote{font-size:13px;font-weight:600;background:var(--idea-100);color:var(--idea-700);
+    border-radius:10px;padding:8px 12px;margin-bottom:12px;display:inline-block}
+  .structured{display:grid;gap:6px}
+  .s-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--hairline);
+    border-radius:12px;padding:10px 12px}
+  .s-item .s-ico{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:11px;flex:none}
+  .s-item b{font-size:13px;font-weight:700;display:block}
+  .s-item span{font-size:11px;color:var(--ink-muted);font-weight:600}
+  .s-item .s-tag{margin-left:auto;font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;flex:none}
+  .ic-task{background:var(--task-100);color:var(--task-700)}
+  .ic-meet{background:var(--meet-100);color:var(--meet-700)}
+  .ic-idea{background:var(--idea-100);color:var(--idea-700)}
+  .tg-task{background:var(--task-100);color:var(--task-700)}
+  .tg-meet{background:var(--meet-100);color:var(--meet-700)}
+  .tg-idea{background:var(--idea-100);color:var(--idea-700)}
+  .rail-anim .s-item{opacity:0;transform:translateY(6px);animation:unfold .45s cubic-bezier(.2,.9,.3,1) forwards}
+  .rail-anim .s-item:nth-child(1){animation-delay:.3s}
+  .rail-anim .s-item:nth-child(2){animation-delay:.7s}
+  .rail-anim .s-item:nth-child(3){animation-delay:1.1s}
+  @keyframes unfold{to{opacity:1;transform:none}}
+
+  /* ---------- méthode ---------- */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:step}
+  @media (max-width:860px){.steps{grid-template-columns:1fr}}
+  .step{padding:26px;position:relative}
+  .step .num{
+    font-size:44px;font-weight:800;letter-spacing:-.04em;color:transparent;
+    -webkit-text-stroke:1.4px var(--ink);opacity:.85;margin-bottom:14px;display:block;
+  }
+  .step h3{font-size:17px;margin-bottom:8px}
+  .step p{font-size:14px;color:var(--ink-muted);font-weight:500}
+
+  /* ---------- tarifs ---------- */
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+  @media (max-width:860px){.plans{grid-template-columns:1fr}}
+  .plan{position:relative;display:flex;flex-direction:column}
+  .plan-pop{border:2px solid var(--ink)}
+  .pop-badge{position:absolute;top:-13px;left:24px;background:var(--ink);color:#fff;
+    font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    padding:5px 12px;border-radius:99px}
+  .plan h3{font-size:16px}
+  .price{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:8px 0 2px}
+  .price small{font-size:13px;font-weight:600;color:var(--ink-muted);letter-spacing:0}
+  .plan-desc{font-size:13.5px;color:var(--ink-muted);font-weight:500;margin-bottom:16px}
+  .plan ul{list-style:none;display:grid;gap:9px;margin-bottom:24px}
+  .plan li{font-size:13.5px;font-weight:600;display:flex;gap:9px;align-items:baseline}
+  .plan li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--meet-700);transform:translateY(-1px)}
+  .plan .btn{justify-content:center;margin-top:auto}
+  .plans-note{text-align:center;font-size:12.5px;color:var(--ink-muted);font-weight:600;margin-top:20px}
+
+  /* ---------- FAQ ---------- */
+  .faq{max-width:720px}
+  .faq details{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+    box-shadow:var(--shadow-card);margin-bottom:10px;overflow:hidden}
+  .faq summary{
+    list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+    gap:16px;padding:18px 22px;font-weight:700;font-size:15.5px;
+  }
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";font-size:20px;font-weight:700;color:var(--ink-muted);flex:none;transition:transform .2s}
+  .faq details[open] summary::after{transform:rotate(45deg)}
+  .faq details p{padding:0 22px 20px;font-size:14.5px;color:var(--ink-muted);font-weight:500}
+
+  /* ---------- final cta + footer ---------- */
+  .final{background:var(--ink);color:#fff;border-radius:32px;padding:64px 40px;text-align:center;position:relative;overflow:hidden}
+  .final h2{margin-bottom:14px}
+  .final p{color:rgba(255,255,255,.62);font-weight:500;margin-bottom:28px}
+  .final .btn{background:#fff;color:var(--ink);box-shadow:0 8px 20px rgba(0,0,0,.3)}
+  .final .mono{color:rgba(255,255,255,.45);display:block;margin-top:16px}
+  footer{padding:36px 0 48px}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+    border-top:1px solid var(--hairline);padding-top:24px;font-size:12.5px;font-weight:600;color:var(--ink-muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="#"><span class="logo-mark">B</span>Brief</a>
+    <nav class="nav-links" aria-label="Navigation principale">
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#methode">Méthode</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-ink" href="#tarifs">Créer mon Brief</a>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<div class="wrap hero">
+  <div class="hero-grid">
+    <div>
+      <span class="hero-eyebrow">
+        <span class="dot"></span>
+        <span class="mono" style="color:var(--ink)">L'organisateur vocal — maintenant pour tout le monde</span>
+      </span>
+      <h1>Ta journée, dictée en une phrase.</h1>
+      <p class="lede">Brief écoute ce que tu as en tête et le transforme en tâches, rendez-vous et idées datés. Crée ton compte : ton Brief est à toi — tes dictées, ton calendrier Apple, tes idées. Personne d'autre ne les voit.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-ink" href="#tarifs">Créer mon Brief</a>
+        <a class="btn btn-ghost" href="#tarifs">Voir les tarifs</a>
+      </div>
+      <p class="hero-note">Gratuit pour commencer · Sans carte bancaire · iPhone &amp; Android</p>
+    </div>
+
+    <div class="phone-zone">
+      <div class="phone" role="img" aria-label="Aperçu de l'application Brief">
+        <div class="phone-greet">
+          <div class="avatar">LM</div>
+          <div><b>Salut Léa,</b><span>Qu'est-ce qu'on organise&nbsp;?</span></div>
+        </div>
+        <div class="tiles">
+          <div class="tile tile-task"><span class="t-ico">✓</span><div><div class="t-label">Tâches</div><div class="t-meta">5 aujourd'hui</div></div></div>
+          <div class="tile tile-meet"><span class="t-ico">◷</span><div><div class="t-label">Rendez-vous</div><div class="t-meta">2 · Calendrier Apple</div></div></div>
+          <div class="tile tile-idea"><span class="t-ico">✳</span><div><div class="t-label">Idées</div><div class="t-meta">7 à trier</div></div></div>
+          <div class="tile tile-ia"><span class="t-ico">✦</span><div><div class="t-label">Demander à l'IA</div><div class="t-meta">Assistant</div></div></div>
+        </div>
+        <div class="today">
+          <div class="today-head"><b>Aujourd'hui</b><span>mer. 19 août</span></div>
+          <div class="row"><div><div class="r-t"><span class="chip-dot" style="background:var(--task-700)"></span>Relancer le devis Duval</div><div class="r-s">Travail · 3 sous-tâches</div></div><span class="r-time">14:30</span></div>
+          <div class="row"><div><div class="r-t"><span class="chip-dot" style="background:var(--meet-700)"></span>Point hebdo équipe</div><div class="r-s">Visio · 45 min</div></div><span class="r-time">16:00</span></div>
+          <div class="row"><div><div class="r-t"><span class="chip-dot" style="background:var(--idea-700)"></span>Pharmacie — ordonnance</div><div class="r-s">Perso</div></div><span class="r-time">18:00</span></div>
+        </div>
+        <div class="capture">
+          Dicte ce que tu as en tête…
+          <span class="mic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v7.5A3.5 3.5 0 0 0 12 15zm5.5-3.5a5.5 5.5 0 0 1-11 0H5a7 7 0 0 0 6 6.93V21h2v-2.07A7 7 0 0 0 19 11.5h-1.5z"/></svg></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DOULEURS ============ -->
+<section id="pourquoi">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="mono">La réalité du terrain</span>
+      <h2>Pourquoi ta to-do list te lâche au bout de trois jours.</h2>
+      <p>Organiser sa vie ne manque pas d'outils — il manque un outil qui demande l'effort d'un souffle.</p>
+    </div>
+    <div class="pains">
+      <div class="pain">
+        <h3>La liste qui s'entasse</h3>
+        <p>Écrire une tâche prend trente secondes, la reformuler, la dater, la ranger : une minute. Au bout de dix pensées en une journée, tu as abandonné avant même de commencer.</p>
+      </div>
+      <div class="pain">
+        <h3>L'idée qui s'évapore</h3>
+        <p>La pensée arrive en marchant, en voiture, sous la douche. Pas le bon moment pour ouvrir une app et remplir un formulaire. Alors on « pensera à le noter » — et on ne le note jamais.</p>
+      </div>
+      <div class="pain">
+        <h3>Le fil qui se perd</h3>
+        <p>Tu sais l'avoir dicté « quelque part » la semaine dernière, mais impossible de remettre la main dessus. Ta mémoire vocale est dispersée, introuvable, perdue.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FONCTIONNALITÉS ============ -->
+<section id="fonctionnalites" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="mono">Ce que fait Brief</span>
+      <h2>Conçu autour de ta voix, pas autour d'un formulaire.</h2>
+      <p>Une seule interaction au cœur de l'app : tu parles. Brief s'occupe du reste.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="card f-hero rail-anim">
+        <span class="mono">Fonctionnalité phare</span>
+        <h3>Dicte. Brief structure.</h3>
+        <p>Appuie sur le micro et parle comme à un ami. Brief transcrit, découpe, date : chaque phrase devient une tâche avec ses sous-tâches, un rendez-vous horodaté ou une idée à trier — sans confirmation, sans ressaisie.</p>
+        <div class="rail" aria-hidden="true">
+          <div class="rail-label">
+            <span>Fil d'origine · 19 août · 12 s</span>
+            <span class="wave wav-play"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+          <span class="quote">« …faut que je relance Duval demain à 14 h 30, vérifier la remise, et penser au cadeau de Camille… »</span>
+          <div class="structured">
+            <div class="s-item"><span class="s-ico ic-task">✓</span><div><b>Relancer le devis Duval</b><span>Tâche · demain 14:30</span></div><span class="s-tag tg-task">Tâche</span></div>
+            <div class="s-item"><span class="s-ico ic-task">↳</span><div><b>Vérifier la remise 12 %</b><span>Sous-tâche</span></div><span class="s-tag tg-task">Tâche</span></div>
+            <div class="s-item"><span class="s-ico ic-idea">✦</span><div><b>Cadeau de Camille</b><span>Idée · à trier</span></div><span class="s-tag tg-idea">Idée</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card f-side">
+        <span class="mono">Signature</span>
+        <h3>Le rail vocal persistant</h3>
+        <p>Chaque item garde son fil d'origine : l'extrait surligné de ta dictée, le segment exact (0:03 → 0:07) et le lien vers les autres items de la même dictée. Rien ne se perd entre ce que tu as dit et ce que Brief en a fait.</p>
+        <p style="margin-top:14px">Et la recherche ? Elle fouille aussi <strong>dans les transcriptions</strong> — tape « Duval », retrouve la dictée d'où il vient.</p>
+      </div>
+
+      <div class="card f-cell">
+        <span class="mono" style="color:var(--meet-700)">Calendrier</span>
+        <h3 style="font-size:17px">Calendrier Apple en lecture seule</h3>
+        <p>Tes rendez-vous Apple remontent dans Brief, jamais l'inverse. Tu ajustes en direct dans l'app Calendrier : le calendrier gagne, Brief suit.</p>
+      </div>
+      <div class="card f-cell">
+        <span class="mono" style="color:var(--idea-700)">Idées</span>
+        <h3 style="font-size:17px">Boîte à idées</h3>
+        <p>Tout ce que tu captures sans le ranger attend ici. Un geste pour convertir une idée en tâche datée quand le moment est venu.</p>
+      </div>
+      <div class="card f-cell">
+        <span class="mono">Rituels</span>
+        <h3 style="font-size:17px">Rappel du matin</h3>
+        <p>Chaque jour à 8 h, Brief te remet ta journée devant les yeux : tâches du jour, rendez-vous, idées en attente.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MÉTHODE ============ -->
+<section id="methode" style="background:var(--surface);border-block:1px solid var(--hairline)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="mono">La méthode Brief</span>
+      <h2>Trois gestes, et ta tête est vide.</h2>
+      <p>Pas d'onboarding de dix écrans. Tu dicts dès la première minute.</p>
+    </div>
+    <div class="steps">
+      <div class="card step">
+        <span class="num">01</span>
+        <h3>Dicte</h3>
+        <p>Appuie sur le micro et parle naturellement, comme si tu laissais un mémo vocal. Trois secondes ou trois minutes — Brief écoute, transcrit, puis s'arrête quand tu t'arrêtes.</p>
+      </div>
+      <div class="card step">
+        <span class="num">02</span>
+        <h3>Brief structure</h3>
+        <p>Chaque pensée devient un élément daté : tâches avec sous-tâches, rendez-vous avec heure, idées à trier. Tout reste relié à la dictée d'origine, réécoutable.</p>
+      </div>
+      <div class="card step">
+        <span class="num">03</span>
+        <h3>Vis ta journée</h3>
+        <p>Ton agenda Apple et tes tâches sur un seul écran. Tu décales, tu coches, tu dictes ce qui arrive — Brief tient la comptabilité, toi tu vis.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TARIFS ============ -->
+<section id="tarifs">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="mono">Les tarifs</span>
+      <h2>Un Brief par personne, un prix par besoin.</h2>
+      <p>Chaque compte crée son propre Brief : ses dictées, son agenda, ses idées. Rien n'est partagé par défaut.</p>
+    </div>
+    <div class="plans">
+      <div class="card plan">
+        <h3>Découverte</h3>
+        <div class="price">0 €<small style="font-size:13px;color:var(--ink-muted);font-weight:600"> /mois</small></div>
+        <p style="font-size:13.5px;color:var(--ink-muted);font-weight:500;margin-bottom:16px">Pour essayer le réflexe : dicter au lieu de noter.</p>
+        <ul>
+          <li>30 dictées par mois</li>
+          <li>Tâches, idées et structuration auto</li>
+          <li>Rappel du matin</li>
+          <li>100 idées en boîte à idées</li>
+        </ul>
+        <a class="btn btn-ghost" href="#">Commencer gratuitement</a>
+      </div>
+      <div class="card plan plan-pop">
+        <span class="pop-badge">Le plus populaire</span>
+        <h3>Plus</h3>
+        <div class="price">6 €<small style="font-size:13px;color:var(--ink-muted);font-weight:600"> /mois</small></div>
+        <p style="font-size:13.5px;color:var(--ink-muted);font-weight:500;margin-bottom:16px">Pour faire de Brief ton second cerveau quotidien.</p>
+        <ul>
+          <li>Dictées illimitées</li>
+          <li>Recherche dans les transcriptions</li>
+          <li>Sous-tâches et dépendances illimitées</li>
+          <li>Widget iOS &amp; Live Activity</li>
+          <li>Support prioritaire</li>
+        </ul>
+        <a class="btn btn-ink" href="#">Essayer Plus 14 jours</a>
+      </div>
+      <div class="card plan">
+        <h3>Pro</h3>
+        <div class="price">12 €<small style="font-size:13px;color:var(--ink-muted);font-weight:600"> /mois</small></div>
+        <p style="font-size:13.5px;color:var(--ink-muted);font-weight:500;margin-bottom:16px">Pour les journées qui débordent vraiment.</p>
+        <ul>
+          <li>Tout le plan Plus</li>
+          <li>Multi-calendriers</li>
+          <li>Export de toutes tes données</li>
+          <li>Assistant IA étendu</li>
+          <li>Historique illimité</li>
+        </ul>
+        <a class="btn btn-ghost" href="#">Essayer Pro 14 jours</a>
+      </div>
+    </div>
+    <p class="plans-note">Essai gratuit sur les offres payantes · Sans engagement · Sans carte bancaire.</p>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq" style="background:var(--surface);border-block:1px solid var(--hairline)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="mono">Des réponses claires</span>
+      <h2>Foire aux questions</h2>
+      <p>Tout ce qu'il faut savoir avant ta première dictée.</p>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Mes notes vocales sont-elles privées ?</summary>
+        <p>Oui. Tes dictées et transcriptions sont attachées à ton compte et ne sont visibles que de toi. Les notes vocales ne sont jamais utilisées pour autre chose que la structuration de tes éléments.</p>
+      </details>
+      <details>
+        <summary>Brief remplace-t-il mon calendrier Apple ?</summary>
+        <p>Non — et c'est voulu. Brief lit ton Calendrier Apple et l'affiche dans ta journée, mais n'écrit jamais dedans. Tu continues d'ajuster tes rendez-vous dans l'app Calendrier, Brief s'y adapte en direct.</p>
+      </details>
+      <details>
+        <summary>Chaque utilisateur a-t-il vraiment son propre Brief ?</summary>
+        <p>Oui. À la création du compte, un Brief entièrement séparé est initialisé : tes dictées, tes tâches, tes idées, ta recherche. Par défaut, rien n'est partagé avec qui que ce soit.</p>
+      </details>
+      <details>
+        <summary>Sur quoi est-ce disponible ?</summary>
+        <p>Brief s'installe comme une application sur iPhone et Android directement depuis le navigateur — pas de store, pas de téléchargement lourd. Le micro fonctionne dès la première utilisation.</p>
+      </details>
+      <details>
+        <summary>Mes données m'appartiennent-elles ?</summary>
+        <p>À 100 %. Tes dictées, transcriptions, tâches et idées sont les tiennes et tu peux les exporter à tout moment.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA FINAL ============ -->
+<section>
+  <div class="wrap">
+    <div class="final">
+      <h2 style="margin-bottom:14px">La tête vide, la journée pleine.</h2>
+      <p style="max-width:44ch;margin:0 auto 28px;color:var(--ink-muted);font-weight:500">Ta prochaine pensée mérite mieux qu'un « je m'en souviendrai ». Dicte-la.</p>
+      <a class="btn btn-ink" href="#tarifs">Créer mon Brief</a>
+      <span style="display:block;margin-top:16px" class="mono">Gratuit pour commencer · Sans carte bancaire</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span>© 2026 Brief — L'organisateur vocal</span>
+    <span>Fait pour les têtes pleines.</span>
+  </div>
+</footer>
+
+</body>
+</html>

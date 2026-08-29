@@ -20,30 +20,33 @@ GitHub (pull/push/fetch).
 
 ## La branche de production — VÉRIFIER, ne pas supposer
 
-Depuis le **2026-08-19**, la prod est servie depuis la branche
-**`feat/ui-redesign-claude`** (le VPS `/docker/brief` est branché dessus).
-`main` n'est plus la référence de déploiement. L'ancienne branche
-`feat/task-completion` est obsolète.
+La prod tourne sur `/docker/brief` (VPS, conteneur `brief-app-1`). La
+branche de production **a changé trois fois en août** (`main` →
+`feat/ui-redesign-claude` → `feat/email-password-auth` → `main` après le
+grand ménage du 29/08). **Ne la croyez jamais d'après votre mémoire** :
+lancez `scripts/coord/status.sh` qui lit la branche réelle du VPS via SSH
+et la compare à `origin`.
 
-> ⚠️ Ce fait a changé **deux fois** en une semaine. Ne le croyez jamais
-> d'après votre mémoire : lancez `scripts/coord/status.sh` (ci-dessous) qui
-> lit la branche **réelle** du VPS.
+> Depuis le **2026-08-29**, `status.sh` **découvre la branche de prod
+> dynamiquement** (elle lit `/docker/brief` via SSH). Ne codez pas le nom
+> d'une branche en dur dans un script — ça a produit un écart de prod
+> permanent à la fin août (branche supprimée sur origin, toujours citée en dur).
 
 ## Avant TOUTE session — le réflexe de synchronisation
 
 1. **`git fetch origin --prune`** (copie locale) — voir si GitHub a avancé.
 2. **Lire `HANDOFF.md`** — la dernière passation. Si elle a changé depuis
    votre dernière session, quelqu'un d'autre est passé entre-temps.
-3. **Lancer `scripts/coord/status.sh`** — il compare les 3 copies atteignables
-   (GitHub, votre copie, la prod VPS). Si la prod est en avance sur votre
-   copie, **fast-forward avant de coder**.
+3. **Lancer `scripts/coord/status.sh`** — il compare les 3 copies
+   atteignables (GitHub, votre copie, la prod VPS). Si la prod est en
+   avance sur votre copie, **fast-forward avant de coder**.
 4. **`DECISIONS.md`** — les choix validés depuis la dernière fois.
 
 ## Règles anti-collision entre agents
 
-1. **Un agent = une branche à la fois.** Si un agent travaille sur
-   `feat/ui-redesign-claude`, les autres n'y poussent pas en parallèle : ils
-   créent leur propre branche depuis la pointe, puis PR.
+1. **Un agent = une branche à la fois.** Si un agent travaille sur une branche
+   de feature, les autres n'y poussent pas en parallèle : ils créent leur
+   propre branche depuis la pointe, puis PR.
 2. **HANDOFF.md est le lieu de prise de parole.** Avant de pousser un travail
    qui change le comportement ou l'UI : écrire/mettre à jour la passation.
    Si deux agents poussent sans passer par HANDOFF, le second doit reprendre
@@ -53,8 +56,8 @@ Depuis le **2026-08-19**, la prod est servie depuis la branche
 4. **Les fichiers non commités** (`public/preview-v*`, `backups/`,
    `.env.*`) **ne s'écrasent jamais** — ils sont gitignorés (voir
    `.gitignore`). Un `git clean` est interdit sans vérification.
-5. **Quand tu pousses, précise dans le message de commit qui tu es**
-   (ex. `Hermes Agent` ou `Claude Code`) pour que l'historique reste lisible.
+5. **Quand tu pousses, précise dans le message de commit qui tu es** (ex.
+   `Hermes Agent` ou `Claude Code`) pour que l'historique reste lisible.
 
 ## Commandes
 
@@ -68,15 +71,17 @@ bash scripts/coord/status.sh
 
 ```bash
 git fetch origin --prune
-git merge --ff-only origin/feat/ui-redesign-claude
+git merge --ff-only origin/main     # ou origin/<branche-de-prod-actuelle>
 ```
 
 ### Déployer la prod (VPS, réservé)
 
 ```bash
-cd /docker/brief && git pull origin feat/ui-redesign-claude \
+cd /docker/brief && git pull origin <branche-de-prod> \
   && docker compose --env-file .env.production up -d --build
 ```
+
+**La prod ne se rebascule jamais par panneau Hostinger** (voir ci-dessous).
 
 ### Sauvegarder les données avant tout déploiement
 
@@ -88,7 +93,8 @@ sudo /docker/brief/deploy/backup.sh
 
 1. Ne rien écraser. Le volume `brief-data` est l'unique copie des items.
 2. `git fetch origin` sur la copie concernée, regarder l'écart.
-3. Reconstruire la branche prod à partir de `origin/feat/ui-redesign-claude`.
+3. Reconstruire la branche prod à partir de la dernière version connue
+   (`bash scripts/coord/status.sh` pour savoir laquelle).
 4. Tester `scripts/coord/status.sh` → toutes les copies alignées = OK.
 
 ---
@@ -113,36 +119,34 @@ Après un passage du panneau, vérifier que les labels Traefik sont intacts :
 ### PWA iOS en cache — le test décisif
 
 Quand un utilisateur signale « l'app ne s'ouvre plus » alors que le serveur
-répond 200 et que `curl` depuis la machine locale donne 200 aussi : le problème est le
-**cache du vieux shell PWA** sur l'iPhone (ancien service worker + HTML avec
-`Cache-Control: s-maxage=31536000` — corrigé depuis `c8c175c` mais l'iPhone
-garde l'ancienne version). Test depuis la machine locale :
+répond 200 et que `curl` depuis la machine locale donne 200 aussi : le
+problème est le **cache du vieux shell PWA** sur l'iPhone (ancien service
+worker + HTML avec `Cache-Control: s-maxage=31536000` — corrigé depuis
+`c8c175c` mais l'iPhone garde l'ancienne version).
 
-```bash
-curl -s -o /dev/null -w "%{http_code}" -X POST -H "x-brief-pin: <PIN>" \
-  https://brief.srv1899780.hstgr.cloud/api/session   # 200 = serveur OK
-```
-
-Si 200, la manœuvre iPhone : Réglages → Safari → **Effacer l'historique et les
-données de sites** (purge le service worker) → supprimer l'icône Brief de
-l'écran d'accueil → recharger l'URL dans Safari → ressaisir le PIN → ré-ajouter
-à l'écran d'accueil.
+Manœuvre iPhone : Réglages → Safari → **Effacer l'historique et les données
+de sites** (purge le service worker) → supprimer l'icône Brief de l'écran
+d'accueil → recharger l'URL dans Safari → se reconnecter (email + mdp
+Supabase) → ré-ajouter à l'écran d'accueil.
 
 ### ⚠️ Le crash JS client — invisible pour curl (leçon du 2026-08-19)
 
 **Un `curl` 200 ne prouve PAS que l'app marche.** Le navigateur exécute le
 JavaScript, curl non. Le 2026-08-19, toute l'app plantait dans tous les
-navigateurs (`RangeError: date value is not finite in DateTimeFormat.formatToParts()`
-— un `due = "20260820T140000"` invalide stocké par le sync CalDAV) alors que
-le serveur, le réseau, le DNS et le HTTPS étaient parfaitement sains.
+navigateurs (`RangeError: date value is not finite in
+DateTimeFormat.formatToParts()` — un `due = "20260820T140000"` invalide
+stocké par le sync CalDAV) alors que le serveur, le réseau, le DNS et le
+HTTPS étaient parfaitement sains.
 
 **Quand le réseau passe mais que l'app ne s'ouvre pas :**
-1. Ouvrir la console du navigateur (Safari DevTools / Firefox) et chercher une
-   erreur runtime — c'est là que le crash apparaît, pas dans les logs serveur.
-2. Vérifier les données : `docker exec brief-app-1 cat /app/data/items.json` —
-   chercher des valeurs `due` non-ISO (ex. `20260820T140000` au lieu de
+
+1. Ouvrir la console du navigateur (Safari DevTools / Firefox) et chercher
+   une erreur runtime — c'est là que le crash apparaît, pas dans les logs
+   serveur.
+2. Vérifier les données : `docker exec brief-app-1 cat /app/data/items.json`
+   — chercher des valeurs `due` non-ISO (ex. `20260820T140000` au lieu de
    `2026-08-20T14:00:00+02:00`).
-3. Le fix (commit `aacea8e`) a rendu l'app immunisée : `zonedParts()` ne lève
-   plus jamais, `readItems()` normalise à la lecture. Mais une nouvelle source
-   de dates invalides doit être corrigée à la source — voir
+3. Le fix (commit `aacea8e`) a rendu l'app immunisée : `zonedParts()` ne
+   lève plus jamais, `readItems()` normalise à la lecture. Mais une nouvelle
+   source de dates invalides doit être corrigée à la source — voir
    `docs/handoffs/2026-08-19-caldav-floating-dtstart.md`.
