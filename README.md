@@ -79,9 +79,8 @@ if (denied) return denied;
 
 L'**ancien mécanisme PIN** (`BRIEF_PIN`, `x-brief-pin`, `requirePin()`,
 `POST /api/session`) est **supprimé depuis le 2026-08-26** — ne pas le
-réintroduire. Quelques commentaires morts traînent encore dans le code
-(ex. `src/lib/cron-auth.ts`, `src/components/desktop/DesktopHeader.tsx`) : à
-corriger quand on y touche.
+réintroduire. Les commentaires morts qui le citaient dans le code ont été
+nettoyés le 2026-08-29.
 
 Les routes « machine » (`/api/cron/reminders`, `/api/capture`,
 `/api/digest`, `/api/cron/caldav-sync`) portent un **jeton Bearer dédié**, pas
