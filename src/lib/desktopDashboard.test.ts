@@ -7,7 +7,7 @@ import {
   groupByProject,
   leastUrgentId,
   mondayOf,
-  overdueItems,
+  overdueRows,
   priorityBreakdown,
   weekOccurrenceRows,
   weekOpenCounts,
@@ -58,7 +58,7 @@ describe("mondayOf", () => {
   });
 });
 
-describe("overdueItems", () => {
+describe("overdueRows", () => {
   it("exclut les items faits, en idée, archivés ou sans échéance passée", () => {
     const items = [
       item({ id: "late", due: "2026-08-18T09:00:00+02:00" }),
@@ -67,8 +67,8 @@ describe("overdueItems", () => {
       item({ id: "today", due: "2026-08-20T09:00:00+02:00" }),
       item({ id: "no-due", due: null }),
     ];
-    const out = overdueItems(items, NOW);
-    expect(out.map((i) => i.id)).toEqual(["late"]);
+    const out = overdueRows(items, NOW);
+    expect(out.map((r) => r.item.id)).toEqual(["late"]);
   });
 
   it("trie du plus ancien au plus récent", () => {
@@ -76,7 +76,55 @@ describe("overdueItems", () => {
       item({ id: "a", due: "2026-08-17T09:00:00+02:00" }),
       item({ id: "b", due: "2026-08-15T09:00:00+02:00" }),
     ];
-    expect(overdueItems(items, NOW).map((i) => i.id)).toEqual(["b", "a"]);
+    expect(overdueRows(items, NOW).map((r) => r.item.id)).toEqual(["b", "a"]);
+  });
+
+  it("une récurrente manquée (jour fini, non cochée) donne une ligne en retard par occurrence", () => {
+    // Séance push lun/jeu jamais cochée : le lundi 17 (jour fini) est
+    // manqué → une ligne « en retard » (le filet d'Aramis 29/08). Le jeudi
+    // 20 = aujourd'hui : pas encore manqué.
+    const serie = item({
+      id: "push",
+      kind: "event",
+      due: "2026-08-20T16:00:00+02:00",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      seriesAnchor: "2026-08-17T16:00:00+02:00",
+      lastCompletedOccurrenceAt: null,
+    });
+    const out = overdueRows([serie], NOW);
+    expect(out).toHaveLength(1);
+    expect(out[0].due).toContain("2026-08-17");
+  });
+
+  it("une récurrente dont toutes les occurrences passées sont cochées n'est pas en retard", () => {
+    const serie = item({
+      id: "push",
+      kind: "event",
+      due: "2026-08-20T16:00:00+02:00",
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      seriesAnchor: "2026-08-17T16:00:00+02:00",
+      lastCompletedOccurrenceAt: "2026-08-17T16:00:00+02:00",
+    });
+    // Jeudi 20 à 10h : lundi 17 coché, jeudi 20 = aujourd'hui (pas fini) → rien.
+    expect(overdueRows([serie], NOW)).toHaveLength(0);
+  });
+
+  it("le cas réel du 29/08 : une occurrence APRÈS la dernière coche (le ven 28 après coche mar 25) est en retard", () => {
+    // Samedi 29/08 : Aramis a coché le pull du mardi 25, celui du vendredi
+    // 28 n'est pas enregistré → il doit apparaître en retard pour pouvoir
+    // être coché et faire passer la semaine à 6/6.
+    const now = new Date("2026-08-29T12:00:00+02:00");
+    const serie = item({
+      id: "pull",
+      kind: "event",
+      due: "2026-09-01T16:00:00.000Z",
+      rrule: "FREQ=WEEKLY;BYDAY=TU,FR",
+      seriesAnchor: "2026-08-18T16:00:00Z",
+      lastCompletedOccurrenceAt: "2026-08-25T16:00:00Z",
+    });
+    const out = overdueRows([serie], now);
+    expect(out).toHaveLength(1);
+    expect(out[0].due).toBe("2026-08-28T16:00:00.000Z");
   });
 });
 
@@ -215,6 +263,9 @@ describe("weekOccurrenceRows", () => {
         due: "2026-08-28T16:00:00.000Z",
         rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=FR,SA,SU",
         seriesAnchor: "2026-08-21T16:00:00Z",
+        // Ven 21 + sam 22 + dim 23 cochés : couverts par « fait jusqu'à
+        // maintenant », pas de lignes en retard parasites.
+        lastCompletedOccurrenceAt: "2026-08-23T16:00:00Z",
       }),
     ];
     const rows = weekOccurrenceRows(items, now);
@@ -241,21 +292,23 @@ describe("weekOccurrenceRows", () => {
     expect(rows).toHaveLength(3);
   });
 
-  it("une série sans occurrence dans la semaine garde une ligne à son due courant", () => {
+  it("une série sans occurrence dans la semaine : plus d'injection du due courant, mais le manqué ≤7j reste", () => {
     const now = new Date("2026-08-27T10:00:00+02:00");
     const items = [
       item({
         id: "serie-hors-fenetre",
         due: "2026-08-31T16:00:00.000Z",
         // Toutes les 2 semaines le lundi : occurrences 17/08, 31/08 — aucune
-        // dans la fenêtre [24/08, 31/08). La ligne reste à `due` (31/08).
+        // dans la fenêtre [24/08, 31/08).
         rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO",
         seriesAnchor: "2026-08-17T16:00:00.000Z",
+        // Le lun 17 est coché : rien de manqué, et surtout PAS de ligne au
+        // `due` 31/08 (semaine suivante — capture Aramis 29/08).
+        lastCompletedOccurrenceAt: "2026-08-17T16:00:00.000Z",
       }),
     ];
     const rows = weekOccurrenceRows(items, now);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].due).toBe("2026-08-31T16:00:00.000Z");
+    expect(rows).toHaveLength(0);
   });
 
   it("un item simple (sans rrule) donne une ligne à son due", () => {
@@ -279,21 +332,50 @@ describe("weekOccurrenceRows", () => {
     expect(weekOccurrenceRows(items, now).map((r) => r.key)).toEqual(["done", "ok"]);
   });
 
-  it("une série faite garde UNE ligne à son due, sans occurrences résiduelles", () => {
+  it("les occurrences DÉJÀ COCHÉES de la semaine restent visibles (filtre « Faites » par occurrence)", () => {
     const now = new Date("2026-08-27T10:00:00+02:00");
     const items = [
       item({
-        id: "serie-faite",
-        due: "2026-08-28T16:00:00.000Z",
+        id: "poster20",
+        due: "2026-08-29T16:00:00.000Z",
         rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=FR,SA,SU",
         seriesAnchor: "2026-08-21T16:00:00Z",
-        doneAt: "2026-08-27T10:00:00+02:00",
+        // Ven 21 + sam 22 cochés ; ven 28, sam 29, dim 30 dans la semaine.
+        // NB : dim 23 non coché serait en retard — ici on coche tout jusque
+        // dim 23 pour isoler le comportement « occurrences de la semaine ».
+        lastCompletedOccurrenceAt: "2026-08-23T16:00:00Z",
       }),
     ];
     const rows = weekOccurrenceRows(items, now);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].key).toBe("serie-faite");
-    expect(rows[0].due).toBe("2026-08-28T16:00:00.000Z");
+    // Toutes les occurrences de la semaine (28, 29, 30) + les manquées
+    // d'avant la semaine dans la fenêtre 7 jours (ven 21, sam 22 — mais
+    // elles sont couvertes par la coche → pas de lignes).
+    expect(rows.map((r) => r.due)).toEqual([
+      "2026-08-28T16:00:00.000Z",
+      "2026-08-29T16:00:00.000Z",
+      "2026-08-30T16:00:00.000Z",
+    ]);
+  });
+
+  it("une occurrence manquée d'avant la semaine (≤7j, postérieure à la dernière coche) apparaît en retard", () => {
+    const now = new Date("2026-08-27T10:00:00+02:00");
+    const items = [
+      item({
+        id: "push",
+        due: "2026-08-27T16:00:00.000Z",
+        rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+        seriesAnchor: "2026-08-17T16:00:00Z",
+        // Lundi 17 coché ; jeudi 20 manqué → en retard, dans la fenêtre 7j.
+        lastCompletedOccurrenceAt: "2026-08-17T16:00:00Z",
+      }),
+    ];
+    const rows = weekOccurrenceRows(items, now);
+    const dues = rows.map((r) => r.due);
+    expect(dues).toEqual([
+      "2026-08-20T16:00:00.000Z", // manquée (en retard, ≤7j)
+      "2026-08-24T16:00:00.000Z", // lun 24 (semaine)
+      "2026-08-27T16:00:00.000Z", // jeu 27 (aujourd'hui, semaine)
+    ]);
   });
 
   it("trie les lignes par date d'occurrence croissante, toutes séries confondues", () => {
@@ -308,6 +390,7 @@ describe("weekOccurrenceRows", () => {
         due: "2026-08-29T16:00:00.000Z",
         rrule: "FREQ=WEEKLY;UNTIL=20260831T235959Z;BYDAY=SA",
         seriesAnchor: "2026-08-22T16:00:00Z",
+        lastCompletedOccurrenceAt: "2026-08-22T16:00:00Z", // sam 22 coché
       }),
       item({ id: "push", due: "2026-08-27T16:00:00.000Z" }),
       item({ id: "pull", due: "2026-08-28T16:00:00.000Z" }),

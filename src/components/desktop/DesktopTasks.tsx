@@ -21,6 +21,7 @@
 import { useMemo, useState } from "react";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { formatDue } from "@/lib/due";
+import { zonedParts, zonedTime } from "@/lib/zoned";
 import { CheckIcon } from "../icons";
 import {
   TASK_FILTERS,
@@ -68,6 +69,13 @@ export function DesktopTasks({
   initialKind?: TaskKindFilter;
 }) {
   const now = useMemo(() => new Date(), []);
+  // Minuit Paris du jour — repère du « en retard » par occurrence. Passe par
+  // zoned.ts (jamais d'offset hardcodé : la prod tourne en UTC, et +02:00
+  // serait faux en hiver).
+  const startOfToday = useMemo(() => {
+    const p = zonedParts(now);
+    return zonedTime(p.y, p.m, p.d, 0, 0).getTime();
+  }, [now]);
   const [kind, setKind] = useState<TaskKindFilter>(initialKind);
   const [filter, setFilter] = useState<TaskFilterKey>("all");
   const [quickText, setQuickText] = useState("");
@@ -149,7 +157,15 @@ export function DesktopTasks({
               </div>
               {groupRows.map((row) => {
                 const it = row.item;
-                const late = filter === "overdue";
+                // État lu sur l'OCCURRENCE, pas sur l'item : une occurrence
+                // passée non cochée est en retard même si la série pointe
+                // déjà la semaine prochaine ; une occurrence couverte par
+                // la dernière coche est faite, même si l'item reste ouvert.
+                const occDone = it.doneAt
+                  || (!!it.rrule && !!it.lastCompletedOccurrenceAt
+                      && new Date(row.due).getTime() <= new Date(it.lastCompletedOccurrenceAt).getTime());
+                const late = !occDone && (filter === "overdue"
+                  || (new Date(row.due).getTime() < startOfToday));
                 const isEvent = it.kind === "event";
                 return (
                   <div key={row.key} className="flex items-center gap-3" style={{ padding: "12px 14px", background: C.bg, borderRadius: 18 }}>
@@ -157,15 +173,15 @@ export function DesktopTasks({
                       onClick={() => onToggleDone(it.id, row.due)}
                       aria-label="Marquer fait"
                       className="flex flex-none items-center justify-center"
-                      style={{ width: 26, height: 26, borderRadius: 99, padding: 0, cursor: "pointer", background: it.doneAt ? C.ink : C.surface, border: it.doneAt ? `2px solid ${C.ink}` : "2px solid rgba(16,16,16,.18)" }}
+                      style={{ width: 26, height: 26, borderRadius: 99, padding: 0, cursor: "pointer", background: occDone ? C.ink : C.surface, border: occDone ? `2px solid ${C.ink}` : `2px solid ${late ? "rgba(226,58,46,.55)" : "rgba(16,16,16,.18)"}` }}
                     >
-                      {it.doneAt && <CheckIcon size={14} className="text-white" />}
+                      {occDone && <CheckIcon size={14} className="text-white" />}
                     </button>
                     <button onClick={() => onOpenTask(it.id)} className="flex min-w-0 flex-1 flex-col gap-1 text-left" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
-                      <span className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: it.doneAt ? C.inkFaint : C.ink, textDecoration: it.doneAt ? "line-through" : "none" }}>{it.title}</span>
+                      <span className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: occDone ? C.inkFaint : C.ink, textDecoration: occDone ? "line-through" : "none" }}>{it.title}</span>
                       <span className="flex items-center gap-1.75">
                         <span className="text-[11px] font-semibold" style={{ color: isEvent ? C.meet700 : late ? "var(--color-danger)" : C.inkMuted }}>
-                          {isEvent ? "RDV" : ""}{isEvent && row.due ? " · " : ""}{formatDue(row.due, it.allDay)}
+                          {late && !isEvent ? "En retard · " : ""}{isEvent ? "RDV" : ""}{isEvent && row.due ? " · " : ""}{formatDue(row.due, it.allDay)}
                         </span>
                       </span>
                     </button>

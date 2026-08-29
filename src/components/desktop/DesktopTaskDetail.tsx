@@ -28,6 +28,7 @@ import { calendarForProjectName } from "@/lib/calendarMapping";
 import { TIMEZONE } from "@/lib/zoned";
 import type { DraftItem, Item, Project, Tag } from "@/lib/types";
 
+import { TAG_COLOR_MAP } from "@/lib/tagColors";
 const C = {
   bg: "var(--color-bg)",
   surface: "var(--color-surface)",
@@ -37,18 +38,6 @@ const C = {
   danger: "var(--color-danger)",
 } as const;
 
-const TAG_COLOR_MAP: Record<string, string> = {
-  yellow: "#FBE2AE",
-  orange: "#FFCC00",
-  red: "#FF3B30",
-  purple: "#AF52DE",
-  blue: "#007AFF",
-  green: "#34C759",
-  teal: "#5AC8FA",
-  brown: "#A2845E",
-  pink: "#FF2D55",
-  sky: "#64D2FF",
-};
 
 type EditDraft = {
   title: string;

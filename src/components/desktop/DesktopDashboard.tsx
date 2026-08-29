@@ -19,10 +19,11 @@ import { skinFor, shapeFor } from "@/lib/projects";
 import { compareByDue } from "@/lib/due";
 import { TIMEZONE } from "@/lib/zoned";
 import {
-  overdueItems,
+  overdueRows,
   weekOpenCounts,
   weekProgressByProject,
   type TaskKindFilter,
+  type OverdueRow,
 } from "@/lib/desktopDashboard";
 import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Overview, Project } from "@/lib/types";
@@ -137,7 +138,8 @@ export function DesktopDashboard({
   );
   const donutPct = todayItems.length ? Math.round((todayDoneCount / todayItems.length) * 100) : 0;
 
-  const overdue = useMemo(() => overdueItems(items, now).slice(0, 3), [items, now]);
+  const overdue = useMemo(() => overdueRows(items, now).slice(0, 6), [items, now]);
+  const overdueTotal = useMemo(() => overdueRows(items, now).length, [items, now]);
   const progressRows = useMemo(() => weekProgressByProject(items, projects, now, 8), [items, projects, now]);
 
   const weekCounts = useMemo(() => weekOpenCounts(items, now), [items, now]);
@@ -205,7 +207,7 @@ export function DesktopDashboard({
           </div>
           <div className="flex gap-4.5">
             <div className="flex items-baseline gap-1.5">
-              <span className="tnum text-[15px] font-extrabold" style={{ color: C.danger }}>{overview?.totals.overdue ?? 0}</span>
+              <span className="tnum text-[15px] font-extrabold" style={{ color: C.danger }}>{overdueTotal}</span>
               <span className="text-[12px] font-semibold" style={{ color: C.inkMuted }}>en retard</span>
             </div>
             <div className="flex items-baseline gap-1.5">
@@ -365,22 +367,25 @@ export function DesktopDashboard({
             <div className="flex flex-none items-center gap-2.25">
               <span style={{ width: 8, height: 8, borderRadius: 99, background: C.danger }} />
               <span className="font-bold tracking-[-0.02em]" style={{ fontSize: 15 }}>En retard</span>
-              <span className="tnum font-extrabold" style={{ marginLeft: "auto", fontSize: 15, color: C.danger }}>{overview?.totals.overdue ?? 0}</span>
+              <span className="tnum font-extrabold" style={{ marginLeft: "auto", fontSize: 15, color: C.danger }}>{overdueTotal}</span>
             </div>
             {overdue.length === 0 && <span className="text-[12px] font-medium" style={{ color: C.inkMuted }}>Rien en retard.</span>}
-            {overdue.map((it) => (
-              <div key={it.id} className="flex items-center gap-2.75" style={{ padding: "9px 10px", background: C.bg, borderRadius: 16 }}>
+            {overdue.map((row) => {
+              const it = row.item;
+              return (
+              <div key={row.key} className="flex items-center gap-2.75" style={{ padding: "9px 10px", background: C.bg, borderRadius: 16 }}>
                 <button
-                  onClick={() => onToggleDone(it.id)}
+                  onClick={() => onToggleDone(it.id, row.due)}
                   aria-label="Marquer fait"
                   style={{ width: 22, height: 22, flex: "none", padding: 0, borderRadius: 99, border: "2px solid rgba(226,58,46,.45)", background: C.surface, cursor: "pointer" }}
                 />
                 <button onClick={() => onOpenTask(it.id)} className="flex min-w-0 flex-1 flex-col gap-0.5 text-left" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
                   <span className="text-[12px] font-semibold tracking-[-0.01em]">{it.title}</span>
-                  <span className="text-[11px] font-semibold" style={{ color: C.danger }}>{it.due ? `prévu ${dayShortFmt.format(new Date(it.due)).replace(".", "")}` : ""}</span>
+                  <span className="text-[11px] font-semibold" style={{ color: C.danger }}>{row.due ? `prévu ${dayShortFmt.format(new Date(row.due)).replace(".", "")}` : ""}</span>
                 </button>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </section>

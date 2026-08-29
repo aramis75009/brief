@@ -14,11 +14,7 @@ import { calendarForProjectName } from "@/lib/calendarMapping";
 import { fetchTags, createTag, deleteTag, updateTag } from "@/lib/api";
 import type { Overview, Project, Tag } from "@/lib/types";
 
-const TAG_COLOR_MAP: Record<string, string> = {
-  yellow: "#FBE2AE", orange: "#FFCC00", red: "#FF3B30", purple: "#AF52DE",
-  blue: "#007AFF", green: "#34C759", teal: "#5AC8FA", brown: "#A2845E",
-  pink: "#FF2D55", sky: "#64D2FF",
-};
+import { TAG_COLOR_MAP } from "@/lib/tagColors";
 const COLOR_LABELS: Record<string, string> = {
   yellow: "Jaune", orange: "Orange", red: "Rouge", purple: "Violet",
   blue: "Bleu", green: "Vert", teal: "Turquoise", brown: "Marron",

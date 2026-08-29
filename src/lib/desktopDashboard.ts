@@ -24,12 +24,90 @@ export function mondayOf(now: Date): CalendarDate {
   return shiftDays(parts, -offset);
 }
 
-/** Items actifs, non faits, dont l'échéance est avant aujourd'hui minuit Paris — triés du plus ancien au plus récent. */
-export function overdueItems(items: Item[], now: Date): Item[] {
+/**
+ * Occurrences manquées d'une série récurrente : celles dont l'heure
+ * effective est passée (jour < aujourd'hui) et qui ne sont pas couvertes
+ * par la dernière coche (« fait jusqu'à maintenant »).
+ *
+ * Constat Aramis 29/08 : « parfois je fais la tâche mais j'oublie de la
+ * cocher — elle doit atterrir dans "En retard" pour que je puisse la
+ * cocher et faire avancer la semaine ». Une récurrente dont le `due` pointe
+ * la prochaine occurrence n'est JAMAIS « en retard » avec l'ancien calcul
+ * (bucket sur `due`) : ses occurrences passées non cochées n'existaient
+ * dans aucune vue. On les expose ici, une par ligne cochable.
+ */
+export function missedOccurrences(
+  it: Item,
+  now: Date,
+  /** Borne haute de recherche (minuit de demain par défaut). */
+  rangeEnd?: Date,
+): Date[] {
+  if (!it.rrule || !it.due) return [];
+  const due = new Date(it.due);
+  if (Number.isNaN(due.getTime())) return [];
+  const anchor = it.seriesAnchor ? new Date(it.seriesAnchor) : due;
+  if (Number.isNaN(anchor.getTime())) return [];
+  const completedAt = it.lastCompletedOccurrenceAt
+    ? new Date(it.lastCompletedOccurrenceAt).getTime()
+    : null;
+  // De l'ancre de la série à demain minuit : toute l'histoire, la dernière
+  // coche et le filtre « jour fini » réduisent ensuite au manqué réel.
+  const start = anchor;
+  const end = rangeEnd ?? midnightTomorrow(now);
+  return occurrencesInRange(anchor, it.rrule, start, end)
+    .map((o) => applyOverride(o, it.overrides, it.exdates))
+    .filter((d): d is Date => d !== null)
+    .filter((d) => {
+      // « Jour déjà commencé/fini » : l'occurrence d'aujourd'hui n'est pas
+      // manquée tant que son jour n'est pas fini.
+      const p = zonedParts(d);
+      const today = zonedParts(now);
+      const isPastDay = `${p.y}-${p.m}-${p.d}` < `${today.y}-${today.m}-${today.d}`;
+      if (!isPastDay) return false;
+      // Pas encore « faite » : postérieure à la dernière coche.
+      return completedAt === null || d.getTime() > completedAt;
+    });
+}
+
+/** Minuit du jour suivant `now`, Europe/Paris. */
+export function midnightTomorrow(now: Date): Date {
+  const parts = zonedParts(now);
+  const next = shiftDays(parts, 1);
+  return zonedTime(next.y, next.m, next.d, 0, 0);
+}
+
+/** Une ligne « en retard » : l'item ET l'occurrence précise qui est manquée. */
+export type OverdueRow = {
+  item: Item;
+  /** ISO de l'occurrence manquée (post-override) — celle que la coche va terminer. */
+  due: string;
+  key: string;
+};
+
+/**
+ * Items en retard, occurrences comprises. Un item simple non fait dont
+ * l'échéance est passée = une ligne. Une série récurrente = une ligne PAR
+ * occurrence manquée (jour fini, non couverte par la dernière coche) —
+ * c'est le filet « j'ai fait la séance mais j'ai oublié de cocher » :
+ * cocher la ligne avance la série ET l'avancement de la semaine.
+ */
+export function overdueRows(items: Item[], now: Date, limit?: number): OverdueRow[] {
   const bucketOf = makeBucketOf(now);
-  return items
-    .filter((it) => isActive(it) && !it.doneAt && bucketOf(it.due) === "overdue")
-    .sort((a, b) => (a.due ?? "").localeCompare(b.due ?? ""));
+  const rows: OverdueRow[] = [];
+  for (const it of items) {
+    if (!isActive(it) || it.doneAt) continue;
+    if (it.rrule) {
+      for (const missed of missedOccurrences(it, now)) {
+        rows.push({ item: it, due: missed.toISOString(), key: `${it.id}:${missed.toISOString()}` });
+      }
+      continue;
+    }
+    if (it.due && bucketOf(it.due) === "overdue") {
+      rows.push({ item: it, due: it.due, key: it.id });
+    }
+  }
+  rows.sort((a, b) => a.due.localeCompare(b.due));
+  return limit ? rows.slice(0, limit) : rows;
 }
 
 /**
@@ -147,35 +225,42 @@ export type OccurrenceRow = {
 };
 
 /**
- * Lignes de l'onglet Tâches & RDV : une ligne par OCCURRENCE de la semaine
- * calendaire (lundi→dimanche, Europe/Paris) pour les séries récurrentes, une
- * ligne par item pour les autres. Même logique que le calendrier
- * (`buildDayAgenda`) : overrides/exdates appliqués, occurrences ≤
- * `lastCompletedOccurrenceAt` masquées (« fait jusqu'à maintenant »). Une
- * série sans occurrence dans la semaine (jour hors fenêtre, série finie)
- * garde une ligne à son occurrence courante pour rester visible.
+ * Lignes de l'onglet Tâches & RDV : une ligne par OCCURRENCE. Pour une série
+ * récurrente : toutes les occurrences de la semaine (faites, manquées ou à
+ * venir — le filtre d'état fait le tri), PLUS les occurrences manquées
+ * d'avant la semaine (bornées à 7 jours en arrière, le filet « en retard »),
+ * SANS jamais injecter d'occurrence de la semaine suivante (le comportement
+ * précédent affichait le RDV du lundi suivant au milieu de la semaine en
+ * cours — capture Aramis 29/08 : « un RDV le 28, puis 31, puis 2 »).
  */
 export function weekOccurrenceRows(items: Item[], now: Date): OccurrenceRow[] {
   const monday = mondayOf(now);
   const nextMonday = shiftDays(monday, 7);
   const start = zonedTime(monday.y, monday.m, monday.d, 0, 0);
   const end = zonedTime(nextMonday.y, nextMonday.m, nextMonday.d, 0, 0);
+  // Les occurrences manquées d'avant la semaine ne remontent que sur 7 jours
+  // — plus loin, la ligne « en retard » du dashboard reste le bon endroit.
+  const missedWindowStart = zonedTime(monday.y, monday.m, Math.max(1, monday.d - 7), 0, 0);
 
   const rows: OccurrenceRow[] = [];
   for (const it of items) {
     if (it.status === "idea" || it.status === "archived") continue;
     if (!it.due) continue;
-    // Les items faits restent dans `rows` : `filterRowsByState` les écarte du
-    // filtre par défaut et les garde pour « Faites » (les exclure ici rendait
-    // « Faites » toujours vide — bug 27/08). Une série faite garde UNE ligne à
-    // son `due` courant, sans développer d'occurrences résiduelles.
-    if (it.doneAt) {
-      rows.push({ item: it, due: it.due, key: it.id });
+    // Un item FAIT (non récurrent) n'apparaît que si son échéance est dans
+    // la semaine — pour le filtre « Faites ». Les faits d'avant la semaine
+    // n'ont rien à faire dans cette vue (pollution constatée en prod :
+    // « salle de sport » du 17/08 toujours visible fin août).
+    if (it.doneAt && !it.rrule) {
+      const d = new Date(it.due);
+      if (!Number.isNaN(d.getTime()) && d >= start && d < end) {
+        rows.push({ item: it, due: it.due, key: it.id });
+      }
       continue;
     }
     const due = new Date(it.due);
     if (Number.isNaN(due.getTime())) continue;
 
+    // Item simple (fait ou non) : une ligne à son échéance.
     if (!it.rrule) {
       rows.push({ item: it, due: it.due, key: it.id });
       continue;
@@ -186,21 +271,32 @@ export function weekOccurrenceRows(items: Item[], now: Date): OccurrenceRow[] {
       rows.push({ item: it, due: it.due, key: it.id });
       continue;
     }
-    const completedAt = it.lastCompletedOccurrenceAt
-      ? new Date(it.lastCompletedOccurrenceAt).getTime()
-      : null;
-    const occs = occurrencesInRange(anchor, it.rrule, start, end)
+
+    // Série récurrente : TOUTES les occurrences de la semaine (faites
+    // comprises — le filtre d'état décide de l'affichage), puis les
+    // manquées d'avant la semaine. Jamais de semaine suivante.
+    const occs = occurrencesInRange(anchor, it.rrule, anchor, end)
       .map((o) => ({ raw: o, eff: applyOverride(o, it.overrides, it.exdates) }))
       .filter((x): x is { raw: Date; eff: Date } => x.eff !== null)
-      .filter((x) => completedAt === null || x.eff.getTime() > completedAt)
       .sort((a, b) => a.eff.getTime() - b.eff.getTime());
 
-    if (occs.length) {
-      for (const { eff } of occs) {
-        rows.push({ item: it, due: eff.toISOString(), key: `${it.id}:${eff.toISOString()}` });
+    const seen = new Set<string>();
+    for (const { eff } of occs) {
+      const iso = eff.toISOString();
+      if (seen.has(iso)) continue;
+      if (eff >= start && eff < end) {
+        seen.add(iso);
+        rows.push({ item: it, due: iso, key: `${it.id}:${iso}` });
       }
-    } else {
-      rows.push({ item: it, due: it.due, key: it.id });
+    }
+    // Occurrences manquées AVANT la semaine (fenêtre 7 jours) : non
+    // couvertes par la dernière coche et dont le jour est fini.
+    for (const missed of missedOccurrences(it, now, start)) {
+      if (missed < missedWindowStart) continue;
+      const iso = missed.toISOString();
+      if (seen.has(iso)) continue;
+      seen.add(iso);
+      rows.push({ item: it, due: iso, key: `${it.id}:${iso}` });
     }
   }
   // Tri chronologique : une liste de RDV se lit par date croissante, pas par
@@ -248,15 +344,26 @@ export function filterActiveByState(items: Item[], filter: TaskFilterKey, now: D
  */
 export function filterRowsByState(rows: OccurrenceRow[], filter: TaskFilterKey, now: Date): OccurrenceRow[] {
   const bucketOf = makeBucketOf(now);
+  const isDone = (r: OccurrenceRow): boolean => {
+    // Une occurrence est faite si l'item est terminé OU si la série la
+    // couvre (« fait jusqu'à maintenant ») — l'occurrence précise, pas
+    // seulement la dernière coche.
+    if (r.item.doneAt) return true;
+    if (r.item.rrule && r.item.lastCompletedOccurrenceAt) {
+      const last = new Date(r.item.lastCompletedOccurrenceAt).getTime();
+      return !Number.isNaN(last) && new Date(r.due).getTime() <= last;
+    }
+    return false;
+  };
   switch (filter) {
     case "today":
-      return rows.filter((r) => !r.item.doneAt && bucketOf(r.due) === "today");
+      return rows.filter((r) => !isDone(r) && bucketOf(r.due) === "today");
     case "overdue":
-      return rows.filter((r) => !r.item.doneAt && bucketOf(r.due) === "overdue");
+      return rows.filter((r) => !isDone(r) && bucketOf(r.due) === "overdue");
     case "done":
-      return rows.filter((r) => !!r.item.doneAt);
+      return rows.filter((r) => isDone(r));
     default:
-      return rows.filter((r) => !r.item.doneAt);
+      return rows.filter((r) => !isDone(r));
   }
 }
 

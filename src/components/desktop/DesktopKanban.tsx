@@ -389,13 +389,15 @@ export function DesktopKanban({
   );
 
   const columns = [...board.columns].sort((a, b) => a.order - b.order);
-  const allUnplaced = items.filter((it) => !it.columnId && !it.doneAt);
 
   // Filtre par projet
   const visibleItems = activeProjectFilter
     ? items.filter((it) => it.projectId === activeProjectFilter)
     : items;
 
+  // Barre « Non placées » : respecte le filtre projet actif (le bug 29/08 :
+  // les pills d'AUTRES projets s'affichaient pendant qu'un filtre projet
+  // était actif — la variable filtrée existait mais n'était pas branchée).
   const unplaced = visibleItems.filter((it) => !it.columnId && !it.doneAt);
   const openCount = visibleItems.filter((it) => !it.doneAt).length;
 
@@ -500,7 +502,7 @@ export function DesktopKanban({
                 color: C.inkMuted,
               }}
             >
-              {allUnplaced.length}
+              {unplaced.length}
             </span>
             <span style={{ color: C.inkFaint }}>{showUnplaced ? "−" : "+"}</span>
           </button>
@@ -524,7 +526,7 @@ export function DesktopKanban({
       >
 
       {/* Section non placées — barre horizontale */}
-      {showUnplaced && allUnplaced.length > 0 && (
+      {showUnplaced && unplaced.length > 0 && (
         <div
           className="flex items-center flex-none"
           style={{
@@ -544,7 +546,7 @@ export function DesktopKanban({
             NON PLACÉES
           </span>
           <div className="flex overflow-x-auto" style={{ gap: 8 }}>
-            {allUnplaced.map((item) => {
+            {unplaced.map((item) => {
               const project = projects.find((p) => p.id === item.projectId);
               return (
                 <DraggablePill

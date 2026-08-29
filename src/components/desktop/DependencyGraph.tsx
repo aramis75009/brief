@@ -41,6 +41,7 @@ import { formatDue } from "@/lib/due";
 import { shapeFor, skinFor } from "@/lib/projects";
 import type { Item, Project, Shape, Tag } from "@/lib/types";
 
+import { TAG_COLOR_MAP } from "@/lib/tagColors";
 const C = {
   bg: "var(--color-bg)",
   surface: "var(--color-surface)",
@@ -51,18 +52,6 @@ const C = {
 } as const;
 
 /** Même palette d'étiquettes que les cartes Kanban — les deux vues montrent les mêmes barres. */
-const TAG_COLOR_MAP: Record<string, string> = {
-  yellow: "#FBE2AE",
-  orange: "#FFCC00",
-  red: "#FF3B30",
-  purple: "#AF52DE",
-  blue: "#007AFF",
-  green: "#34C759",
-  teal: "#5AC8FA",
-  brown: "#A2845E",
-  pink: "#FF2D55",
-  sky: "#64D2FF",
-};
 
 const STATUS: Record<GraphStatus, { color: string; label: string }> = {
   ready: { color: "#34C759", label: "Prête à démarrer" },
