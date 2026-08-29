@@ -69,33 +69,42 @@ else
 fi
 
 echo
-# Alignement — la référence est la branche de prod DÉTECTÉE sur le VPS
+# Alignement — la référence est la branche de prod DÉTECTÉE sur le VPS.
+# Comparaison sur les SHA COMPLETS (pas les versions courtes) pour éviter
+# un faux « écart » causé par la différence de longueur (7 vs 8 chars).
+LOCAL_FULL="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo '')"
 LOCAL="$(short "$REPO_DIR")"
+ORIGIN_MAIN_FULL="$(git -C "$REPO_DIR" rev-parse origin/main 2>/dev/null || echo '')"
 ORIGIN_MAIN="$(git -C "$REPO_DIR" rev-parse --short origin/main 2>/dev/null || echo '?')"
-ORIGIN_VPS_BRANCH="?"
+VPS_HEAD_FULL=""
+ORIGIN_VPS_BRANCH_FULL=""
+if [[ -n "$VPS_HEAD" && "$VPS_HEAD" != "?" ]]; then
+  VPS_HEAD_FULL="$(git -C "$REPO_DIR" rev-parse "$VPS_HEAD" 2>/dev/null || echo '')"
+fi
 if [[ -n "$VPS_BRANCH" && "$VPS_BRANCH" != "?" ]]; then
   ORIGIN_VPS_BRANCH="$(git -C "$REPO_DIR" rev-parse --short "origin/$VPS_BRANCH" 2>/dev/null || echo '?')"
+  ORIGIN_VPS_BRANCH_FULL="$(git -C "$REPO_DIR" rev-parse "origin/$VPS_BRANCH" 2>/dev/null || echo '')"
 fi
 
 echo "── Diagnostic ──"
 if [[ -z "$VPS_BRANCH" || "$VPS_BRANCH" == "?" ]]; then
   echo "⚠️  Prod injoignable — impossible de conclure."
-elif [[ "$ORIGIN_VPS_BRANCH" == "?" ]]; then
+elif [[ -z "$ORIGIN_VPS_BRANCH_FULL" ]]; then
   echo "⚠️  La prod tourne sur '$VPS_BRANCH' qui n'existe PAS sur origin."
   echo "    Pousse-la ou rebascule la prod sur une branche existante."
-elif [[ "$VPS_HEAD" == "$ORIGIN_VPS_BRANCH" ]]; then
+elif [[ -n "$VPS_HEAD_FULL" && "$VPS_HEAD_FULL" == "$ORIGIN_VPS_BRANCH_FULL" ]]; then
   echo "✅ Prod alignée avec GitHub ($VPS_BRANCH @ $VPS_HEAD)"
 else
   echo "⚠️  Écart de prod : VPS=$VPS_HEAD / origin/$VPS_BRANCH=$ORIGIN_VPS_BRANCH — un déploiement est nécessaire"
 fi
 
-if [[ "$LOCAL" == "$VPS_HEAD" && "$LOCAL" != "?" ]]; then
+if [[ -n "$LOCAL_FULL" && "$LOCAL_FULL" == "$VPS_HEAD_FULL" ]]; then
   echo "✅ Copie locale alignée avec la prod"
 else
   echo "⚠️  Ta copie ($LOCAL) diffère de la prod ($VPS_HEAD) — fast-forward ou rebase avant de coder"
 fi
 
-if [[ "$ORIGIN_MAIN" != "$VPS_HEAD" ]]; then
+if [[ -n "$ORIGIN_MAIN_FULL" && -n "$VPS_HEAD_FULL" && "$ORIGIN_MAIN_FULL" != "$VPS_HEAD_FULL" ]]; then
   echo "ℹ️  main ($ORIGIN_MAIN) diffère de la prod ($VPS_HEAD) — merge prévu ?"
 fi
 echo
