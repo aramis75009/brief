@@ -10,101 +10,101 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-29 (soir) · Landing SaaS servie sur `/landing` + marque vectorielle — déployé en prod
+# Passation — 2026-08-29 (nuit) · Occurrences manquées visibles — sprint stabilisation 1/2
 
 | | |
 |---|---|
-| **Agent** | **Hermes Agent · glm-5.3** — reprise en autonomie (2 crash model kimi-k3 absorbés, session préservée) |
-| **Branche** | `main` (HEAD `550aa8e`) — unique branche |
-| **Prod** | **Déployée** sur le VPS au même commit (`550aa8e`), conteneur sain (`Healthy`), `/landing` + `/logo.svg` + `/` vérifiés 200 depuis le conteneur |
+| **Agent** | **Hermes Agent · glm-5.3** — reprise en autonomie |
+| **Branche** | `main` (HEAD `a123ca5`) — unique branche |
+| **Prod** | **Déployée** (`a123ca5`), conteneur Healthy, `/` et `/landing` 200 |
 
 ## Goal — l'objectif
 
-Terminer le chantier landing demandé par Aramis : connecter tous les CTA au
-parcours d'authentification Supabase, corriger la mise en page, utiliser le
-**logo validé** (PWA / écran de connexion — pas en créer un nouveau), animer
-le hero, et pousser sur un `main` propre.
+Sprint « stabiliser avant de construire » (décision Aramis 29/08 soir) :
+corriger les bugs des tâches récurrentes que vivait Aramis, puis seulement
+attaquer les chantiers (projets & objectifs). Deux bugs décrits par Aramis,
+reproduits sur ses **vraies données de prod** avant correction.
 
 ## Current state — ce qui a été fait
 
-1. **`logo.svg` à la racine du repo** : la marque validée (« Trois
-   destinations » — 3 barres pastel task/meet/idea décroissantes sur tuile
-   encre, même motif que `icon-192.png` et le composant `Mark()` de
-   `AuthGate.tsx`) exportée en **vectoriel**, source de vérité. Copie servie
-   dans `public/logo.svg`. Correction mid-course d'Aramis : ne PAS créer un
-   nouveau logo — j'avais d'abord proposé un glyph micro, abandonné.
-2. **`public/landing.html`** (v2, remplace la preview
-   `docs/landing/multi-user-v1.html` qui reste en archive) :
-   - **7 CTA câblés** : tous pointent vers `/` (l'app, qui affiche
-     l'écran de connexion Supabase `AuthGate`). Pas de faux parcours signup :
-     l'auth actuelle est une allowlist `authorized_users`, sans signup libre.
-   - **Logo validé** en inline SVG : header (tuile encre), favicon, CTA
-     final (tuile blanche inversée).
-   - **Animations hero** : entrée décalée du copy, téléphone flottant,
-     micro pulsant, waveform vivante, halo pastel derrière le mockup,
-     reveal au scroll **no-JS-safe** (caché uniquement si JS pose `.anim`
-     sur `<html>` — crawlers et lecteurs voient tout).
-   - **Copy CalDAV corrigée** : « synchro bidirectionnelle » (décision
-     Aramis 18/08) au lieu de « lecture seule » qui contredisait le code.
-   - **Fix débordement horizontal** mobile (+22px) / tablette (+67px) : le
-     halo (`inset:-8% -12%`) débordait → `overflow-x:clip` sur html/body.
-3. **`next.config.ts`** : `rewrites()` `/landing` → `/landing.html` (Next ne
-   sert pas les index.html des sous-dossiers de `public/`).
-4. **Docs** : README (pages publiques `/` et `/landing`), DESIGN.md (la
-   marque vectorielle existe — retire « Logo à créer »).
-5. **Déploiement prod** : pull + `docker compose up -d --build`, conteneur
-   `Healthy`. ⚠️ Un curl direct vers le domaine public depuis le VPS Hermes
-   a été bloqué par l'approbation locale — vérifié en 200 **depuis le VPS
-   lui-même** (loopback conteneur). Aramis devrait ouvrir
-   `https://brief.srv1899780.hstgr.cloud/landing` une fois pour confirmer
-   le rendu visuel de bout en bout (TLS/Traefik).
+1. **Bug « avancement sport 5/6 »** — cause racine : la coche du pull du
+   vendredi 28 n'a jamais été enregistrée, et AUCUNE vue ne permettait de
+   la rattraper : le `due` d'une récurrente pointe toujours la prochaine
+   occurrence, donc jamais « en retard », et les occurrences manquées
+   n'existaient nulle part. Fix : `missedOccurrences()` +
+   `overdueRows()` (une ligne « en retard » PAR occurrence manquée, jour
+   fini, non couverte par `lastCompletedOccurrenceAt`). La coche d'une
+   ligne transmet l'occurrence précise (`completedAt`) → `completionPatch`
+   avance la série → l'avancement de la semaine passe (rejoué sur données
+   prod : cocher le pull du 28 fait passer sport à 6/6).
+2. **Bug « vue Tâches & RDV brouillon »** — trois causes dans
+   `weekOccurrenceRows` : (a) injection du `due` courant quand la série
+   était épuisée dans la semaine → RDV de la semaine SUIVANTE au milieu de
+   la vue (le « 28, puis 31, puis 2 ») — supprimée ; (b) occurrences
+   cochées masquées → maintenant visibles (grisées/barrées par
+   occurrence, filtrables « Faites ») ; (c) manquées d'avant la semaine
+   (fenêtre 7 j) ajoutées comme lignes en retard. Rejoué sur prod : vue
+   sport = 24, 25, 26, 27, 28, 30 chronologique propre.
+3. **Filtre d'état par occurrence** (`filterRowsByState`) : « En retard » /
+   « Faites » se lisent sur l'occurrence, plus sur l'item.
+4. **DesktopTasks** : badge « En retard · » rouge par ligne, état cochable
+   par occurrence. **DesktopDashboard** : compteur « en retard »
+   occurrence-based (héro + carte), 6 lignes au lieu de 3.
+5. **Kanban** : la barre « Non placées » respecte le filtre projet (la
+   variable filtrée existait, jamais branchée).
+6. **`tagColors.ts`** : palette des tags centralisée (4 copies
+   divergentes), « orange » corrigé (#FFCC00 était un jaune → #FF9500),
+   alignée sur les teintes du design system. Les clés persistées dans
+   `tags.json` n'ont pas changé.
+7. **Découvert déjà corrigé ailleurs** : le `<button>` imbriqué de
+   `TodayRow` était déjà fixé (commentaire dans HomeScreen.tsx) ; le
+   bouton « Rien à structurer » n'existe plus. TODOS.md à jour.
 
 ## Decisions — choix critiques
 
-- **CTA → `/` et pas un signup** : le login exige l'allowlist
-  `authorized_users` ; un bouton « Crée ton compte » serait un mensonge.
-  « Ouvrir Brief » est honnête et mène à l'écran de connexion validé.
-- **Landing en statique `public/landing.html`** et pas en composants
-  Next : zéro risque pour la PWA et les routes API, pas de bundle, cache
-  simple. L'intégration en composants reste possible plus tard (voir
-  `docs/landing/README.md`, non urgent).
-- **Tarifs laissés tels quels** (0/6/12 €, placeholders) : README de la
-  landing le documente ; arbitrage produit avec Aramis en attente. Les
-  boutons pointent vers `/` (pas de paiement branché — aucun n'existe).
-- **QA visuel sans modèle vision** : le modèle vision auxiliaire (qwen3.5)
-   renvoyait 400 en fin de session → QA **programmatique** Playwright sur 3
-   viewports (débordements, reveals, ancres, FAQ, animations, liens) — tout
-   passe. Captures finales dans `/tmp/final-{desk,mob}-full.png`.
+- **« Fait jusqu'à maintenant » conservé** : une coche couvre toutes les
+  occurrences antérieures (sémantique historique, alignée
+  `reminders.ts`/`completion.ts`). Le filet « en retard » n'attrape que les
+  occurrences POSTÉRIEURES à la dernière coche — test dédié au cas réel
+  du ven 28.
+- **Le manqué d'avant la semaine est borné à 7 jours** dans la vue
+  Tâches & RDV (au-delà : dashboard « En retard » seulement). Limite la
+  pollution sans cacher le rattrapage.
+- **L'occurrence d'aujourd'hui n'est jamais « manquée »** tant que son jour
+  n'est pas fini — on ne marque pas en retard un RDV du soir à 14 h.
+- **Compteur overview serveur non touché** (`/api/overview` garde sa
+  définition) : le dashboard calcule désormais son retard localement,
+  occurrence-based. Harmonisation serveur = travail futur si besoin.
 
 ## Validations
 
 | Étape | État |
 |---|---|
 | `npx tsc --noEmit` | ✅ 0 erreur |
-| `npx vitest run` | ✅ **374/374** |
-| `npx eslint .` | ✅ 0 erreur (30 warnings préexistants, fichiers non touchés) |
+| `npx vitest run` | ✅ **378/378** (dont 41 sur la lib dashboard, 6 nouveaux) |
+| `npx eslint .` | ✅ 0 erreur (warnings préexistants) |
 | `npm run build` | ✅ standalone OK |
-| Serveur standalone (mode prod Docker) | ✅ `/landing`, `/logo.svg`, `/`, `/manifest.webmanifest` → 200 |
-| QA Playwright 3 viewports | ✅ zéro débordement, 0 `.reveal` non déclenchés, FAQ dépliable, ancres OK, 7 CTA corrects, 4 animations actives |
-| Prod VPS | ✅ `main@550aa8e`, conteneur Healthy, 200 vérifiés depuis le VPS |
+| **Rejeu données de prod** | ✅ pull ven 28 attrapé en retard ; vue sport propre ; plus de lignes semaine suivante |
+| Prod VPS | ✅ `a123ca5` déployé, Healthy, `/` + `/landing` 200 |
 
 ## Next steps
 
-1. **Aramis vérifie visuellement** `https://brief.srv1899780.hstgr.cloud/landing`
-   (rendu de bout en bout après Traefik/TLS) — le dernier maillon que je
-   n'ai pas pu vérifier depuis ici.
-2. **Arbitrage tarifs** (0/6/12 € placeholders) + brancher les CTA sur un
-   vrai signup quand l'auth multi-user existera (aujourd'hui : allowlist).
-3. **Chantiers suivants** (demande Aramis) : projets & objectifs dans
-   Brief ; petits bugs dashboard avec tâches récurrentes.
-4. La preview historique `docs/landing/multi-user-v1.html` peut être
-   supprimée quand Aramis valide la v2 servie.
+1. **Aramis recette sur son usage réel** : ouvrir le dashboard, cocher le
+   pull du vendredi 28 depuis « En retard » → sport doit passer 6/6.
+   Signaler tout autre écart constaté (sprint stabilisation 2/2 si besoin).
+2. **Sprint 2 : chantier projets & objectifs** (demande Aramis) sur la
+   base saine.
+3. Bugs P1 restants (non rencontrés par Aramis ce jour) : micro PWA iOS
+   capricieux au 1er accès ; drag & drop Kanban edge cases.
+4. Micro-dette : harmoniser le compteur « en retard » serveur
+   (`/api/overview`) avec la définition occurrence-based si le récap
+   Telegram doit suivre.
 
 ## Historique des passations
 
 | Date | Sujet | Agent | Lien |
 |---|---|---|---|
-| 2026-08-29 (soir) | Landing SaaS `/landing` + logo vectoriel — déployé prod | Hermes Agent | (cette passation) |
+| 2026-08-29 (nuit) | Occurrences manquées visibles — stabilisation 1/2 | Hermes Agent | (cette passation) |
+| 2026-08-29 (soir) | Landing SaaS `/landing` + logo vectoriel — déployé prod | Hermes Agent | [fiche](docs/handoffs/2026-08-29-landing-saas-deployee.md) |
 | 2026-08-29 (fin aprem) | Finitions du ménage + prod alignée sur `main` | Hermes Agent | [fiche](docs/handoffs/2026-08-29-finitions-menage-prod-alignee.md) |
 | 2026-08-29 | Grand ménage du repo — main redevient la source de vérité | Hermes Agent | [fiche](docs/handoffs/2026-08-29-grand-menage-repo.md) |
-| 2026-08-29 (matin) | Landing page multi-utilisateur v1 (preview, à retravailler) | Hermes Agent | [fiche](docs/handoffs/2026-08-29-landing-multi-user-v1.md) |
