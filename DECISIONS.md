@@ -14,6 +14,43 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-26 · Grand ménage du repo — `main` devient la source de vérité unique (Hermes, avec Claude Code)
+
+**Décision.** Consolidation : tous les fichiers de contrat (AGENTS / README /
+HERMES / CLAUDE / coordination / TODOS / DECISIONS) sont réécrits à partir de
+la réalité du code. `main` redevient la cible de déploiement — la prod VPS
+actuellement sur `feat/email-password-auth` (832a8116) y rebascule au prochain
+`git pull` planifié. L'ancien `DESIGN.md` (qui avait été restauré par Claude
+Design le 20/08 puis perdu dans une branche non mergée) est recréé depuis
+zéro à partir de `docs/design-system-ref.dc.html` + `src/app/globals.css` +
+`src/components/`. `TODOS.md` est réécrit (~140 lignes actives, les sections
+"✅ FAIT/DÉPLOYÉ" archivées). `scripts/coord/status.sh` découvre la branche
+prod dynamiquement au lieu de la hardcoder.
+
+**Pourquoi.** L'audit du 28/08/2026 a confirmé ~30 incohérences entre les
+docs et le code : `AGENTS.md` et `README.md` décrivaient encore le mécanisme
+PIN supprimé depuis le 26/08, `HERMES.md` et `docs/coordination.md` codaient
+en dur `feat/ui-redesign-claude` (absorbée et supprimée le 26/08), la table
+env du README omettait 11 variables obligatoires au build (Supabase,
+CalDAV, modèles IA), et le repo portait un `data/items.json` sample au
+format ancien (`dueAt`/`completedAt`) capable de corrompre `items.json` à la
+copie. Un DESIGN.md avait été restauré le 20/08 mais jamais mergé dans
+`main` — perdu. Sans ce ménage, tout agent suivant les docs écrivait du
+code qui ne compilait pas ou déployait sur une branche inexistante.
+
+**Comment.** Audit complet du filesystem (routes, guards, env vars,
+composants, git archaeology sur DESIGN.md et la branche prod), puis
+réécriture parallèle des 7 fichiers de contrat, création du `DESIGN.md` neuf
+(mobile + desktop), réduction de `TODOS.md` de 545 à ~140 lignes, purge des
+commentaires morts (`cron-auth.ts`, `DesktopHeader.tsx`), suppression de
+`data/items.json` sample obsolète. Tests : 374/374 passent encore.
+
+**Statut.** ✅ Fait le 29/08 (branche `cleanup/mega-clean-2026-08-29`,
+mergée dans `main`). La prod VPS rebasculera sur `main` au prochain
+déploiement planifié.
+
+---
+
 ## 2026-08-26 · Le PIN partagé devient une auth email + mot de passe (Supabase)
 
 **Décision.** Le PIN unique (`BRIEF_PIN`, `src/lib/guard.ts`) est remplacé par
@@ -203,7 +240,9 @@ l'utilisateur avait déjà activé les notifications.
 
 ---
 
-## 2026-08-20 (après-midi) · `DESIGN.md` est de retour — réécrit fidèle au code
+## 2026-08-20 (après-midi) · `DESIGN.md` est de retour — réécrit fidèle au code [ARCHIVÉ le 2026-08-29]
+
+> **ARCHIVÉ.** Ce DESIGN.md restauré le 20/08 sur `feat/ui-redesign-claude` n'a **jamais été mergé dans `main`** — la branche a été absorbée par `feat/email-password-auth` puis supprimée fin août. L'état actuel est l'entrée 2026-08-29 en haut de ce fichier.
 
 **Décision.** `DESIGN.md` existe de nouveau à la racine. Ce n'est **pas** une
 résurrection de l'ancien (système corail/General Sans, supprimé le 20/08 au

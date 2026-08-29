@@ -3,9 +3,10 @@
 # Spécifique à Claude Code
 
 `AGENTS.md` ci-dessus porte le contrat commun aux trois agents : invariants,
-commandes de vérification, règles git, gabarit de passation. **Ce qui suit ne
-concerne que Claude Code.** Ne pas y remettre une règle qui vaut aussi pour
-Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge tout seul.
+commandes de vérification, règles git, gabarit de passation. **Ce qui suit
+ne concerne que Claude Code.** Ne pas y remettre une règle qui vaut aussi
+pour Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge
+tout seul.
 
 ## Avant de coder
 
@@ -19,14 +20,19 @@ Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge tout seul.
   `.env.local`, jamais commités — voir `docs/agent-calendar-access.md`.
 - **`superpowers:brainstorming` avant de concevoir une fonctionnalité**, pas
   après avoir commencé à coder.
-- **`superpowers:systematic-debugging` devant un bug**, plutôt que `/investigate`
-  ou `debugging-wizard`.
-- **Le design system Claude Design v1 est la source de vérité visuelle** (le
-  fichier `.dc.html` + `globals.css`) — l'ancien `DESIGN.md` est supprimé, ne
-  plus s'y référer. Pour une direction nouvelle, `frontend-design`.
+- **`superpowers:systematic-debugging` devant un bug**, plutôt que
+  `/investigate` ou `debugging-wizard`.
+- **Le design system Claude Design v1 est la source de vérité visuelle** —
+  prototype iOS dans `docs/design-system-ref.dc.html`, tokens et recettes
+  actuelles dans `DESIGN.md` (racine). Toute nouvelle direction passe par
+  `frontend-design` avec livrable `.dc.html`.
+- **Sécurité** : `requireSession()` (Supabase Auth, JWT) est l'unique garde
+  des routes `/api/*`. L'ancien mécanisme PIN est supprimé depuis le
+  2026-08-26. Ne jamais réintroduire `requirePin`, `BRIEF_PIN` ou
+  `x-brief-pin`.
 - Documentation d'une bibliothèque : MCP `context7`, jamais la mémoire du
-  modèle. Next.js 16 et React 19 sont postérieurs à beaucoup de ce que tu crois
-  savoir — et `AGENTS.md` rappelle que les guides font foi dans
+  modèle. Next.js 16 et React 19 sont postérieurs à beaucoup de ce que tu
+  crois savoir — et `AGENTS.md` rappelle que les guides font foi dans
   `node_modules/next/dist/docs/`.
 
 ## Arbitrage des skills
@@ -38,8 +44,8 @@ Hermes — elle irait dans `AGENTS.md`, le seul fichier qu'il charge tout seul.
 | Merger + PR | `/ship` | git à la main |
 | Déployer sur Vercel | `vercel-deploy-workflow` | `vercel:deploy` |
 
-Vercel n'est **pas** la cible réelle de Brief : stockage éphémère, aucun cron à
-la minute. Le VPS l'est.
+Vercel n'est **pas** la cible réelle de Brief : stockage éphémère, aucun
+cron à la minute. Le VPS l'est.
 
 ## Mémoire
 
@@ -48,20 +54,25 @@ Le dossier mémoire de ce projet est
 
 Y écrire quand un fait résiste à l'oubli : un piège d'outil, une décision
 produit, une contrainte non déductible du code. **Ne pas y écrire ce que
-`HANDOFF.md`, `AGENTS.md`, `TODOS.md` ou git disent déjà** — c'est du doublon
-qui se périme séparément.
+`HANDOFF.md`, `AGENTS.md`, `TODOS.md` ou git disent déjà** — c'est du
+doublon qui se périme séparément.
 
 ## Système de design
 
-Le design system **Claude Design v1 (iOS)** est LA source de vérité visuelle :
-`/opt/data/brief-design-claude/Brief Design System.dc.html` (tokens, composants,
-écrans), implémentée à l'identique dans `src/app/globals.css` + `src/components/`
-(voir `DECISIONS.md` — l'ancien `DESIGN.md` a été **supprimé** le 20/08 : il
-décrivait l'ancien système corail/General Sans, abandonné, ne plus jamais s'y
-référer).
+Le design system **Claude Design v1** est LA source de vérité visuelle :
 
-Les polices, couleurs, échelles d'espacement, rayons, durées d'animation et
-l'icône sont définis dans le fichier de design system. Ne pas s'en écarter sans
-accord explicite. En revue ou en QA, signaler tout code qui ne s'y conforme pas
-— la section « Ce qu'il reste à faire côté code » liste les écarts connus et
-assumés.
+- **Prototype iOS (mobile)** : `docs/design-system-ref.dc.html` — tokens
+  exacts (fond `#F4F4F2`, encre `#101010`, pastels task / meet / idea / AI,
+  radius 20/24/pill, ombres card/fab/nav, Plus Jakarta Sans 400–800).
+- **Tokens et recettes actuels (mobile + desktop)** : `DESIGN.md` (racine du
+  repo). Ce fichier décrit ce qui est réellement en code — la spec `.dc.html`
+  est la référence visuelle, `DESIGN.md` est la source opérationnelle.
+- **Implémentation** : `src/app/globals.css` (tokens Tailwind v4) +
+  `src/components/` (mobile) + `src/components/desktop/` (desktop).
+
+Ne pas s'écarter des tokens sans accord explicite. En revue ou en QA,
+signaler tout code qui ne s'y conforme pas — les écarts connus et assumés
+sont listés dans `DESIGN.md`, section « Écarts connus ».
+
+L'ancien système corail / General Sans a été abandonné le 2026-08-20 et
+supprimé (`DECISIONS.md`) — ne pas le ressusciter.

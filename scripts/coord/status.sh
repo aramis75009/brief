@@ -9,6 +9,13 @@
 #
 # Règle : si la prod est en avance sur ta copie, fast-forward AVANT de coder.
 # ---------------------------------------------------------------------------
+# 2026-08-29 · Grand ménage : la branche de prod n'est PLUS hardcodée.
+# Elle est découverte dynamiquement depuis le VPS (qui lit sa propre
+# branche via git). Avant, status.sh comparait avec origin/feat/ui-redesign-claude
+# — branche absorbée dans main le 26/08 et supprimée d'origin — ce qui produisait
+# un écart de prod PERMANENT (origin=? → toujours "écart"). Maintenant la référence
+# est: la branche prod actuelle est celle qui est sur /docker/brief.
+# ---------------------------------------------------------------------------
 set -u
 
 VPS_DIR="/docker/brief"
@@ -23,9 +30,8 @@ echo
 
 # 1. GitHub (origin) — la vérité centrale
 echo "1. GitHub (origin)"
-echo "   origin/main                 : $(short "$REPO_DIR") $(git -C "$REPO_DIR" branch -r --contains "$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null)" 2>/dev/null | head -1 || true)"
 if git -C "$REPO_DIR" fetch origin --prune --quiet 2>/dev/null; then
-  echo "   origin/feat/ui-redesign-claude : $(git -C "$REPO_DIR" rev-parse --short origin/feat/ui-redesign-claude 2>/dev/null || echo '?')"
+  echo "   origin/main : $(git -C "$REPO_DIR" rev-parse --short origin/main 2>/dev/null || echo '?')"
 else
   echo "   (fetch impossible — réseau ?)"
 fi
@@ -37,9 +43,13 @@ echo "   HEAD    : $(short "$REPO_DIR")"
 
 echo
 echo "3. Production (VPS /docker/brief)"
+VPS_BRANCH=""
+VPS_HEAD="?"
 if [[ -d "$VPS_DIR/.git" ]]; then
-  echo "   branche : $(branch "$VPS_DIR")"
-  echo "   HEAD    : $(short "$VPS_DIR")"
+  VPS_BRANCH="$(branch "$VPS_DIR")"
+  VPS_HEAD="$(short "$VPS_DIR")"
+  echo "   branche : $VPS_BRANCH"
+  echo "   HEAD    : $VPS_HEAD"
 elif command -v ssh >/dev/null 2>&1; then
   # Copie de travail dans un conteneur (Hermes) : la prod est sur la machine
   # hôte, jointe par SSH. Clé : /opt/data/home/.ssh/id_ed25519 (HOME=/opt/data/home).
@@ -47,8 +57,10 @@ elif command -v ssh >/dev/null 2>&1; then
     -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o BatchMode=yes \
     root@186.241.16.37 "cd /docker/brief && echo \$(git branch --show-current) \$(git rev-parse --short HEAD)" 2>/dev/null)"
   if [[ -n "$VPS_SSH_OUT" ]]; then
-    echo "   branche : ${VPS_SSH_OUT% *}"
-    echo "   HEAD    : ${VPS_SSH_OUT##* }"
+    VPS_BRANCH="${VPS_SSH_OUT% *}"
+    VPS_HEAD="${VPS_SSH_OUT##* }"
+    echo "   branche : $VPS_BRANCH"
+    echo "   HEAD    : $VPS_HEAD"
   else
     echo "   ⚠️  injoignable (pas de repo local, SSH hôte impossible — Mac ?)"
   fi
@@ -57,22 +69,34 @@ else
 fi
 
 echo
-# Alignement
+# Alignement — la référence est la branche de prod DÉTECTÉE sur le VPS
 LOCAL="$(short "$REPO_DIR")"
-VPS="${VPS_SSH_OUT##* }"
-[[ -z "$VPS" || "$VPS" == "$VPS_DIR" ]] && VPS="$(short "$VPS_DIR" 2>/dev/null || echo '?')"
-ORIGIN_UI="$(git -C "$REPO_DIR" rev-parse --short origin/feat/ui-redesign-claude 2>/dev/null || echo '?')"
+ORIGIN_MAIN="$(git -C "$REPO_DIR" rev-parse --short origin/main 2>/dev/null || echo '?')"
+ORIGIN_VPS_BRANCH="?"
+if [[ -n "$VPS_BRANCH" && "$VPS_BRANCH" != "?" ]]; then
+  ORIGIN_VPS_BRANCH="$(git -C "$REPO_DIR" rev-parse --short "origin/$VPS_BRANCH" 2>/dev/null || echo '?')"
+fi
 
 echo "── Diagnostic ──"
-if [[ "$VPS" == "$ORIGIN_UI" && "$VPS" != "?" ]]; then
-  echo "✅ Prod alignée avec GitHub (feat/ui-redesign-claude @ $VPS)"
+if [[ -z "$VPS_BRANCH" || "$VPS_BRANCH" == "?" ]]; then
+  echo "⚠️  Prod injoignable — impossible de conclure."
+elif [[ "$ORIGIN_VPS_BRANCH" == "?" ]]; then
+  echo "⚠️  La prod tourne sur '$VPS_BRANCH' qui n'existe PAS sur origin."
+  echo "    Pousse-la ou rebascule la prod sur une branche existante."
+elif [[ "$VPS_HEAD" == "$ORIGIN_VPS_BRANCH" ]]; then
+  echo "✅ Prod alignée avec GitHub ($VPS_BRANCH @ $VPS_HEAD)"
 else
-  echo "⚠️  Écart de prod : VPS=$VPS / origin=$ORIGIN_UI — un déploiement est nécessaire"
+  echo "⚠️  Écart de prod : VPS=$VPS_HEAD / origin/$VPS_BRANCH=$ORIGIN_VPS_BRANCH — un déploiement est nécessaire"
 fi
-if [[ "$LOCAL" == "$VPS" ]]; then
+
+if [[ "$LOCAL" == "$VPS_HEAD" && "$LOCAL" != "?" ]]; then
   echo "✅ Copie locale alignée avec la prod"
 else
-  echo "⚠️  Ta copie ($LOCAL) diffère de la prod ($VPS) — fast-forward ou rebase avant de coder"
+  echo "⚠️  Ta copie ($LOCAL) diffère de la prod ($VPS_HEAD) — fast-forward ou rebase avant de coder"
+fi
+
+if [[ "$ORIGIN_MAIN" != "$VPS_HEAD" ]]; then
+  echo "ℹ️  main ($ORIGIN_MAIN) diffère de la prod ($VPS_HEAD) — merge prévu ?"
 fi
 echo
 echo "── Rappel ──"

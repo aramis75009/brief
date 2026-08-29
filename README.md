@@ -1,14 +1,18 @@
 # Brief
 
 Organiseur personnel piloté à la voix. Tu parles, Whisper transcrit, un LLM
-découpe la note en tâches et rendez-vous datés, tu relis, Brief les garde.
+découpe la note en tâches et rendez-vous datés, tu relis, Brief les garde. Les
+rappels partent en **Web Push** depuis le serveur — iOS ne fournit aucune API
+de notification programmée à une application web, c'est donc au serveur de
+décider de la seconde d'envoi.
 
-Brief ne dépend d'aucun service de tâches tiers : il possède ses données, sans
-plafond de projets. Les rappels partent en **Web Push** depuis le serveur —
-iOS ne fournit aucune API de notification programmée à une application web,
-c'est donc au serveur de décider de la seconde d'envoi.
+Brief ne dépend d'aucun service de tâches tiers : il possède ses données,
+sans plafond de projets. L'app est **mobile ET desktop** — PWA installée à
+l'écran d'accueil iOS + site responsive ≥ 1024 px, portée par `useIsDesktop()`
+et les composants `src/components/desktop/`.
 
-Next.js 16 (App Router) · React 19 · Tailwind v4 · déployé sur Vercel.
+Next.js 16 (App Router) · React 19 · Tailwind v4 · Supabase Auth · hébergé en
+**VPS Docker** (pas Vercel).
 
 ## Chaîne
 
@@ -16,6 +20,7 @@ Next.js 16 (App Router) · React 19 · Tailwind v4 · déployé sur Vercel.
 micro → /api/transcribe → /api/parse → écran Revue → /api/items → stockage
         (Groq Whisper)     (Groq LLM)   (édition)                  ↓
                            dates absolues              cron → Web Push → iPhone
+                                                           + sync CalDAV Apple
 ```
 
 ## Démarrage
@@ -32,66 +37,109 @@ Le micro exige un contexte sécurisé : `localhost` convient, une IP de LAN non.
 
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `BRIEF_PIN` | Code d'accès. Vérifié **côté serveur** sur toutes les routes `/api/*`. | — (obligatoire) |
 | `GROQ_API_KEY` | Transcription et structuration. | — (obligatoire) |
 | `TRANSCRIBE_PROVIDER` | `groq` ou `voicebox`. | `groq` |
 | `TRANSCRIBE_MODEL` | Modèle de transcription. | `whisper-large-v3` |
 | `PARSE_MODEL` | Modèle de structuration. | `openai/gpt-oss-20b` |
+| `CHAT_MODEL` | Modèle de l'assistant conversationnel (`/api/chat`). | — |
+| `OLLAMA_API_KEY` | Chat IA quand le modèle est servi via Ollama Cloud. | — |
+| `VOICEBOX_URL` | Base d'un Voicebox local. Implémenté, non testé. | — |
 | `NEXT_PUBLIC_APP_NAME` | Titre affiché. Exposé au navigateur. | `Brief` |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clé publique Web Push. Exposée au navigateur. | — |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL du projet Supabase. Exposée au navigateur. **Build-time.** | — (obligatoire) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clé publique « anon » Supabase. Exposée au navigateur. **Build-time.** | — (obligatoire) |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clé publique Web Push. Exposée au navigateur. **Build-time.** | — |
 | `VAPID_PRIVATE_KEY` | Clé privée Web Push. **Jamais exposée.** | — |
 | `VAPID_SUBJECT` | Contact `mailto:` exigé par le protocole VAPID. | — |
-| `BRIEF_DATA_DIR` | Dossier des données serveur (projets, items, abonnements). **Éphémère sur Vercel.** | `.data` |
-| `BRIEF_CRON_TOKEN` | Jeton du planificateur de rappels. Distinct du PIN. | — |
-| `BRIEF_CAPTURE_TOKEN` | Jeton du raccourci iOS. Distinct du PIN. | — |
-| `BRIEF_DIGEST_TOKEN` | Jeton de lecture du récap du matin (n8n). Distinct du PIN. | — |
-| `VOICEBOX_URL` | Base d'un Voicebox local. Implémenté, non testé. | — |
+| `BRIEF_DATA_DIR` | Dossier des données serveur (projets, items, abonnements). Docker : `/app/data`. | `.data` |
+| `BRIEF_CRON_TOKEN` | Jeton Bearer du planificateur de rappels (`/api/cron/*`). Distinct de la session utilisateur. | — |
+| `BRIEF_CAPTURE_TOKEN` | Jeton Bearer du raccourci iOS (`/api/capture`). | — |
+| `BRIEF_DIGEST_TOKEN` | Jeton Bearer de lecture du récap du matin (`/api/digest`, n8n). | — |
+| `BRIEF_CALDAV_USER` | Login CalDAV Apple. | — |
+| `BRIEF_CALDAV_PASSWORD` | Mot de passe app-spécifique iCloud. | — |
+| `BRIEF_CALDAV_ROOT` | Racine CalDAV (défaut iCloud). | — |
+| `BRIEF_CALDAV_CALENDAR_PATH` | Chemin du calendrier cible. | — |
+| `BRIEF_CALDAV_MAPPING` | Surcharge JSON de la correspondance kind → calendrier. | — |
 
-`VOICEBOX_URL` n'est **pas** posée sur Vercel : le service tourne sur le LAN,
-injoignable depuis une fonction cloud.
+`VOICEBOX_URL` n'est pas posée sur le VPS public : le service tourne sur le
+LAN d'Aramis, injoignable depuis une fonction cloud.
 
 ## Sécurité
 
-L'URL de déploiement est publique. La seule barrière est
-[`src/lib/guard.ts`](src/lib/guard.ts) : chaque route `/api/*` compare le header
-`x-brief-pin` à `process.env.BRIEF_PIN` en temps constant, et renvoie `401`
-sinon. **Toute nouvelle route sous `/api/` doit commencer par :**
+L'URL de déploiement est publique. Depuis le 2026-08-26, la seule barrière
+est [`src/lib/guard.ts`](src/lib/guard.ts) : `requireSession()` vérifie le
+JWT Supabase Auth en temps constant (clé publique ES256, validation locale,
+pas d'appel réseau). Le rafraîchissement du jeton est géré par
+[`src/proxy.ts`](src/proxy.ts) avant que la route ne s'exécute. **Toute
+nouvelle route sous `/api/` doit commencer par :**
 
 ```ts
-const denied = requirePin(req);
+const denied = await requireSession();
 if (denied) return denied;
 ```
 
-L'écran PIN et le `sessionStorage` ne sont que de l'UX — ils ne protègent rien.
+L'**ancien mécanisme PIN** (`BRIEF_PIN`, `x-brief-pin`, `requirePin()`,
+`POST /api/session`) est **supprimé depuis le 2026-08-26** — ne pas le
+réintroduire. Quelques commentaires morts traînent encore dans le code
+(ex. `src/lib/cron-auth.ts`, `src/components/desktop/DesktopHeader.tsx`) : à
+corriger quand on y touche.
+
+Les routes « machine » (`/api/cron/reminders`, `/api/capture`,
+`/api/digest`, `/api/cron/caldav-sync`) portent un **jeton Bearer dédié**, pas
+la session utilisateur. Un secret stocké en clair dans une crontab ou un
+raccourci iOS ne doit pas ouvrir la même porte qu'une session Humain, et
+doit pouvoir être révoqué seul.
 
 ## Routes
 
+Toutes les routes `/api/*` exigent soit `requireSession()` (humain), soit un
+jeton Bearer (machine). Tableau en lecture seule : voir
+[`src/app/api/`](src/app/api/) pour le code exact.
+
 | Route | Entrée | Sortie |
 |---|---|---|
-| `POST /api/session` | header PIN | `{ ok: true }` — valide un code |
+| **Auth** | | |
+| `POST /api/auth/login` | `{ email, password }` | `{ session }` Supabase |
+| `POST /api/auth/logout` | — | `{ ok: true }` |
+| `POST /api/auth/forgot-password` | `{ email }` | email de reset |
+| `POST /api/auth/reset-password` | `{ password }` + token URL | `{ ok: true }` |
+| `GET /api/auth/session` | — | `{ user? }` (lit le JWT cookie) |
+| **Capture / parsing** | | |
 | `POST /api/transcribe` | multipart `file` + `mimeType` | `{ text }` |
-| `GET /api/projects` | — | `[{ id, name, tint, hints }]` — projets de Brief |
 | `POST /api/parse` | `{ text }` | `{ items }` — dates absolues, `kind` task/event |
-| `GET /api/items` | — | `{ items }` |
+| `POST /api/capture` | `{ text, structure? }` | **machine** — raccourci iOS |
+| **Données** | | |
+| `GET /api/items` | — | `{ items }` (tous les items, filtrable) |
 | `POST /api/items` | `{ items }` | `{ results, saved, total }` — `207` si partiel |
+| `GET /api/items/[id]` | — | un item |
+| `PATCH /api/items/[id]` | champs | item mis à jour |
+| `DELETE /api/items/[id]` | — | suppression |
+| `GET /api/projects` | — | `[{ id, name, tint, hints }]` |
 | `GET /api/overview` | — | charge par projet, activité 7 jours |
-| `POST /api/push/subscribe` | `{ subscription }` | enregistre l'abonnement Web Push |
+| `GET /api/agenda` | `?date=YYYY-MM-DD` | la vue Agenda du jour |
+| `GET /api/board` | — | le Kanban (desktop) |
+| `GET /api/search` | `?q=` | recherche plein-texte |
+| `GET /api/tags` | — | tags existants |
+| `GET /api/tags/[id]` | — | tag |
+| **CalDAV Apple** | | |
+| `GET /api/caldav-status` | — | état de la synchro (dernière réussie, erreurs) |
+| `GET /api/cron/caldav-sync` | Bearer | **machine** — tire/pousse `src/lib/caldav.ts` |
+| **Web Push** | | |
+| `POST /api/push/subscribe` | `{ subscription }` | enregistre l'abonnement |
 | `POST /api/push/test` | `{ title, body, subscription? }` | envoi immédiat |
-| `GET /api/cron/reminders` | `Authorization: Bearer $BRIEF_CRON_TOKEN` | passage du planificateur |
-| `POST /api/capture` | `Authorization: Bearer $BRIEF_CAPTURE_TOKEN`, `{ text, structure? }` | raccourci iOS |
-| `GET /api/digest` | `Authorization: Bearer $BRIEF_DIGEST_TOKEN` | récap du jour : retard + échéances du jour |
-
-Les trois dernières portent un **jeton machine**, pas le PIN : un secret déposé
-dans une crontab, un raccourci iOS ou un automate ne doit pas ouvrir la même
-porte que le code que tu tapes, et doit pouvoir être révoqué seul. Chacune a le
-sien, pour que révoquer l'une n'éteigne pas les autres.
+| **IA / divers** | | |
+| `POST /api/chat` | `{ messages }` | l'assistant conversationnel (tuile « Demander à l'IA ») |
+| `POST /api/audio` | multipart | stocke un enregistrement |
+| `GET /api/audio/[id]` | — | lit un enregistrement |
+| **Planificateur** | | |
+| `GET /api/cron/reminders` | Bearer | **machine** — passage d'envoi des rappels Web Push |
+| `GET /api/digest` | Bearer | **machine** — récap du jour (n8n → canal) |
 
 ### Le récap du matin — `GET /api/digest`
 
 Conçu pour un automate qui met en forme et envoie sur un canal que Brief n'a
 pas (WhatsApp, Telegram, un mail). Brief notifie déjà par Web Push item par
-item ; ceci répond à une autre question — « qu'est-ce qui pèse sur ma journée »
-— en un seul message.
+item ; ceci répond à une autre question — « qu'est-ce qui pèse sur ma
+journée » — en un seul message.
 
 ```json
 { "generatedAt": "2026-08-15T06:30:00.000Z",
@@ -104,13 +152,14 @@ item ; ceci répond à une autre question — « qu'est-ce qui pèse sur ma jour
 
 Les deux listes sont triées : priorité 1 d'abord (la plus haute), puis échéance
 la plus ancienne. Les tâches terminées, sans échéance ou postérieures à
-aujourd'hui n'y figurent pas — un récap qui déverse l'Inbox chaque matin finit
-ignoré.
+aujourd'hui n'y figurent pas — un récap qui déverse l'Inbox chaque matin
+finit ignoré.
 
 **Le découpage se fait ici, pas chez l'appelant.** Un nœud Code n8n s'exécute
-dans le fuseau de son conteneur (`GENERIC_TIMEZONE`, `Europe/Berlin` sur le VPS
-— le bon décalage par accident). Ce réglage vit hors du dépôt : une régression
-n'y produirait aucun test rouge. Voir [`src/lib/buckets.ts`](src/lib/buckets.ts).
+dans le fuseau de son conteneur (`GENERIC_TIMEZONE`, `Europe/Berlin` sur le
+VPS — le bon décalage par accident). Ce réglage vit hors du dépôt : une
+régression n'y produirait aucun test rouge. Voir
+[`src/lib/buckets.ts`](src/lib/buckets.ts).
 
 ## Pièges à connaître
 
@@ -123,14 +172,20 @@ n'y produirait aucun test rouge. Voir [`src/lib/buckets.ts`](src/lib/buckets.ts)
   Un rappel absent se voit ; un rappel au mauvais moment ne se voit pas.
 - **Le classement tâche / rendez-vous est visible et modifiable à la revue.**
   Une erreur du modèle n'est signalée nulle part ailleurs.
-- **L'`id` d'un item est généré avant le premier envoi et réutilisé.** Un second
-  envoi écrase au lieu de dupliquer : double-clic et rejeu sont inoffensifs.
+- **L'`id` d'un item est généré avant le premier envoi et réutilisé.** Un
+  second envoi écrase au lieu de dupliquer : double-clic et rejeu sont
+  inoffensifs.
 - **iOS ne notifie que les PWA installées à l'écran d'accueil.** En onglet
   Safari, l'abonnement peut réussir sans qu'aucune notification n'arrive.
 - **Tailwind v4 ne compile pas les utilitaires arbitraires contenant `env()`.**
   Les safe areas passent par `.safe-top` / `.safe-bottom` dans `globals.css`.
 - **Le reset CSS doit rester dans `@layer base`.** Hors layer, il l'emporte sur
   les utilitaires Tailwind — c'est ce qui affichait un bouton noir sur noir.
+- **CalDAV Apple est la source de vérité pour les horaires** (décision
+  2026-08-18) : toute édition directe dans Calendrier écrase l'état Brief à la
+  prochaine sync. Voir `docs/handoffs/2026-08-18-caldav-source-de-verite.md`.
+- **Un crash JS client est invisible pour `curl`** (leçon 2026-08-19) : un
+  serveur 200 ne prouve pas que l'app s'ouvre — vérifier en DevTools.
 
 ## Déploiement — VPS
 
@@ -144,9 +199,9 @@ certificat en boucle :
    (`dig +short <domaine>` doit renvoyer l'IP).
 
    **Pas besoin d'en acheter un.** Hostinger attribue à chaque VPS un hostname
-   public gratuit `srvXXXXXX.hstgr.cloud`, **avec un wildcard** : n'importe quel
-   sous-domaine (`brief.srvXXXXXX.hstgr.cloud`) résout déjà vers l'IP, en A et
-   en AAAA, sans rien créer. Et `hstgr.cloud` figure sur la
+   public gratuit `srvXXXXXX.hstgr.cloud`, **avec un wildcard** : n'importe
+   quel sous-domaine (`brief.srvXXXXXX.hstgr.cloud`) résout déjà vers l'IP,
+   en A et en AAAA, sans rien créer. Et `hstgr.cloud` figure sur la
    [Public Suffix List](https://publicsuffix.org/list/), donc chaque
    `srvXXXXXX.hstgr.cloud` compte comme un domaine enregistré distinct pour
    Let's Encrypt : quota propre, aucune concurrence avec les autres clients.
@@ -154,10 +209,10 @@ certificat en boucle :
    `.env.production` et un `docker compose up -d`.
 2. Les ports **80 et 443** ouverts. Le 80 porte le défi HTTP-01 de Let's
    Encrypt : le fermer casse aussi le renouvellement.
-3. **Un reverse proxy.** Le VPS actuel en a déjà un — un Traefik en réseau host
-   (`/docker/traefik`) qui sert aussi n8n. Brief s'y branche par les labels de
-   `app` ; il n'y a pas de proxy dans ce dépôt. Sur une machine nue, prendre
-   `deploy/Caddyfile`.
+3. **Un reverse proxy.** Le VPS actuel en a déjà un — un Traefik en réseau
+   host (`/docker/traefik`) qui sert aussi n8n. Brief s'y branche par les
+   labels de `app` ; il n'y a pas de proxy dans ce dépôt. Sur une machine
+   nue, prendre `deploy/Caddyfile`.
 
 ```bash
 cp .env.production.example .env.production   # puis remplir, BRIEF_DOMAIN inclus
@@ -168,8 +223,8 @@ Quatre choses à ne pas rater :
 
 **`--env-file .env.production` n'est pas facultatif.** `env_file:` injecte des
 variables dans un conteneur au démarrage ; il n'alimente pas l'interpolation
-`${...}` du `docker-compose.yml`, que Compose ne lit que depuis le shell ou un
-fichier nommé `.env`. Sans le drapeau, la clé VAPID publique arrive vide au
+`${...}` du `docker-compose.yml`, que Compose ne lit que depuis le shell ou
+un fichier nommé `.env`. Sans le drapeau, la clé VAPID publique arrive vide au
 build. Le fichier contient désormais des gardes `:?` qui font échouer Compose
 plutôt que de produire une image silencieusement cassée.
 
@@ -180,13 +235,15 @@ réplique. Le perdre, c'est tout perdre.
 **La clé VAPID publique doit être passée AU BUILD.** Les variables
 `NEXT_PUBLIC_*` sont inlinées dans le bundle par le compilateur. Absente au
 build, elle vaut `undefined` dans le navigateur et l'abonnement aux
-notifications échoue sans que le serveur ne voie rien. Le `docker-compose.yml`
-la passe en `args`, pas seulement en `env_file`.
+notifications échoue sans que le serveur ne voie rien. Même chose pour les
+deux variables Supabase. Le `docker-compose.yml` les passe en `args`, pas
+seulement en `env_file`.
 
 **Le HTTPS n'est pas optionnel.** Le micro et les notifications exigent un
-contexte sécurisé. Le conteneur `app` n'écoute que sur `127.0.0.1:3000` — utile
-pour diagnostiquer depuis le VPS, jamais joignable de l'extérieur. C'est Traefik
-qui termine le TLS, via les labels de `app`, et qui renouvelle seul.
+contexte sécurisé. Le conteneur `app` n'écoute que sur `127.0.0.1:3000` —
+utile pour diagnostiquer depuis le VPS, jamais joignable de l'extérieur.
+C'est Traefik qui termine le TLS, via les labels de `app`, et qui renouvelle
+seul.
 
 ⚠️ Traefik tourne en `exposedbydefault=false`. Sans les labels, le conteneur
 démarre parfaitement et reste **invisible depuis Internet** : aucune erreur,
@@ -203,13 +260,14 @@ docker compose ps        # app doit être « healthy », pas seulement « runnin
 
 ### Le cron
 
-Un conteneur séparé appelle `/api/cron/reminders` chaque minute. Volontairement
-pas un `setInterval` dans l'application : un planificateur en mémoire disparaît
-au premier redémarrage, et c'est précisément ce qu'il ne doit pas faire.
+Un conteneur séparé appelle `/api/cron/reminders` chaque minute.
+Volontairement pas un `setInterval` dans l'application : un planificateur en
+mémoire disparaît au premier redémarrage, et c'est précisément ce qu'il ne
+doit pas faire.
 
-Chaque passage journalise `checked / due / sent / advanced / stale / failures`.
-Une sortie vide ne permettrait pas de distinguer « rien à faire » de « cassé
-depuis trois jours ».
+Chaque passage journalise `checked / due / sent / advanced / stale /
+failures`. Une sortie vide ne permettrait pas de distinguer « rien à faire »
+de « cassé depuis trois jours ».
 
 ### Sauvegardes
 
@@ -220,11 +278,12 @@ Installé sur le VPS en `/etc/cron.d/brief` (déclaratif, contrairement à
 0 3 * * * root BRIEF_VOLUME=brief_brief-data /docker/brief/deploy/backup.sh >> /var/log/brief-backup.log 2>&1
 ```
 
-⚠️ Un fichier de `/etc/cron.d` est **ignoré en silence** si son nom contient un
-point ou si ses permissions ne sont pas 644 root:root. Aucune erreur nulle part.
+⚠️ Un fichier de `/etc/cron.d` est **ignoré en silence** si son nom contient
+un point ou si ses permissions ne sont pas 644 root:root. Aucune erreur nulle
+part.
 
-Le script vérifie l'archive juste après l'avoir écrite. **Une sauvegarde jamais
-restaurée n'est pas une sauvegarde.** Le cycle complet a été exercé le
+Le script vérifie l'archive juste après l'avoir écrite. **Une sauvegarde
+jamais restaurée n'est pas une sauvegarde.** Le cycle complet a été exercé le
 2026-08-13 — sauvegarde, suppression de `items.json`, restauration, donnée
 revenue :
 
@@ -238,7 +297,7 @@ docker run --rm -v brief_brief-data:/data -v /var/backups/brief:/backup:ro \
 
 1. Raccourcis → nouveau → **Dicter le texte** (français)
 2. **Obtenir le contenu de l'URL** : `POST https://<domaine>/api/capture`
-   en-tête `Authorization: Bearer <BRIEF_CAPTURE_TOKEN>`, corps `{"text": <dictée>}`
+   en-tête `Authorization: Bearer <BRIEF...N>`, corps `{"text": <dictée>}`
 3. Réglages → Bouton Action → ce raccourci
 
 `{"structure": false}` court-circuite le LLM et dépose la note brute dans
@@ -246,19 +305,20 @@ l'Inbox — utile quand on veut juste ne pas oublier, sans attendre le réseau.
 
 ### Avertissement de build connu
 
-Le build signale trois fois *« Dynamic filesystem access causes tracing of the
-whole project »* sur `src/lib/store.ts`. C'est inhérent à un stockage fichier :
-Next ne peut pas déterminer statiquement ce qui sera lu. Conséquence, la sortie
-standalone pèse 41 Mo au lieu d'un peu moins. Sans effet sur le fonctionnement.
+Le build signale trois fois *« Dynamic filesystem access causes tracing of
+the whole project »* sur `src/lib/store.ts`. C'est inhérent à un stockage
+fichier : Next ne peut pas déterminer statiquement ce qui sera lu.
+Conséquence, la sortie standalone pèse 41 Mo au lieu d'un peu moins. Sans
+effet sur le fonctionnement.
 
 ## Vérifications rapides
 
 ```bash
-# le garde répond bien 401 sans PIN
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<url>/api/session
+# la garde répond bien 401 sans session Supabase
+curl -s -o /dev/null -w '%{http_code}\n' -X GET https://<url>/api/auth/session
 
-# structuration de bout en bout
+# structuration de bout en bout (avec une session valide en cookie)
 curl -s -X POST https://<url>/api/parse \
-  -H 'x-brief-pin: <PIN>' -H 'Content-Type: application/json' \
+  -H 'Content-Type: application/json' -H "Cookie: <session>" \
   -d '{"text":"demain photographier les polos"}'
 ```
