@@ -203,8 +203,11 @@ Toutes les icônes vivent dans `src/components/icons.tsx` (SVG inline, stroke
 1.9–2.1, `stroke-linecap="round"`). L'**icône PWA** (« Trois destinations » :
 trois barres arrondies décroissantes, bleu/vert/ambre sur fond `#101010`)
 est servie depuis `public/icon-{192,512}.png` + variantes maskable et
-apple-touch-icon. **Pas de composant `Logo` actuellement** — à créer quand le
-besoin d'une marque vectorielle réutilisable se fera sentir.
+apple-touch-icon. **La marque vectorielle existe depuis le 29/08** :
+`logo.svg` à la racine du repo (source de vérité, mêmes proportions que
+l'icône PWA et le composant `Mark()` de `AuthGate.tsx`), copie servie dans
+`public/logo.svg`. La landing (`public/landing.html`, route `/landing`)
+l'utilise en inline SVG (header tuile encre, CTA final tuile blanche).
 
 ## 4. Pièges d'implémentation
 

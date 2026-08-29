@@ -18,6 +18,18 @@ const nextConfig: NextConfig = {
   // garde donc la sortie autonome dont le Dockerfile a besoin.
   output: process.env.VERCEL ? undefined : "standalone",
 
+  async rewrites() {
+    return [
+      {
+        // Landing SaaS servie en statique (public/landing.html). Next ne sert
+        // pas les index.html des sous-dossiers de public/ : /landing.html
+        // marche, /landing/ non. Le joli chemin réécrit vers le fichier.
+        source: "/landing",
+        destination: "/landing.html",
+      },
+    ];
+  },
+
   async headers() {
     return [
       {

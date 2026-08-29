@@ -90,6 +90,13 @@ doit pouvoir être révoqué seul.
 
 ## Routes
 
+Pages publiques (sans session) :
+
+| Page | Rôle |
+|---|---|
+| `/` | L'app (PWA) — l'écran de connexion Supabase s'affiche si aucune session. |
+| `/landing` | Landing SaaS — fichier statique `public/landing.html`, réécrit depuis `/landing` par `next.config.ts`. CTA « Ouvrir Brief » → `/`. |
+
 Toutes les routes `/api/*` exigent soit `requireSession()` (humain), soit un
 jeton Bearer (machine). Tableau en lecture seule : voir
 [`src/app/api/`](src/app/api/) pour le code exact.

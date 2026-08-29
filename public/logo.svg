@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Brief">
+  <!--
+    Logo Brief — marque validée (PWA + écran de connexion).
+    Source de vérité vectorielle : ce fichier.
+    Mêmes proportions que public/icon-192.png et le composant Mark() de
+    src/components/AuthGate.tsx (barres 100/76/52, h 19, gap 12).
+    Tokens : task-100 #CFE0FF · meet-100 #CBE9D6 · idea-100 #FBE2AE · ink #101010.
+  -->
+  <rect width="96" height="96" rx="27" fill="#101010"/>
+  <rect x="24" y="26" width="48" height="10" rx="5" fill="#CFE0FF"/>
+  <rect x="24" y="43" width="36.5" height="10" rx="5" fill="#CBE9D6"/>
+  <rect x="24" y="60" width="25" height="10" rx="5" fill="#FBE2AE"/>
+</svg>
