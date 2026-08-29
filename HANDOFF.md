@@ -10,101 +10,103 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-29 (nuit) · Occurrences manquées visibles — sprint stabilisation 1/2
+# Passation — 2026-08-30 (pré-session) · Stabilisation déployée + SPEC chantier Objectifs & Projets
 
 | | |
 |---|---|
-| **Agent** | **Hermes Agent · glm-5.3** — reprise en autonomie |
-| **Branche** | `main` (HEAD `a123ca5`) — unique branche |
-| **Prod** | **Déployée** (`a123ca5`), conteneur Healthy, `/` et `/landing` 200 |
+| **Agent** | **Hermes Agent · glm-5.3 (Ollama Cloud)** — Aramis continue avec ce même modèle dans la session qui suit. Session précédente : `20260829_174516_16a757` (TUI). |
+| **Branche** | `main` (HEAD `f9880f5`) — unique branche, origin à jour |
+| **Prod** | **Déployée** (`f9880f5`), conteneur Healthy, `/` + `/landing` 200, `status.sh` cohérent |
+| **Recette en attente** | Aramis doit confirmer sur usage réel : cocher le pull du ven 28 (dans « En retard ») fait passer Sport 5/6 → 6/6. |
 
-## Goal — l'objectif
+## État — sprint stabilisation 1/2 TERMINÉ et déployé (a123ca5 + f9880f5)
 
-Sprint « stabiliser avant de construire » (décision Aramis 29/08 soir) :
-corriger les bugs des tâches récurrentes que vivait Aramis, puis seulement
-attaquer les chantiers (projets & objectifs). Deux bugs décrits par Aramis,
-reproduits sur ses **vraies données de prod** avant correction.
+Bugs récurrents d'Aramis corrigés, reproduction sur ses **vraies données
+de prod** (SSH → `docker exec brief-app-1 cat /app/data/items.json`) :
 
-## Current state — ce qui a été fait
+1. **Occurrences manquées visibles** : `missedOccurrences()` +
+   `overdueRows()` dans `src/lib/desktopDashboard.ts` — une ligne
+   « en retard » PAR occurrence manquée (jour fini, non couverte par
+   `lastCompletedOccurrenceAt`). Cocher la ligne transmet l'occurrence
+   précise (`completedAt`) → `completionPatch` avance la série.
+2. **Vue Tâches & RDV saine** (`weekOccurrenceRows`) : plus d'injection du
+   `due` courant (le « 28, 31, 2 »), occurrences cochées visibles
+   (filtre « Faites » par occurrence), manquées ≤7 j avant la semaine
+   visibles en retard, items faits simples limités à la semaine.
+3. **`filterRowsByState`** : état lu par occurrence. **DesktopTasks** :
+   badge « En retard · » rouge, coche par occurrence.
+   **DesktopDashboard** : compteur « en retard » occurrence-based.
+4. **Kanban** : « Non placées » respecte le filtre projet.
+   **`tagColors.ts`** : palette tags centralisée (4 copies), orange fixé.
 
-1. **Bug « avancement sport 5/6 »** — cause racine : la coche du pull du
-   vendredi 28 n'a jamais été enregistrée, et AUCUNE vue ne permettait de
-   la rattraper : le `due` d'une récurrente pointe toujours la prochaine
-   occurrence, donc jamais « en retard », et les occurrences manquées
-   n'existaient nulle part. Fix : `missedOccurrences()` +
-   `overdueRows()` (une ligne « en retard » PAR occurrence manquée, jour
-   fini, non couverte par `lastCompletedOccurrenceAt`). La coche d'une
-   ligne transmet l'occurrence précise (`completedAt`) → `completionPatch`
-   avance la série → l'avancement de la semaine passe (rejoué sur données
-   prod : cocher le pull du 28 fait passer sport à 6/6).
-2. **Bug « vue Tâches & RDV brouillon »** — trois causes dans
-   `weekOccurrenceRows` : (a) injection du `due` courant quand la série
-   était épuisée dans la semaine → RDV de la semaine SUIVANTE au milieu de
-   la vue (le « 28, puis 31, puis 2 ») — supprimée ; (b) occurrences
-   cochées masquées → maintenant visibles (grisées/barrées par
-   occurrence, filtrables « Faites ») ; (c) manquées d'avant la semaine
-   (fenêtre 7 j) ajoutées comme lignes en retard. Rejoué sur prod : vue
-   sport = 24, 25, 26, 27, 28, 30 chronologique propre.
-3. **Filtre d'état par occurrence** (`filterRowsByState`) : « En retard » /
-   « Faites » se lisent sur l'occurrence, plus sur l'item.
-4. **DesktopTasks** : badge « En retard · » rouge par ligne, état cochable
-   par occurrence. **DesktopDashboard** : compteur « en retard »
-   occurrence-based (héro + carte), 6 lignes au lieu de 3.
-5. **Kanban** : la barre « Non placées » respecte le filtre projet (la
-   variable filtrée existait, jamais branchée).
-6. **`tagColors.ts`** : palette des tags centralisée (4 copies
-   divergentes), « orange » corrigé (#FFCC00 était un jaune → #FF9500),
-   alignée sur les teintes du design system. Les clés persistées dans
-   `tags.json` n'ont pas changé.
-7. **Découvert déjà corrigé ailleurs** : le `<button>` imbriqué de
-   `TodayRow` était déjà fixé (commentaire dans HomeScreen.tsx) ; le
-   bouton « Rien à structurer » n'existe plus. TODOS.md à jour.
+Validations : tsc 0 erreur · vitest **378/378** (41 sur la lib dashboard,
+dont le test du cas réel ven 28) · build standalone OK · rejeu prod OK.
 
-## Decisions — choix critiques
+⚠️ Sémantique clé conservée : « fait jusqu'à maintenant » — une coche
+couvre les occurrences antérieures. Le filet n'attrape que les
+occurrences POSTÉRIEURES à la dernière coche.
 
-- **« Fait jusqu'à maintenant » conservé** : une coche couvre toutes les
-  occurrences antérieures (sémantique historique, alignée
-  `reminders.ts`/`completion.ts`). Le filet « en retard » n'attrape que les
-  occurrences POSTÉRIEURES à la dernière coche — test dédié au cas réel
-  du ven 28.
-- **Le manqué d'avant la semaine est borné à 7 jours** dans la vue
-  Tâches & RDV (au-delà : dashboard « En retard » seulement). Limite la
-  pollution sans cacher le rattrapage.
-- **L'occurrence d'aujourd'hui n'est jamais « manquée »** tant que son jour
-  n'est pas fini — on ne marque pas en retard un RDV du soir à 14 h.
-- **Compteur overview serveur non touché** (`/api/overview` garde sa
-  définition) : le dashboard calcule désormais son retard localement,
-  occurrence-based. Harmonisation serveur = travail futur si besoin.
+⚠️ Compteur `/api/overview` (serveur) NON harmonisé — toujours
+item-based. Si le récap Telegram doit montrer le retard occurrence-based,
+c'est un chantier à part.
 
-## Validations
+## NEXT CHANTIER — Objectifs & Projets (spec dictée par Aramis, 29/08 soir)
 
-| Étape | État |
-|---|---|
-| `npx tsc --noEmit` | ✅ 0 erreur |
-| `npx vitest run` | ✅ **378/378** (dont 41 sur la lib dashboard, 6 nouveaux) |
-| `npx eslint .` | ✅ 0 erreur (warnings préexistants) |
-| `npm run build` | ✅ standalone OK |
-| **Rejeu données de prod** | ✅ pull ven 28 attrapé en retard ; vue sport propre ; plus de lignes semaine suivante |
-| Prod VPS | ✅ `a123ca5` déployé, Healthy, `/` + `/landing` 200 |
+**Vision globale (rappel Aramis, `TODOS.md` P3 + DECISIONS.md)** : un
+Asana personnel — Kanban, tags, sous-tâches, **dépendances visuelles
+(graphe nœuds type n8n)**, dark mode à la fin. Priorité = Kanban.
 
-## Next steps
+**Ce qu'Aramis a demandé ce soir (spec à la lettre) :**
 
-1. **Aramis recette sur son usage réel** : ouvrir le dashboard, cocher le
-   pull du vendredi 28 depuis « En retard » → sport doit passer 6/6.
-   Signaler tout autre écart constaté (sprint stabilisation 2/2 si besoin).
-2. **Sprint 2 : chantier projets & objectifs** (demande Aramis) sur la
-   base saine.
-3. Bugs P1 restants (non rencontrés par Aramis ce jour) : micro PWA iOS
-   capricieux au 1er accès ; drag & drop Kanban edge cases.
-4. Micro-dette : harmoniser le compteur « en retard » serveur
-   (`/api/overview`) avec la définition occurrence-based si le récap
-   Telegram doit suivre.
+1. **Objectifs assignés à des projets**, avec horizon :
+   - court terme / moyen terme / long terme.
+   - Exemple donné par Aramis : **Web@cadémie → objectif « Rejoindre la
+     Web@cadémie »** (projet `webacademie` dans prod).
+2. **Des tâches à faire AVANT d'utiliser** la fonctionnalité qui crée les
+   dépendances (comprendre : les tâches précèdent l'objectif et se
+   relient en dépendances — voir le graphe existant
+     `DependencyGraph.tsx`).
+3. **Vue projet type Asana** : la vision « Asana perso » d'Aramis.
+4. **Dashboard — « Demain »** : à l'endroit de la carte « Aujourd'hui »,
+   ajouter la capacité de voir **l'étage de demain** (« flèche ou
+   quelque chose dans le genre » — comprendre : navigation
+   Aujourd'hui ↔ Demain sur la même carte, pas une nouvelle carte).
+5. **Ensuite : vérifier que tout fonctionne bien** (recette complète,
+   Aramis y veille).
+
+**Où coder :**
+- Modèle : `src/lib/types.ts` (Item), `store.ts`, `projects.ts` — un
+  objectif est probablement un nouvel objet lié à un projet (pas un item :
+  un objectif survit aux tâches, il les orchestre). À concecrire AVANT de
+  coder — demander la validation du schéma à Aramis sur un petit exemple.
+- API : routes `/api/projects` et probablement `/api/objectives` neuf.
+- UI desktop : `DesktopDashboard.tsx` (carte Aujourd'hui → toggle
+  Demain), `DesktopTasks.tsx` / nouvel écran « Objectifs », Kanban.
+- La vision « Asana » desktop existe partiellement : Kanban, tags,
+  sous-tâches, `DependencyGraph.tsx` — s'appuyer dessus.
+
+**Règles du repo (AGENTS.md, à respecter scrupuleusement) :**
+- GitHub = vérité. Avant de coder : `git fetch` + `bash
+  scripts/coord/status.sh` + lire cette passation.
+- Commits en anglais (`type: subject`) — convention Aramis.
+- Toute route `/api/` commence par `requireSession()`.
+- Aucun calcul de date hors `src/lib/zoned.ts` (Europe/Paris).
+- Bouton mort → câbler une vraie feature, JAMAIS supprimer.
+- Tests : la lib `desktopDashboard.test.ts` est le modèle du niveau
+  attendu (occurrences, prod-replay). Chaque nouvelle logique pure a ses
+  tests AVANT l'UI.
+- Design : DESIGN.md + `docs/design-system-ref.dc.html` ; logo validé =
+  `logo.svg` racine (3 barres pastel sur tuile encre — ne pas recréer).
+- Aramis préfère qu'on lui **propose un exemple du résultat attendu**
+  avant d'intégrer (correction explicite passée) — pour le schéma
+  objectifs et l'UI « Demain », montrer d'abord une maquette/JSON.
 
 ## Historique des passations
 
 | Date | Sujet | Agent | Lien |
 |---|---|---|---|
-| 2026-08-29 (nuit) | Occurrences manquées visibles — stabilisation 1/2 | Hermes Agent | (cette passation) |
+| 2026-08-30 (pré-session) | Stabilisation déployée + spec Objectifs & Projets | Hermes Agent | (cette passation) |
+| 2026-08-29 (nuit) | Occurrences manquées visibles — stabilisation 1/2 | Hermes Agent | [fiche](docs/handoffs/2026-08-29-nuit-occurrences-manquees.md) |
 | 2026-08-29 (soir) | Landing SaaS `/landing` + logo vectoriel — déployé prod | Hermes Agent | [fiche](docs/handoffs/2026-08-29-landing-saas-deployee.md) |
 | 2026-08-29 (fin aprem) | Finitions du ménage + prod alignée sur `main` | Hermes Agent | [fiche](docs/handoffs/2026-08-29-finitions-menage-prod-alignee.md) |
 | 2026-08-29 | Grand ménage du repo — main redevient la source de vérité | Hermes Agent | [fiche](docs/handoffs/2026-08-29-grand-menage-repo.md) |
