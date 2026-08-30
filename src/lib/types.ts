@@ -117,6 +117,8 @@ export type DraftItem = {
   tags?: string[];
   /** IDs d'items prédécesseurs — cette tâche ne peut pas démarrer avant. */
   dependsOn?: string[];
+  /** Objectif auquel l'item contribue (lien faible : l'objectif survit aux tâches). */
+  objectiveId?: string | null;
   /** ID de colonne Kanban (null = non placée). */
   columnId?: string | null;
   /** Fil d'origine vocal — la dictée d'où provient cet item. */
@@ -387,6 +389,33 @@ export type Overview = {
 };
 
 export type ToastKind = "ok" | "err";
+
+/* ---------------------------------------------------------------------------
+ * Objectifs — un objectif n'est PAS un item. Il survit aux tâches, les
+ * orchestre, et les tâches qui y mènent se relient à lui (graphe).
+ * ------------------------------------------------------------------------ */
+
+/** Horizon d'un objectif : court / moyen / long terme. */
+export type ObjectiveHorizon = "court" | "moyen" | "long";
+
+/**
+ * Objectif Brief. Lié à un projet, horodaté, pas un item.
+ *
+ * La spec d'Aramis (29/08 soir) : « objectifs assignés à des projets, avec
+ * horizon ». Un objectif orchestre ses tâches — il n'a pas d'échéance propre,
+ * c'est la convergence des tâches liées qui mesure sa progression. Une tâche
+ * pointe dessus par `Item.objectiveId`.
+ */
+export type Objective = {
+  id: string;
+  projectId: string;
+  title: string;
+  horizon: ObjectiveHorizon;
+  createdAt: string;
+  /** Posé quand l'objectif est atteint — le nœud quitte le graphe. */
+  achievedAt: string | null;
+  notes?: string;
+};
 
 /**
  * État de la chaîne, de bout en bout. Un seul état à la fois : c'est lui qui

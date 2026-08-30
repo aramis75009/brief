@@ -26,6 +26,7 @@ const NAV_ITEMS: { screen: DesktopScreen; label: string }[] = [
   { screen: "calendrier", label: "Calendrier" },
   { screen: "tâches", label: "Tâches & RDV" },
   { screen: "kanban", label: "Kanban" },
+  { screen: "objectifs", label: "Objectifs" },
   { screen: "graphe", label: "Graphe" },
   { screen: "idées", label: "Idées" },
   { screen: "réglages", label: "Réglages" },

@@ -38,8 +38,9 @@ import {
   type Point,
 } from "@/lib/graph";
 import { formatDue } from "@/lib/due";
+import { objectiveEdges, objectiveNodeId, objectiveProgress } from "@/lib/objectives";
 import { shapeFor, skinFor } from "@/lib/projects";
-import type { Item, Project, Shape, Tag } from "@/lib/types";
+import type { Item, Objective, Project, Shape, Tag } from "@/lib/types";
 
 import { TAG_COLOR_MAP } from "@/lib/tagColors";
 const C = {
@@ -123,6 +124,7 @@ export function DependencyGraph({
   items,
   projects,
   tags,
+  objectives = [],
   onOpenTask,
   onAddDependency,
   density = "compact",
@@ -132,6 +134,8 @@ export function DependencyGraph({
   items: Item[];
   projects: Project[];
   tags: Tag[];
+  /** Objectifs actifs — affichés comme nœuds cibles à droite du graphe. */
+  objectives?: Objective[];
   /** Ouvre la vraie fiche tâche (double-clic sur un nœud, ou « Ouvrir la fiche »). */
   onOpenTask: (id: string) => void;
   /**
@@ -172,6 +176,45 @@ export function DependencyGraph({
   const pos = useMemo(() => layoutGraph(list, metrics, pinned), [list, metrics, pinned]);
   const edges = useMemo(() => graphEdges(list), [list]);
   const byId = useMemo(() => indexById(list), [list]);
+
+  /* --- Nœuds objectifs (spec 29/08) — colonne à droite des tâches liées ---
+   *
+   * Un objectif n'est pas un Item : il n'a ni `dependsOn`, ni `doneAt`. Sa
+   * place se déduit des tâches qui y pointent (`objectiveId`) : à droite du
+   * nœud le plus profond de son groupe, centrée verticalement sur elles.
+   * Un objectif sans tâche liée n'apparaît pas — un nœud orphelin dans le
+   * vide apprendrait moins que l'écran Objectifs.
+   */
+  const OBJ_W = 230;
+  const OBJ_H = 58;
+  const OBJ_GAP_X = 130;
+
+  const objectiveNodes = useMemo(() => {
+    const active = objectives.filter((o) => !o.achievedAt);
+    const byObjective = new Map<string, Item[]>();
+    for (const t of list) {
+      if (!t.objectiveId) continue;
+      const l = byObjective.get(t.objectiveId) ?? [];
+      l.push(t);
+      byObjective.set(t.objectiveId, l);
+    }
+    const nodes: { objective: Objective; x: number; y: number; tasks: Item[] }[] = [];
+    for (const o of active) {
+      const linked = byObjective.get(o.id) ?? [];
+      if (linked.length === 0) continue;
+      const ps = linked.map((t) => pos.get(t.id)).filter((p): p is Point => !!p);
+      if (ps.length === 0) continue;
+      const maxX = Math.max(...ps.map((p) => p.x));
+      const midY = (Math.min(...ps.map((p) => p.y)) + Math.max(...ps.map((p) => p.y))) / 2;
+      nodes.push({ objective: o, x: maxX + metrics.W + OBJ_GAP_X, y: midY - (OBJ_H - metrics.H) / 2, tasks: linked });
+    }
+    return nodes;
+  }, [objectives, list, pos, metrics]);
+
+  const objectiveLinks = useMemo(
+    () => objectiveEdges(objectives, list),
+    [objectives, list],
+  );
 
   /* Les gestionnaires posés une seule fois (molette, glisser) et `fit` lisent
      l'état courant par référence — sinon ils captureraient le zoom et la
@@ -640,6 +683,30 @@ export function DependencyGraph({
                 </g>
               );
             })()}
+
+            {/* Arêtes tâche → objectif (pointillés dorés : ce lien n'est pas une dépendance bloquante). */}
+            {objectiveLinks.map(({ fromId, toId }) => {
+              const a = pos.get(fromId);
+              const target = objectiveNodes.find((n) => objectiveNodeId(n.objective) === toId);
+              if (!a || !target) return null;
+              const x1 = a.x + metrics.W;
+              const y1 = a.y + metrics.H / 2;
+              const x2 = target.x - 9;
+              const y2 = target.y + OBJ_H / 2;
+              const dx = Math.max(70, Math.abs(x2 - x1) * curve);
+              return (
+                <g key={`${fromId}->${toId}`} opacity={0.55}>
+                  <path
+                    d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
+                    fill="none"
+                    strokeDasharray="2 6"
+                    strokeLinecap="round"
+                    style={{ stroke: "#B98A17", strokeWidth: 1.8 }}
+                  />
+                  <circle cx={x2} cy={y2} r={3.5} style={{ fill: "#B98A17" }} />
+                </g>
+              );
+            })}
           </svg>
 
           {list.map((t) => {
@@ -795,6 +862,52 @@ export function DependencyGraph({
                     bloquée
                   </span>
                 )}
+              </div>
+            );
+          })}
+
+          {/* --- Nœuds objectifs — la cible dorée vers laquelle convergent les tâches ---
+              Un objectif n'est ni draggable ni cliquable (son écran dédié gère son
+              cycle de vie) : c'est une borne de lecture — « tout ça mène ici ». */}
+          {objectiveNodes.map(({ objective, x, y }) => {
+            const project = projectOf(objective.projectId);
+            const prog = objectiveProgress(objective, items);
+            return (
+              <div
+                key={objectiveNodeId(objective)}
+                className="absolute left-0 top-0 flex select-none flex-col justify-center"
+                style={{
+                  transform: `translate(${x}px,${y}px)`,
+                  width: OBJ_W,
+                  height: OBJ_H,
+                  padding: "8px 12px",
+                  gap: 4,
+                  background: "#FFF8E6",
+                  border: "1.5px solid #B98A17",
+                  borderRadius: 14,
+                  boxShadow: "0 4px 14px rgba(185,138,23,.16)",
+                }}
+                title={`${objective.title} — ${prog.done}/${prog.total} tâches faites`}
+              >
+                <div className="flex items-center gap-1.5">
+                  {/* Losange doré — la marque « objectif » dans tout Brief. */}
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: "#B98A17", transform: "rotate(45deg)", flex: "none" }} />
+                  <span className="font-mono" style={{ fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8a6a12" }}>
+                    Objectif · {objective.horizon} terme
+                  </span>
+                </div>
+                <span
+                  className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-bold tracking-[-0.01em]"
+                  style={{ lineHeight: 1.2, color: C.ink }}
+                >
+                  {objective.title}
+                </span>
+                <div className="flex items-center gap-2">
+                  {project && <span style={swatchStyle(skinFor(project), shapeFor(project))} />}
+                  <span className="tnum text-[11px] font-semibold" style={{ color: "#8a6a12" }}>
+                    {prog.done}/{prog.total} faites
+                  </span>
+                </div>
               </div>
             );
           })}

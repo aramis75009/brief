@@ -13,11 +13,12 @@
  * dans l'espace qu'elle laissait vide sous les barres de progression.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MicIcon, StarIcon, CheckIcon } from "../icons";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { compareByDue } from "@/lib/due";
-import { TIMEZONE } from "@/lib/zoned";
+import { fetchAgendaDay } from "@/lib/api";
+import { shiftDays, zonedParts, TIMEZONE } from "@/lib/zoned";
 import {
   overdueRows,
   weekOpenCounts,
@@ -93,6 +94,33 @@ export function DesktopDashboard({
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
 
   const todaySorted = useMemo(() => [...todayAgenda].sort(compareByDue), [todayAgenda]);
+
+  /* --- Carte « Aujourd'hui / Demain » (spec 29/08 : flèche sur la même carte) --- */
+
+  const [dayView, setDayView] = useState<0 | 1>(0); // 0 = aujourd'hui, 1 = demain
+  const [tomorrowAgenda, setTomorrowAgenda] = useState<AgendaItem[] | null>(null);
+
+  const tomorrowStr = useMemo(() => {
+    const today = zonedParts(now);
+    const tm = shiftDays(today, 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${tm.y}-${pad(tm.m)}-${pad(tm.d)}`;
+  }, [now]);
+
+  // Chargé à la première bascule, gardé en cache pour la session.
+  useEffect(() => {
+    if (dayView !== 1 || tomorrowAgenda !== null) return;
+    let cancelled = false;
+    fetchAgendaDay(tomorrowStr)
+      .then((events) => { if (!cancelled) setTomorrowAgenda(events); })
+      .catch(() => { if (!cancelled) setTomorrowAgenda([]); });
+    return () => { cancelled = true; };
+  }, [dayView, tomorrowStr, tomorrowAgenda]);
+
+  const displayedAgenda = useMemo(() => {
+    const base = dayView === 0 ? todaySorted : (tomorrowAgenda ?? []);
+    return dayView === 0 ? base : [...base].sort(compareByDue);
+  }, [dayView, todaySorted, tomorrowAgenda]);
 
   // Le donut compte les tâches du jour, y compris celles déjà terminées.
   // L'agenda (`todayAgenda`) exclut les items terminés — donc on calcule
@@ -280,10 +308,23 @@ export function DesktopDashboard({
           </div>
         </div>
 
-        {/* Aujourd'hui */}
+        {/* Aujourd'hui / Demain — bascule sur la même carte (spec 29/08) */}
         <div className="flex flex-col" style={{ gridColumn: "span 5", padding: 22, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)", minHeight: 0, overflow: "hidden" }}>
           <div className="flex flex-none items-baseline justify-between" style={{ marginBottom: 14 }}>
-            <span className="font-bold tracking-[-0.02em]" style={{ fontSize: 20 }}>Aujourd’hui</span>
+            <span className="flex items-center gap-2">
+              <span className="font-bold tracking-[-0.02em]" style={{ fontSize: 20 }}>
+                {dayView === 0 ? "Aujourd’hui" : "Demain"}
+              </span>
+              <button
+                onClick={() => setDayView(dayView === 0 ? 1 : 0)}
+                aria-label={dayView === 0 ? "Voir demain" : "Voir aujourd’hui"}
+                title={dayView === 0 ? "Voir demain →" : "← Voir aujourd’hui"}
+                className="flex items-center justify-center"
+                style={{ width: 28, height: 28, borderRadius: 99, background: C.bg, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 15, color: C.ink }}
+              >
+                {dayView === 0 ? "→" : "←"}
+              </button>
+            </span>
             <button
               onClick={onGoTasks}
               className="flex items-center gap-1.5"
@@ -293,10 +334,15 @@ export function DesktopDashboard({
             </button>
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" style={{ gap: 2 }}>
-            {todaySorted.length === 0 && (
-              <span className="text-[13px] font-medium" style={{ color: C.inkMuted, padding: "12px 10px" }}>Rien de prévu aujourd’hui.</span>
+            {dayView === 1 && tomorrowAgenda === null && (
+              <span className="text-[13px] font-medium" style={{ color: C.inkMuted, padding: "12px 10px" }}>Chargement…</span>
             )}
-            {todaySorted.map((entry) => {
+            {!(dayView === 1 && tomorrowAgenda === null) && displayedAgenda.length === 0 && (
+              <span className="text-[13px] font-medium" style={{ color: C.inkMuted, padding: "12px 10px" }}>
+                {dayView === 0 ? "Rien de prévu aujourd’hui." : "Rien de prévu demain."}
+              </span>
+            )}
+            {displayedAgenda.map((entry) => {
               const it = entry.briefItemId ? itemById.get(entry.briefItemId) : undefined;
               const project = it ? projectMap.get(it.projectId) : entry.projectId ? projectMap.get(entry.projectId) : undefined;
               const d = dot(project);

@@ -14,6 +14,7 @@ import { DesktopDashboard } from "./DesktopDashboard";
 import { DesktopCalendar } from "./DesktopCalendar";
 import { DesktopTasks } from "./DesktopTasks";
 import { DesktopKanban } from "./DesktopKanban";
+import { DesktopObjectives } from "./DesktopObjectives";
 import { DependencyGraph } from "./DependencyGraph";
 import { DesktopTaskDetail } from "./DesktopTaskDetail";
 import { DesktopIdeas } from "./DesktopIdeas";
@@ -21,10 +22,10 @@ import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
 import { leastUrgentId, type TaskKindFilter } from "@/lib/desktopDashboard";
 import { graphStatus, graphTasks, indexById } from "@/lib/graph";
-import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag } from "@/lib/api";
+import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag, fetchObjectives, createObjective, updateObjective, deleteObjective } from "@/lib/api";
 import type { DesktopScreen } from "./types";
 import type { AgendaItem } from "@/lib/agenda";
-import type { DraftItem, Item, KanbanBoard, Overview, Project, Tag } from "@/lib/types";
+import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, Tag } from "@/lib/types";
 
 const C = { bg: "var(--color-bg)" } as const;
 
@@ -89,6 +90,7 @@ export function DesktopShell({
   const [paletteQuery, setPaletteQuery] = useState("");
   const [board, setBoard] = useState<KanbanBoard>({ columns: [], updatedAt: "" });
   const [tags, setTags] = useState<Tag[]>([]);
+  const [objectives, setObjectives] = useState<Objective[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -103,13 +105,14 @@ export function DesktopShell({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Charger le board et les tags au démarrage
+  // Charger le board, les tags et les objectifs au démarrage
   useEffect(() => {
     (async () => {
       try {
-        const [b, t] = await Promise.all([fetchBoard(), fetchTags()]);
+        const [b, t, o] = await Promise.all([fetchBoard(), fetchTags(), fetchObjectives()]);
         setBoard(b);
         setTags(t);
+        setObjectives(o);
       } catch {
         // Non bloquant — le Kanban affichera des colonnes vides
       }
@@ -168,6 +171,23 @@ export function DesktopShell({
     const subtasks = [...(item.subtasks ?? []), { id: `sub-${Date.now().toString(36)}`, title: title.trim(), done: false }];
     try { await onSaveItem(itemId, { subtasks }); } catch { /* silencieux */ }
   }, [items, onSaveItem]);
+
+  /* --- Objectifs --- */
+
+  const handleCreateObjective = useCallback(async (title: string, projectId: string, horizon: ObjectiveHorizon) => {
+    const created = await createObjective(title, projectId, horizon);
+    setObjectives((prev) => [...prev, created]);
+  }, []);
+
+  const handleAchieveObjective = useCallback(async (id: string) => {
+    const updated = await updateObjective(id, { achievedAt: new Date().toISOString() });
+    setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
+  }, []);
+
+  const handleDeleteObjective = useCallback(async (id: string) => {
+    await deleteObjective(id);
+    setObjectives((prev) => prev.filter((o) => o.id !== id));
+  }, []);
 
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -274,8 +294,22 @@ export function DesktopShell({
               items={activeItems}
               projects={projects}
               tags={tags}
+              objectives={objectives}
               onOpenTask={openTask}
               onAddDependency={handleAddDependency}
+            />
+          )}
+
+          {screen === "objectifs" && (
+            <DesktopObjectives
+              objectives={objectives}
+              items={items}
+              projects={projects}
+              onOpenTask={openTask}
+              onToggleDone={(id) => onToggleDone(id)}
+              onCreateObjective={handleCreateObjective}
+              onAchieveObjective={handleAchieveObjective}
+              onDeleteObjective={handleDeleteObjective}
             />
           )}
 
@@ -318,6 +352,10 @@ export function DesktopShell({
                 if (!it) return;
                 const newDeps = (it.dependsOn ?? []).filter((d) => d !== depId);
                 await onSaveItem(itemId, { dependsOn: newDeps });
+              }}
+              objectives={objectives.filter((o) => !o.achievedAt && o.projectId === detailItem?.projectId)}
+              onSetObjective={async (itemId, objectiveId) => {
+                await onSaveItem(itemId, { objectiveId });
               }}
             />
           )}

@@ -10,103 +10,83 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-30 (pré-session) · Stabilisation déployée + SPEC chantier Objectifs & Projets
+# Passation — 2026-08-30 (session) · Chantier Objectifs & Projets codé, en attente de recette
 
 | | |
 |---|---|
-| **Agent** | **Hermes Agent · glm-5.3 (Ollama Cloud)** — Aramis continue avec ce même modèle dans la session qui suit. Session précédente : `20260829_174516_16a757` (TUI). |
-| **Branche** | `main` (HEAD `f9880f5`) — unique branche, origin à jour |
-| **Prod** | **Déployée** (`f9880f5`), conteneur Healthy, `/` + `/landing` 200, `status.sh` cohérent |
-| **Recette en attente** | Aramis doit confirmer sur usage réel : cocher le pull du ven 28 (dans « En retard ») fait passer Sport 5/6 → 6/6. |
+| **Agent** | **Hermes Agent · kimi-k3 (Ollama Cloud)** — a repris la main depuis la passation pré-session (glm-5.3). |
+| **Branche** | `feat/objectifs-projets` (HEAD `cbc4608`) — NON mergée, 2 commits devant `main` |
+| **Prod** | **Inchangée** (`main @ 930b7dc`, conteneur Healthy) — la branche n'est **pas** déployée |
+| **Recette en attente** | Aramis valide (1) le schéma Objectif, (2) l'UI (écran Objectifs, toggle Demain, graphe, fiche tâche), puis merge + déploiement. |
 
-## État — sprint stabilisation 1/2 TERMINÉ et déployé (a123ca5 + f9880f5)
+## Ce qui a été livré sur `feat/objectifs-projets`
 
-Bugs récurrents d'Aramis corrigés, reproduction sur ses **vraies données
-de prod** (SSH → `docker exec brief-app-1 cat /app/data/items.json`) :
+Spec d'Aramis (29/08 soir, voir passation précédente) implémentée **en entier** :
 
-1. **Occurrences manquées visibles** : `missedOccurrences()` +
-   `overdueRows()` dans `src/lib/desktopDashboard.ts` — une ligne
-   « en retard » PAR occurrence manquée (jour fini, non couverte par
-   `lastCompletedOccurrenceAt`). Cocher la ligne transmet l'occurrence
-   précise (`completedAt`) → `completionPatch` avance la série.
-2. **Vue Tâches & RDV saine** (`weekOccurrenceRows`) : plus d'injection du
-   `due` courant (le « 28, 31, 2 »), occurrences cochées visibles
-   (filtre « Faites » par occurrence), manquées ≤7 j avant la semaine
-   visibles en retard, items faits simples limités à la semaine.
-3. **`filterRowsByState`** : état lu par occurrence. **DesktopTasks** :
-   badge « En retard · » rouge, coche par occurrence.
-   **DesktopDashboard** : compteur « en retard » occurrence-based.
-4. **Kanban** : « Non placées » respecte le filtre projet.
-   **`tagColors.ts`** : palette tags centralisée (4 copies), orange fixé.
+1. **Objectifs liés aux projets, avec horizon** — modèle, stockage, API, UI.
+   - Type `Objective { id, projectId, title, horizon: court|moyen|long,
+     createdAt, achievedAt, notes? }`, fichier `objectives.json` (store
+     atomique existant).
+   - Lib pure `src/lib/objectives.ts` + 10 tests (progression, regroupement
+     par projet trié court → moyen → long, arêtes graphe, slug).
+   - API `/api/objectives` (GET/POST/PATCH/DELETE), `requireSession()`.
+2. **Lien tâches → objectif** (`Item.objectiveId`, nullable, faible) :
+   - `sanitizePatch` (`PATCH /api/items/[id]`) l'accepte.
+   - Fiche tâche : sélecteur « Contribue à » filtré aux objectifs actifs du
+     projet de l'item (desktop).
+3. **Vue Asana** (point 3 de la spec) : nouvel écran **Objectifs** dans la nav
+   desktop — groupes par projet, pastille d'horizon colorée, progression
+   `done/total` + barre, tâches restantes cochables (elles avancent le
+   pourcentage), création inline par projet, marquer atteint / supprimer.
+4. **Dashboard « Demain »** (point 4) : la carte « Aujourd'hui » a une flèche
+   circulaire qui bascule sur l'agenda de demain (fetch `/api/agenda?date=<J+1>`
+   à la première bascule, gardé en cache pour la session). Pas de nouvelle
+   carte — la spec demandait « flèche ou quelque chose dans le genre ».
+5. **Graphe** : les objectifs actifs ayant au moins une tâche liée visible
+   s'affichent comme des **nœuds dorés** (fond `#FFF8E6`, liseré `#B98A17`),
+   placés à droite de la tâche la plus profonde qui y mène, avec arête
+   pointillée dorée depuis chaque tâche liée. Le lien n'est **pas** bloquant
+   (`graphStatus` ne lit que `dependsOn`) — décision inscrite dans
+   `DECISIONS.md`. Les objectifs ne sont ni draggable ni cliquables (leur
+   écran gère leur cycle de vie) ; un objectif sans tâche liée n'apparaît pas.
 
-Validations : tsc 0 erreur · vitest **378/378** (41 sur la lib dashboard,
-dont le test du cas réel ven 28) · build standalone OK · rejeu prod OK.
+Validations : `tsc --noEmit` 0 erreur · `vitest run` **388/388** (30 fichiers,
+dont les 10 neufs d'`objectives.test.ts`) · `npm run build` ✅ standalone, la
+route `/api/objectives` figure bien au manifeste · `eslint` 0 erreur (1 warning
+préexistant sur `OverdueRow` dans `DesktopDashboard.tsx`, laissé tel quel —
+hors chantier).
 
-⚠️ Sémantique clé conservée : « fait jusqu'à maintenant » — une coche
-couvre les occurrences antérieures. Le filet n'attrape que les
-occurrences POSTÉRIEURES à la dernière coche.
+## ⚠️ Décisions prises en autonomie (à relire par Aramis)
 
-⚠️ Compteur `/api/overview` (serveur) NON harmonisé — toujours
-item-based. Si le récap Telegram doit montrer le retard occurrence-based,
-c'est un chantier à part.
+Le HANDOFF précédent demandait de faire valider le schéma avant de coder ;
+la consigne de la session était « tout en autonomie ». Choix faits, inscrits
+dans `DECISIONS.md` (entrée 2026-08-30 en tête) :
 
-## NEXT CHANTIER — Objectifs & Projets (spec dictée par Aramis, 29/08 soir)
+- Lien tâche → objectif **non bloquant** (le graphe ne rend « bloquée » que
+  via `dependsOn`).
+- Horizon par défaut « moyen » si non précisé à la création (API).
+- Un objectif **atteint** disparaît des vues actives mais n'est jamais
+  supprimé d'office (`achievedAt` timestampé).
+- Les objectifs ne sont **pas** propagés à CalDAV (ce ne sont pas des items).
+- La vue Objectifs est desktop-only (le mobile garde ses 5 écrans).
 
-**Vision globale (rappel Aramis, `TODOS.md` P3 + DECISIONS.md)** : un
-Asana personnel — Kanban, tags, sous-tâches, **dépendances visuelles
-(graphe nœuds type n8n)**, dark mode à la fin. Priorité = Kanban.
+## Prochaine étape
 
-**Ce qu'Aramis a demandé ce soir (spec à la lettre) :**
-
-1. **Objectifs assignés à des projets**, avec horizon :
-   - court terme / moyen terme / long terme.
-   - Exemple donné par Aramis : **Web@cadémie → objectif « Rejoindre la
-     Web@cadémie »** (projet `webacademie` dans prod).
-2. **Des tâches à faire AVANT d'utiliser** la fonctionnalité qui crée les
-   dépendances (comprendre : les tâches précèdent l'objectif et se
-   relient en dépendances — voir le graphe existant
-     `DependencyGraph.tsx`).
-3. **Vue projet type Asana** : la vision « Asana perso » d'Aramis.
-4. **Dashboard — « Demain »** : à l'endroit de la carte « Aujourd'hui »,
-   ajouter la capacité de voir **l'étage de demain** (« flèche ou
-   quelque chose dans le genre » — comprendre : navigation
-   Aujourd'hui ↔ Demain sur la même carte, pas une nouvelle carte).
-5. **Ensuite : vérifier que tout fonctionne bien** (recette complète,
-   Aramis y veille).
-
-**Où coder :**
-- Modèle : `src/lib/types.ts` (Item), `store.ts`, `projects.ts` — un
-  objectif est probablement un nouvel objet lié à un projet (pas un item :
-  un objectif survit aux tâches, il les orchestre). À concecrire AVANT de
-  coder — demander la validation du schéma à Aramis sur un petit exemple.
-- API : routes `/api/projects` et probablement `/api/objectives` neuf.
-- UI desktop : `DesktopDashboard.tsx` (carte Aujourd'hui → toggle
-  Demain), `DesktopTasks.tsx` / nouvel écran « Objectifs », Kanban.
-- La vision « Asana » desktop existe partiellement : Kanban, tags,
-  sous-tâches, `DependencyGraph.tsx` — s'appuyer dessus.
-
-**Règles du repo (AGENTS.md, à respecter scrupuleusement) :**
-- GitHub = vérité. Avant de coder : `git fetch` + `bash
-  scripts/coord/status.sh` + lire cette passation.
-- Commits en anglais (`type: subject`) — convention Aramis.
-- Toute route `/api/` commence par `requireSession()`.
-- Aucun calcul de date hors `src/lib/zoned.ts` (Europe/Paris).
-- Bouton mort → câbler une vraie feature, JAMAIS supprimer.
-- Tests : la lib `desktopDashboard.test.ts` est le modèle du niveau
-  attendu (occurrences, prod-replay). Chaque nouvelle logique pure a ses
-  tests AVANT l'UI.
-- Design : DESIGN.md + `docs/design-system-ref.dc.html` ; logo validé =
-  `logo.svg` racine (3 barres pastel sur tuile encre — ne pas recréer).
-- Aramis préfère qu'on lui **propose un exemple du résultat attendu**
-  avant d'intégrer (correction explicite passée) — pour le schéma
-  objectifs et l'UI « Demain », montrer d'abord une maquette/JSON.
+1. Aramis recette sur la branche (`feat/objectifs-projets`) — il peut créer
+   « Rejoindre la Web@cadémie » (horizon long, projet Web@cadémie), lier 2-3
+   tâches via la fiche, vérifier le graphe et le toggle Demain.
+2. Si validé : merge `feat/objectifs-projets` → `main`, push, puis déployer
+   (`ssh root@186.241.16.37 'cd /docker/brief && git pull origin main &&
+   docker compose --env-file .env.production up -d --build'` +
+   `bash scripts/coord/status.sh`).
+3. La recette en attente de la passation précédente (cocher le pull du ven 28
+   fait passer Sport 5/6 → 6/6) reste d'actualité.
 
 ## Historique des passations
 
 | Date | Sujet | Agent | Lien |
 |---|---|---|---|
-| 2026-08-30 (pré-session) | Stabilisation déployée + spec Objectifs & Projets | Hermes Agent | (cette passation) |
+| 2026-08-30 (session) | Chantier Objectifs & Projets codé, recette à faire | Hermes Agent | (cette passation) |
+| 2026-08-30 (pré-session) | Stabilisation déployée + spec Objectifs & Projets | Hermes Agent | [fiche](docs/handoffs/2026-08-30-pre-session-spec-objectifs-projets.md) |
 | 2026-08-29 (nuit) | Occurrences manquées visibles — stabilisation 1/2 | Hermes Agent | [fiche](docs/handoffs/2026-08-29-nuit-occurrences-manquees.md) |
 | 2026-08-29 (soir) | Landing SaaS `/landing` + logo vectoriel — déployé prod | Hermes Agent | [fiche](docs/handoffs/2026-08-29-landing-saas-deployee.md) |
-| 2026-08-29 (fin aprem) | Finitions du ménage + prod alignée sur `main` | Hermes Agent | [fiche](docs/handoffs/2026-08-29-finitions-menage-prod-alignee.md) |
-| 2026-08-29 | Grand ménage du repo — main redevient la source de vérité | Hermes Agent | [fiche](docs/handoffs/2026-08-29-grand-menage-repo.md) |

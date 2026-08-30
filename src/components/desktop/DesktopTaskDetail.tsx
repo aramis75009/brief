@@ -26,7 +26,7 @@ import { apiFetch } from "@/lib/api";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { calendarForProjectName } from "@/lib/calendarMapping";
 import { TIMEZONE } from "@/lib/zoned";
-import type { DraftItem, Item, Project, Tag } from "@/lib/types";
+import type { DraftItem, Item, Objective, Project, Tag } from "@/lib/types";
 
 import { TAG_COLOR_MAP } from "@/lib/tagColors";
 const C = {
@@ -421,6 +421,8 @@ export function DesktopTaskDetail({
   onCreateTag,
   onAddDependency,
   onRemoveDependency,
+  objectives,
+  onSetObjective,
 }: {
   item: Item | null;
   items: Item[];
@@ -439,6 +441,10 @@ export function DesktopTaskDetail({
   onCreateTag?: (name: string, color: string) => Promise<Tag | null>;
   onAddDependency?: (itemId: string, depId: string) => void;
   onRemoveDependency?: (itemId: string, depId: string) => void;
+  /** Objectifs actifs du projet de l'item — pour le sélecteur « Contribue à ». */
+  objectives?: Objective[];
+  /** Branche/retire le lien item → objectif (`Item.objectiveId`). */
+  onSetObjective?: (itemId: string, objectiveId: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() =>
@@ -685,6 +691,43 @@ export function DesktopTaskDetail({
                   <TagComposer allTags={allTags ?? []} itemTags={item.tags ?? []} onAdd={(tagId) => onAddTag(item.id, tagId)} onCreateTag={onCreateTag} />
                 )}
               </div>
+
+              {/* Objectif — « contribue à » (spec 29/08 : les tâches précèdent l'objectif) */}
+              {objectives !== undefined && onSetObjective && (
+                <div className="flex flex-wrap items-center" style={{ gap: 8, marginBottom: 18 }}>
+                  <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>
+                    Objectif
+                  </span>
+                  {objectives.length === 0 ? (
+                    <span className="text-[12px] font-medium" style={{ color: C.inkFaint }}>
+                      Aucun objectif actif sur ce projet.
+                    </span>
+                  ) : (
+                    <select
+                      value={item.objectiveId ?? ""}
+                      onChange={(e) => onSetObjective(item.id, e.target.value || null)}
+                      style={{
+                        padding: "7px 12px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(16,16,16,.1)",
+                        background: C.surface,
+                        fontFamily: "inherit",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: C.ink,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <option value="">Aucun</option>
+                      {objectives.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.title}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
 
               {/* Titre — le point d'ancrage de la fiche, pas son cinquième bloc */}
               <h2 className="text-[28px] font-extrabold leading-[1.15] tracking-[-0.03em]" style={{ color: isDone ? C.inkFaint : C.ink, textDecoration: isDone ? "line-through" : "none", marginBottom: item.notes ? 12 : 24 }}>
