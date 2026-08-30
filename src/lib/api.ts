@@ -1,6 +1,7 @@
 "use client";
 
 import type { AgendaItem } from "./agenda";
+import type { Settings } from "./settings";
 import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, SaveResult, Tag } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
@@ -35,6 +36,8 @@ const TIMEOUTS = {
   overview: 15_000,
   agenda: 15_000,
   caldavStatus: 10_000,
+  settings: 10_000,
+  account: 10_000,
 } as const;
 
 async function jsonFetch<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
@@ -129,6 +132,44 @@ export async function fetchAgendaDay(date: string): Promise<AgendaItem[]> {
 /** Âge réel du dernier passage CalDAV — `null` si jamais synchronisé. */
 export async function fetchCalDavStatus(): Promise<{ lastSyncAt: number | null }> {
   return jsonFetch("/api/caldav-status", {}, TIMEOUTS.caldavStatus);
+}
+
+/* --- Réglages et compte --------------------------------------------------- */
+
+/** Les interrupteurs de la chaîne — synchro CalDAV, récap du matin. */
+export async function fetchSettings(): Promise<Settings> {
+  return jsonFetch<Settings>("/api/settings", {}, TIMEOUTS.settings);
+}
+
+/**
+ * Bascule un ou plusieurs réglages. Rend l'état complet du serveur — c'est LUI
+ * qui fait foi, jamais l'état optimiste du composant : une bascule refusée doit
+ * revenir toute seule à sa position réelle.
+ */
+export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
+  return jsonFetch<Settings>(
+    "/api/settings",
+    { method: "PATCH", body: JSON.stringify(patch) },
+    TIMEOUTS.settings,
+  );
+}
+
+/** Qui est connecté — l'adresse vient des claims du JWT, pas du client. */
+export async function fetchAccount(): Promise<{ authenticated: boolean; email: string | null }> {
+  return jsonFetch("/api/auth/session", {}, TIMEOUTS.account);
+}
+
+/**
+ * Demande l'email de réinitialisation du mot de passe. La réponse est
+ * volontairement générique côté serveur (elle n'indique jamais si le compte
+ * existe) — on se contente de la relayer.
+ */
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return jsonFetch(
+    "/api/auth/forgot-password",
+    { method: "POST", body: JSON.stringify({ email }) },
+    TIMEOUTS.account,
+  );
 }
 
 /**

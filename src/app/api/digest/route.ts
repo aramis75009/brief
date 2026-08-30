@@ -1,6 +1,6 @@
 import { requireMachineToken } from "@/lib/cron-auth";
 import { buildDigest } from "@/lib/digest";
-import { readItems, readProjects } from "@/lib/store";
+import { readItems, readProjects, readSettings } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +39,24 @@ export async function GET(req: Request): Promise<Response> {
   });
   if (denied) return denied;
 
+  // La bascule « Digest Telegram » des Réglages.
+  //
+  // ⚠️ C'est n8n qui ENVOIE le message, pas Brief : la bascule dit
+  // « désactivé », elle ne peut pas retenir l'automate. Sans un test sur
+  // `enabled` côté n8n, le récap partira quand même — vide. Réponse en 200 et
+  // non en 4xx, délibérément : un choix de l'utilisateur n'est pas une erreur,
+  // et un automate qui voit 403 alerte au lieu de se taire.
+  const settings = await readSettings();
+  if (!settings.digest) {
+    return Response.json({
+      generatedAt: new Date().toISOString(),
+      enabled: false,
+      counts: { overdue: 0, today: 0 },
+      overdue: [],
+      today: [],
+    });
+  }
+
   const [items, projects] = await Promise.all([readItems(), readProjects()]);
-  return Response.json(buildDigest(items, projects, new Date()));
+  return Response.json({ ...buildDigest(items, projects, new Date()), enabled: true });
 }

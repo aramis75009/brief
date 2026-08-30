@@ -1,5 +1,6 @@
 import { requireMachineToken } from "@/lib/cron-auth";
 import { runCalDavSync } from "@/lib/caldav";
+import { readSettings } from "@/lib/store";
 
 export const runtime = "nodejs";
 /** Un passage doit tenir largement dans la fenêtre entre deux appels. */
@@ -19,6 +20,16 @@ export const dynamic = "force-dynamic";
 async function handle(req: Request): Promise<Response> {
   const denied = requireMachineToken(req, "BRIEF_CALDAV_TOKEN");
   if (denied) return denied;
+
+  // La bascule « Calendrier Apple » des Réglages. On sort AVANT tout appel
+  // réseau : couper la synchro doit vraiment cesser de parler à iCloud, pas
+  // seulement jeter le résultat. Le cron continue d'appeler chaque minute —
+  // c'est voulu, rallumer la bascule reprend tout seul au passage suivant.
+  const settings = await readSettings();
+  if (!settings.caldavSync) {
+    console.log("[caldav] désactivé dans les Réglages — passage sauté");
+    return Response.json({ skipped: true, reason: "disabled" });
+  }
 
   const startedAt = Date.now();
   try {

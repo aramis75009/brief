@@ -21,12 +21,22 @@ set -euo pipefail
 BASE_URL="${BRIEF_BASE_URL:-https://brief.srv1899780.hstgr.cloud}"
 
 # --- Résolution du jeton : env → .env.local → .env.production (copie locale) ---
+# ⚠️ `head -1` : la PREMIÈRE définition gagne, comme le fait `@next/env` pour
+# l'app. Une variable définie DEUX FOIS dans le même fichier est donc un piège
+# silencieux — on colle la bonne valeur à la fin, le script (et l'app) lisent
+# toujours l'ancienne, et le serveur répond 401 comme si la route était cassée.
+# Constaté le 2026-08-30 sur le Mac. D'où l'avertissement explicite.
 resolve_secret() {
   local name="$1"
   local val="${!name:-}"
   if [ -n "$val" ]; then echo "$val"; return; fi
   for f in .env.local .env.production; do
     if [ -f "$f" ]; then
+      local count
+      count=$(grep -cE "^${name}=" "$f" || true)
+      if [ "$count" -gt 1 ]; then
+        echo "⚠️  ${name} est défini ${count} fois dans ${f} — c'est la PREMIÈRE occurrence qui compte (ligne $(grep -nE "^${name}=" "$f" | head -1 | cut -d: -f1)). Supprime les doublons." >&2
+      fi
       val=$(grep -E "^${name}=" "$f" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
       [ -n "$val" ] && { echo "$val"; return; }
     fi

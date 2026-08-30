@@ -1,17 +1,30 @@
 "use client";
 
 /**
- * Écran Réglages desktop — cartes de destination (couleur + forme + charge
- * réelle depuis `overview.byProject`) et chaîne. Les bascules Calendrier/
- * Digest/PIN sont décoratives, comme sur `AccountSheet` mobile (aucune des
- * deux versions ne les câble à un vrai réglage serveur) ; seule « Rappels
- * push » agit réellement, sur le même chemin que `NotificationsSheet`.
+ * Écran Réglages desktop — compte, chaîne, destinations, étiquettes.
+ *
+ * On y accède par l'AVATAR du bandeau, plus par un onglet de la nav (décision
+ * Aramis du 2026-08-30). L'écran reste un écran plein en deux colonnes : les
+ * Destinations et les Étiquettes sont de vraies interfaces de gestion, elles
+ * deviendraient inutilisables dans un sheet.
+ *
+ * **Toutes les bascules agissent.** Elles ne sont plus décoratives depuis le
+ * 2026-08-30 : « Calendrier Apple » et « Digest Telegram » écrivent dans
+ * `settings.json` par `PATCH /api/settings` et coupent réellement le service
+ * correspondant ; « Rappels push » suit le même chemin que
+ * `NotificationsSheet`. Le serveur fait foi — une bascule refusée revient
+ * toute seule à sa position réelle. `AccountSheet` (mobile) porte encore ses
+ * bascules décoratives : chantier à part, voir `TODOS.md`.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { skinFor, shapeFor } from "@/lib/projects";
 import { calendarForProjectName } from "@/lib/calendarMapping";
-import { fetchTags, createTag, deleteTag, updateTag } from "@/lib/api";
+import {
+  fetchTags, createTag, deleteTag, updateTag,
+  fetchSettings, updateSettings, fetchAccount, requestPasswordReset,
+} from "@/lib/api";
+import type { Settings } from "@/lib/settings";
 import type { Overview, Project, Tag } from "@/lib/types";
 
 import { TAG_COLOR_MAP } from "@/lib/tagColors";
@@ -54,7 +67,7 @@ const C = {
   inkFaint: "var(--color-ink-faint)",
 } as const;
 
-function ToggleRow({ label, desc, on, onClick }: { label: string; desc: string; on: boolean; onClick: () => void }) {
+function ToggleRow({ label, desc, on, onClick, busy }: { label: string; desc: string; on: boolean; onClick: () => void; busy?: boolean }) {
   return (
     <div className="flex items-center gap-3.5" style={{ padding: "12px 0", borderBottom: "1px solid rgba(16,16,16,.06)" }}>
       <span className="flex flex-1 flex-col gap-0.5">
@@ -65,15 +78,146 @@ function ToggleRow({ label, desc, on, onClick }: { label: string; desc: string; 
           propre s'effondre à 0×0 au lieu d'hériter de son contenu. */}
       <button
         onClick={onClick}
-        aria-label="Basculer"
+        disabled={busy}
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
         className="relative flex-none"
-        style={{ width: 48, height: 28, borderRadius: 99, border: "none", padding: 0, cursor: "pointer", background: on ? C.ink : "#EDEDEA", transition: "background .22s" }}
+        style={{ width: 48, height: 28, borderRadius: 99, border: "none", padding: 0, cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1, background: on ? C.ink : "#EDEDEA", transition: "background .22s, opacity .22s" }}
       >
         <span
           className="absolute"
           style={{ top: 3, width: 22, height: 22, borderRadius: 99, background: "#fff", boxShadow: "0 2px 6px rgba(16,16,16,.2)", transition: "left .22s cubic-bezier(.4,0,.2,1)", left: on ? 23 : 3 }}
         />
       </button>
+    </div>
+  );
+}
+
+/**
+ * Les réglages serveur, avec bascule optimiste et retour en arrière.
+ *
+ * L'état optimiste n'est pas du confort : `PATCH /api/settings` passe par le
+ * disque, et une bascule qui attendrait la réponse aurait l'air cassée. En
+ * revanche c'est TOUJOURS la réponse du serveur qui gagne à l'arrivée — sans
+ * ça, une bascule refusée resterait affichée dans la mauvaise position et
+ * l'utilisateur croirait la synchro éteinte alors qu'elle tourne.
+ */
+function useSettings() {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const s = await fetchSettings();
+        if (alive) setSettings(s);
+      } catch { /* silencieux — les bascules restent inertes, elles ne mentent pas */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const toggle = useCallback(async (key: keyof Settings) => {
+    if (!settings || busy) return;
+    const optimistic = { ...settings, [key]: !settings[key] };
+    setSettings(optimistic);
+    setBusy(true);
+    try {
+      setSettings(await updateSettings({ [key]: optimistic[key] }));
+    } catch {
+      setSettings(settings); // le serveur fait foi : on revient à l'état connu
+    } finally {
+      setBusy(false);
+    }
+  }, [settings, busy]);
+
+  return { settings, busy, toggle };
+}
+
+/**
+ * Compte — remplace l'ancienne ligne « Verrou PIN », morte depuis la
+ * suppression du PIN le 2026-08-26.
+ *
+ * Elle promettait un verrou qui n'existe plus. Ce bloc met à la place les
+ * seules actions de compte réelles, dont la déconnexion : jusqu'ici, le
+ * desktop n'avait AUCUN moyen de terminer sa session (seul le sheet mobile en
+ * avait un), alors que le cookie est httpOnly et se rafraîchit tout seul.
+ */
+function AccountBlock({ onLogout }: { onLogout: () => void }) {
+  const [email, setEmail] = useState<string | null>(null);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const account = await fetchAccount();
+        if (alive) setEmail(account.email);
+      } catch { /* silencieux — le bloc s'affiche sans l'adresse */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const sendReset = async () => {
+    if (!email || sending) return;
+    setSending(true);
+    try {
+      const { message } = await requestPasswordReset(email);
+      setResetMsg(message);
+    } catch {
+      setResetMsg("Envoi impossible. Réessaie dans un instant.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-none flex-col gap-1" style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)" }}>
+      <span className="text-[17px] font-bold tracking-[-0.02em]" style={{ marginBottom: 6 }}>Compte</span>
+
+      <div className="flex items-center gap-3.5" style={{ padding: "12px 0", borderBottom: "1px solid rgba(16,16,16,.06)" }}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[13px] font-bold tracking-[-0.01em]">Connecté</span>
+          <span className="truncate text-[11px] font-medium" style={{ color: C.inkMuted }}>
+            {email ?? "…"}
+          </span>
+        </span>
+      </div>
+
+      <div className="flex items-center gap-3.5" style={{ padding: "12px 0", borderBottom: "1px solid rgba(16,16,16,.06)" }}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[13px] font-bold tracking-[-0.01em]">Mot de passe</span>
+          <span className="text-[11px] font-medium" style={{ color: C.inkMuted }}>
+            {resetMsg ?? "Un lien de changement part sur cette adresse."}
+          </span>
+        </span>
+        <button
+          onClick={sendReset}
+          disabled={!email || sending}
+          className="flex-none text-[12px] font-bold"
+          style={{ padding: "7px 14px", background: C.bg, border: "1px solid rgba(16,16,16,.1)", borderRadius: 99, cursor: !email || sending ? "default" : "pointer", opacity: !email || sending ? 0.5 : 1, fontFamily: "inherit", color: C.ink }}
+        >
+          {sending ? "Envoi…" : "Changer"}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3.5" style={{ padding: "12px 0" }}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[13px] font-bold tracking-[-0.01em]">Se déconnecter</span>
+          <span className="text-[11px] font-medium" style={{ color: C.inkMuted }}>
+            Termine la session sur cet appareil.
+          </span>
+        </span>
+        <button
+          onClick={onLogout}
+          className="flex-none text-[12px] font-bold"
+          style={{ padding: "7px 14px", background: C.ink, color: "#fff", border: "none", borderRadius: 99, cursor: "pointer", fontFamily: "inherit" }}
+        >
+          Déconnexion
+        </button>
+      </div>
     </div>
   );
 }
@@ -165,16 +309,16 @@ export function DesktopSettings({
   calendarSyncLabel,
   pushSubscribed,
   onEnablePush,
+  onLogout,
 }: {
   projects: Project[];
   overview: Overview | null;
   calendarSyncLabel: string;
   pushSubscribed: boolean;
   onEnablePush: () => void;
+  onLogout: () => void;
 }) {
-  const [caldavOn, setCaldavOn] = useState(true);
-  const [digestOn, setDigestOn] = useState(true);
-  const [pinOn, setPinOn] = useState(true);
+  const { settings, busy, toggle } = useSettings();
   const byProject = new Map((overview?.byProject ?? []).map((p) => [p.id, p]));
 
   return (
@@ -217,12 +361,28 @@ export function DesktopSettings({
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         <div className="flex flex-none flex-col gap-1" style={{ padding: 18, background: C.surface, border: "1px solid rgba(16,16,16,.06)", borderRadius: 24, boxShadow: "0 6px 20px rgba(16,16,16,.07)" }}>
           <span className="text-[17px] font-bold tracking-[-0.02em]" style={{ marginBottom: 6 }}>Chaîne</span>
-          <ToggleRow label="Calendrier Apple (CalDAV)" desc={`Source de vérité des RDV — ${calendarSyncLabel}.`} on={caldavOn} onClick={() => setCaldavOn((v) => !v)} />
-          <ToggleRow label="Digest Telegram" desc="Récap du matin à 08:30 via n8n." on={digestOn} onClick={() => setDigestOn((v) => !v)} />
+          <ToggleRow
+            label="Calendrier Apple (CalDAV)"
+            desc={settings?.caldavSync === false
+              ? "Synchro en pause — Brief n'écrit plus rien dans le calendrier."
+              : `Source de vérité des RDV — ${calendarSyncLabel}.`}
+            on={settings?.caldavSync ?? true}
+            busy={busy || !settings}
+            onClick={() => void toggle("caldavSync")}
+          />
+          <ToggleRow
+            label="Digest Telegram"
+            desc={settings?.digest === false
+              ? "Récap coupé côté Brief — n8n doit tester `enabled` pour ne rien envoyer."
+              : "Récap du matin à 08:30 via n8n."}
+            on={settings?.digest ?? true}
+            busy={busy || !settings}
+            onClick={() => void toggle("digest")}
+          />
           <ToggleRow label="Rappels push" desc="Web Push sur iPhone et desktop." on={pushSubscribed} onClick={onEnablePush} />
-          <ToggleRow label="Verrou PIN" desc="Code à l’ouverture, mémorisé par appareil." on={pinOn} onClick={() => setPinOn((v) => !v)} />
         </div>
 
+        <AccountBlock onLogout={onLogout} />
       </div>
     </div>
   );

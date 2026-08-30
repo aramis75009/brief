@@ -58,7 +58,7 @@ export function DesktopShell({
   onEnablePush,
   onOpenCapture,
   onOpenChat,
-  onOpenAccount,
+  onLogout,
   onOpenNotifications,
 }: {
   items: Item[];
@@ -80,7 +80,8 @@ export function DesktopShell({
   onEnablePush: () => void;
   onOpenCapture: () => void;
   onOpenChat: () => void;
-  onOpenAccount: () => void;
+  /** Termine la session — le desktop n'avait aucun moyen de le faire avant le 2026-08-30. */
+  onLogout: () => void;
   onOpenNotifications: () => void;
 }) {
   const [screen, setScreen] = useState<DesktopScreen>("dashboard");
@@ -300,13 +301,16 @@ export function DesktopShell({
     <>
       <div className="h-dvh w-full overflow-hidden" style={{ background: C.bg, padding: "16px 20px 20px" }}>
         <div className="mx-auto flex h-full flex-col gap-3" style={{ maxWidth: 1560, minWidth: 1024 }}>
+          {/* L'avatar ouvre l'écran Réglages, il n'ouvre plus le sheet mobile
+              (décision Aramis du 2026-08-30). `AccountSheet` reste le chemin
+              du mobile, inchangé. */}
           <DesktopHeader
             screen={screen}
             badges={badges}
             onNavigate={setScreen}
             onOpenPalette={() => { setPaletteOpen(true); setPaletteQuery(""); }}
             onOpenNotifications={onOpenNotifications}
-            onOpenAccount={onOpenAccount}
+            onOpenAccount={() => setScreen("réglages")}
             onCapture={onOpenCapture}
           />
 
@@ -457,6 +461,7 @@ export function DesktopShell({
               calendarSyncLabel={relativeSyncLabel(calendarSyncAt)}
               pushSubscribed={pushSubscribed}
               onEnablePush={onEnablePush}
+              onLogout={onLogout}
             />
           )}
           </div>

@@ -69,13 +69,20 @@ librement (entre colonnes, réordonner dans une colonne, peut-être déplacer
 les colonnes elles-mêmes). À investiguer : `DesktopKanban.tsx` + `@dnd-kit`
 (sensors, collision detection, contraintes actuelles).
 
-### ⚠️ Onglet Réglages — PIN fantôme (signalé par Aramis le 30/08)
+### Réglages mobile — les 3 bascules décoratives d'`AccountSheet`
 
-**Quoi :** l'onglet Réglages affiche encore un **PIN** qui n'existe plus
-(depuis le 26/08, auth = Supabase email+mdp). Revoir la page Réglages :
-retirer le PIN, et **déplacer les réglages vers le profil** (clic sur
-l'avatar) — Aramis : « revoir la page réglages pour la mettre quand on
-clique sur le profil ».
+**Quoi :** `AccountSheet.tsx` (mobile) porte encore trois bascules qui ne font
+rien — « Calendrier Apple », « Structuration auto », « Rappels du matin ». Le
+desktop a été traité le 30/08 (store `settings.json` + `/api/settings`, voir
+`DECISIONS.md`) ; le mobile a été **volontairement laissé de côté** (Aramis :
+« le mobile est en stand-by, on s'occupe du desktop »).
+
+- « Calendrier Apple » et un éventuel « Digest » : brancher sur le store
+  existant, il n'y a plus rien à concevoir côté serveur.
+- « Structuration auto » : n'a pas d'équivalent desktop — préférence par
+  appareil (localStorage, patron `queue.ts`) plutôt que `settings.json`.
+- « Rappels du matin » (heure fixe 8:00) : demande un vrai réglage d'heure,
+  donc un troisième champ dans `Settings`. À concevoir.
 
 ---
 
@@ -160,8 +167,12 @@ sujet proche) :
 6. **Revoir le calendrier** — peut-être ne pas vouloir copier le calendrier
    Apple (ça fait doublon) mais une autre interface. **Non commencé** —
    chantier de conception (brainstorming + livrable Claude Design).
-7. **Réglages** : PIN fantôme à retirer + déplacer les réglages sur le
-   profil (voir P1). **Non commencé.**
+7. ~~**Réglages** : PIN fantôme à retirer + déplacer les réglages sur le
+   profil~~ — **livré** (`feat/reglages-desktop-profil`, PR #5) : avatar →
+   écran Réglages, onglet retiré, bloc « Compte » (adresse, mot de passe,
+   **déconnexion** — qui manquait totalement au desktop), et les bascules
+   « Calendrier Apple » / « Digest Telegram » agissent vraiment via
+   `settings.json`. *Reste* : le mobile (voir P1).
 8. **Vrais messages de modification** adaptés au design system : quand on
    reporte une tâche, déplace une carte, toute action → un toast conforme.
    **Non commencé** (aucun système de toast au design v1).
