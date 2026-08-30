@@ -1,7 +1,7 @@
 "use client";
 
 import type { AgendaItem } from "./agenda";
-import type { DraftItem, Item, KanbanBoard, Overview, Project, SaveResult, Tag } from "./types";
+import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, SaveResult, Tag } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -357,4 +357,38 @@ export async function deleteTag(id: string): Promise<{ ok: boolean }> {
     { method: "DELETE" },
     TIMEOUTS.projects,
   );
+}
+
+/* --- Objectifs ------------------------------------------------------------ */
+
+export async function fetchObjectives(): Promise<Objective[]> {
+  return jsonFetch<Objective[]>("/api/objectives", {}, TIMEOUTS.projects);
+}
+
+export async function createObjective(
+  title: string,
+  projectId: string,
+  horizon: ObjectiveHorizon,
+  notes?: string,
+): Promise<Objective> {
+  return jsonFetch<Objective>(
+    "/api/objectives",
+    { method: "POST", body: JSON.stringify({ title, projectId, horizon, notes }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function updateObjective(
+  id: string,
+  patch: { title?: string; horizon?: ObjectiveHorizon; achievedAt?: string | null; notes?: string },
+): Promise<Objective> {
+  return jsonFetch<Objective>(
+    "/api/objectives",
+    { method: "PATCH", body: JSON.stringify({ id, ...patch }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function deleteObjective(id: string): Promise<{ ok: boolean }> {
+  return jsonFetch("/api/objectives", { method: "DELETE", body: JSON.stringify({ id }) }, TIMEOUTS.projects);
 }

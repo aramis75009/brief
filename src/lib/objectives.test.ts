@@ -1,0 +1,175 @@
+import { describe, expect, it } from "vitest";
+import {
+  HORIZONS,
+  HORIZON_LABEL,
+  objectiveEdges,
+  objectiveNodeId,
+  objectiveProgress,
+  objectivesByProject,
+  openTasksFor,
+  uniqueObjectiveId,
+} from "./objectives";
+import type { Item, Objective, Project } from "./types";
+
+/* --- Fixtures ------------------------------------------------------------- */
+
+const projA: Project = { id: "webacademie", name: "Web@cadémie", tint: 3, shape: "ring" };
+const projB: Project = { id: "sport", name: "Sport", tint: 5, shape: "capsule" };
+
+const objWeb: Objective = {
+  id: "rejoindre-webacademie",
+  projectId: "webacademie",
+  title: "Rejoindre la Web@cadémie",
+  horizon: "long",
+  createdAt: "2026-08-29T20:00:00.000Z",
+  achievedAt: null,
+};
+const objCourt: Objective = {
+  id: "portfolio-pret",
+  projectId: "webacademie",
+  title: "Portfolio prêt",
+  horizon: "court",
+  createdAt: "2026-08-29T20:01:00.000Z",
+  achievedAt: null,
+};
+const objAchieved: Objective = {
+  id: "vieux-but",
+  projectId: "webacademie",
+  title: "Vieux but atteint",
+  horizon: "moyen",
+  createdAt: "2026-08-01T08:00:00.000Z",
+  achievedAt: "2026-08-20T10:00:00.000Z",
+};
+const objSport: Objective = {
+  id: "courir-10k",
+  projectId: "sport",
+  title: "Courir 10 km",
+  horizon: "moyen",
+  createdAt: "2026-08-29T20:02:00.000Z",
+  achievedAt: null,
+};
+
+function makeItem(partial: Partial<Item>): Item {
+  return {
+    id: partial.id ?? "it-x",
+    kind: "task",
+    title: partial.title ?? "Tâche",
+    projectId: partial.projectId ?? "webacademie",
+    due: partial.due ?? null,
+    allDay: partial.allDay ?? false,
+    priority: partial.priority ?? 3,
+    rrule: partial.rrule ?? null,
+    createdAt: "2026-08-29T08:00:00.000Z",
+    remindedAt: null,
+    doneAt: partial.doneAt ?? null,
+    status: partial.status ?? "active",
+    ...partial,
+  };
+}
+
+/* --- objectiveProgress ---------------------------------------------------- */
+
+describe("objectiveProgress", () => {
+  it("0/0 => pct 0, pas NaN", () => {
+    expect(objectiveProgress(objWeb, [])).toEqual({ done: 0, total: 0, pct: 0 });
+  });
+
+  it("compte fait/total et arrondit le pourcentage", () => {
+    const items: Item[] = [
+      makeItem({ id: "a", objectiveId: "rejoindre-webacademie", doneAt: "2026-08-29T18:00:00.000Z" }),
+      makeItem({ id: "b", objectiveId: "rejoindre-webacademie", doneAt: "2026-08-29T19:00:00.000Z" }),
+      makeItem({ id: "c", objectiveId: "rejoindre-webacademie" }),
+    ];
+    expect(objectiveProgress(objWeb, items)).toEqual({ done: 2, total: 3, pct: 67 });
+  });
+
+  it("ignore idées, archives, events et tâches d'autres objectifs", () => {
+    const items: Item[] = [
+      makeItem({ id: "a", objectiveId: "rejoindre-webacademie", status: "idea" }),
+      makeItem({ id: "b", objectiveId: "rejoindre-webacademie", status: "archived" }),
+      makeItem({ id: "c", objectiveId: "rejoindre-webacademie", kind: "event" }),
+      makeItem({ id: "d", objectiveId: "courir-10k" }),
+      makeItem({ id: "e", objectiveId: "rejoindre-webacademie" }),
+    ];
+    expect(objectiveProgress(objWeb, items)).toEqual({ done: 0, total: 1, pct: 0 });
+  });
+});
+
+/* --- openTasksFor --------------------------------------------------------- */
+
+describe("openTasksFor", () => {
+  it("ne garde que les tâches actives liées à l'objectif", () => {
+    const items: Item[] = [
+      makeItem({ id: "a", objectiveId: "rejoindre-webacademie" }),
+      makeItem({ id: "b", objectiveId: "rejoindre-webacademie", doneAt: "2026-08-29T18:00:00.000Z" }),
+      makeItem({ id: "c", objectiveId: "courir-10k" }),
+      makeItem({ id: "d" }),
+    ];
+    const ids = openTasksFor(objWeb, items).map((i) => i.id);
+    expect(ids).toEqual(["a"]);
+  });
+});
+
+/* --- objectivesByProject -------------------------------------------------- */
+
+describe("objectivesByProject", () => {
+  it("regroupe par projet, trie par horizon, calcule la progression", () => {
+    const items: Item[] = [
+      makeItem({ id: "a", objectiveId: "rejoindre-webacademie", doneAt: "2026-08-29T18:00:00.000Z" }),
+      makeItem({ id: "b", objectiveId: "portfolio-pret" }),
+    ];
+    const groups = objectivesByProject(
+      [objWeb, objCourt, objAchieved, objSport],
+      [projA, projB],
+      items,
+    );
+    expect(groups.map((g) => g.project.id)).toEqual(["webacademie", "sport"]);
+    // l'objectif atteint disparaît
+    expect(groups[0].rows.map((r) => r.objective.id)).toEqual(["portfolio-pret", "rejoindre-webacademie"]);
+    expect(groups[0].rows[1].progress).toEqual({ done: 1, total: 1, pct: 100 });
+    expect(groups[1].rows[0].progress).toEqual({ done: 0, total: 0, pct: 0 });
+  });
+
+  it("ignore les projets sans objectif actif", () => {
+    const groups = objectivesByProject([objAchieved], [projA, projB], []);
+    expect(groups).toEqual([]);
+  });
+});
+
+/* --- uniqueObjectiveId --------------------------------------------------- */
+
+describe("uniqueObjectiveId", () => {
+  it("slugifie le titre et suffixe en cas de doublon", () => {
+    expect(uniqueObjectiveId("Rejoindre la Web@cadémie", new Set())).toBe("rejoindre-la-web-cademie");
+    expect(uniqueObjectiveId("Portfolio prêt", new Set(["portfolio-pret"]))).toBe("portfolio-pret-2");
+  });
+});
+
+/* --- objectif dans le graphe ---------------------------------------------- */
+
+describe("graphe", () => {
+  it("id de nœud stable et distinct d'un id d'item", () => {
+    expect(objectiveNodeId(objWeb)).toBe("obj:rejoindre-webacademie");
+  });
+
+  it("arêtes des tâches actives vers leur objectif, jamais vers un objectif atteint", () => {
+    const items: Item[] = [
+      makeItem({ id: "a", objectiveId: "rejoindre-webacademie" }),
+      makeItem({ id: "b", objectiveId: "rejoindre-webacademie", doneAt: "2026-08-29T18:00:00.000Z" }),
+      makeItem({ id: "c", objectiveId: "vieux-but" }),
+      makeItem({ id: "d", objectiveId: null }),
+      makeItem({ id: "e", kind: "event", objectiveId: "rejoindre-webacademie" }),
+    ];
+    const edges = objectiveEdges([objWeb, objAchieved], items);
+    expect(edges).toEqual([{ fromId: "a", toId: "obj:rejoindre-webacademie" }]);
+  });
+});
+
+/* --- constantes ------------------------------------------------------------ */
+
+describe("constantes", () => {
+  it("trois horizons, tous libellés", () => {
+    expect(HORIZONS).toEqual(["court", "moyen", "long"]);
+    for (const h of HORIZONS) expect(HORIZON_LABEL[h]).toBeTruthy();
+  });
+});

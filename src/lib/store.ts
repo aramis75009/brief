@@ -2,7 +2,7 @@ import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { SEED_PROJECTS } from "./projects";
-import type { Item, KanbanBoard, Project, Tag } from "./types";
+import type { Item, KanbanBoard, Objective, Project, Tag } from "./types";
 
 /**
  * Stockage de Brief — fichiers JSON sur le disque du serveur.
@@ -111,6 +111,20 @@ export async function writeTags(tags: Tag[]): Promise<void> {
   return serialize(() => writeJson("tags.json", tags));
 }
 
+/* --- Objectifs ------------------------------------------------------------- */
+
+/**
+ * Les objectifs stockés, ou une liste vide au premier démarrage. Un objectif
+ * n'est pas un item : il survit à ses tâches, les orchestre — rien à semer.
+ */
+export async function readObjectives(): Promise<Objective[]> {
+  return readJson<Objective[]>("objectives.json", []);
+}
+
+export async function writeObjectives(objectives: Objective[]): Promise<void> {
+  return serialize(() => writeJson("objectives.json", objectives));
+}
+
 /* --- Items --------------------------------------------------------------- */
 
 /**
@@ -140,6 +154,7 @@ function normalizeItem(it: Item): Item {
     tags: Array.isArray(it.tags) ? it.tags : [],
     dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
     columnId: it.columnId ?? null,
+    objectiveId: it.objectiveId ?? null,
   };
 }
 
