@@ -11,6 +11,28 @@ import "server-only";
  * être révoqué seul sans invalider les sessions en cours.
  */
 
+/**
+ * Un appelant machine s'est-il présenté ? (Bearer, `x-brief-token`, ou
+ * `?token=` quand la route l'autorise.)
+ *
+ * Sert aux routes à garde MIXTE — session utilisateur OU jeton machine, voir
+ * `requireSessionOrMachineToken` dans `guard.ts`. Sans ce test, on ne saurait
+ * pas quelle erreur renvoyer : « session invalide ou expirée » sur un jeton
+ * machine erroné enverrait l'agent chercher un problème de cookie qui n'existe
+ * pas. On regarde la PRÉSENCE d'une pièce d'identité machine, jamais sa
+ * validité — c'est `requireMachineToken` qui tranche.
+ */
+export function hasMachineCredential(
+  req: Request,
+  opts?: { allowQueryToken?: boolean },
+): boolean {
+  const header = req.headers.get("authorization") ?? "";
+  if (header.startsWith("Bearer ") && header.length > 7) return true;
+  if (req.headers.get("x-brief-token")) return true;
+  if (opts?.allowQueryToken && new URL(req.url).searchParams.get("token")) return true;
+  return false;
+}
+
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;

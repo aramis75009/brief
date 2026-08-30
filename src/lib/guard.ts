@@ -1,4 +1,5 @@
 import "server-only";
+import { hasMachineCredential, requireMachineToken } from "./cron-auth";
 import { getSupabaseServerClient } from "./supabase/server";
 
 /**
@@ -23,4 +24,35 @@ export async function requireSession(): Promise<Response | null> {
   }
 
   return null;
+}
+
+/**
+ * Garde MIXTE : session utilisateur **OU** jeton machine de lecture.
+ *
+ * Réservée aux routes de LECTURE qu'un agent doit pouvoir interroger sans
+ * navigateur (`GET /api/agenda`, décision Aramis du 2026-08-30) et que l'app
+ * appelle par ailleurs avec la session de l'utilisateur. Les deux appelants
+ * existent vraiment : `/api/agenda` est la source unique de l'accueil, de
+ * l'onglet Agenda et du calendrier desktop (`fetchAgendaDay`) — la basculer
+ * sur le seul jeton machine éteindrait ces trois écrans sans que rien ne le
+ * signale côté serveur.
+ *
+ * ⚠️ **Lecture seule.** Ne jamais poser cette garde sur une route qui écrit :
+ * un secret déposé dans une crontab ou un raccourci iOS ne doit pas ouvrir la
+ * porte de l'écriture. Les routes d'écriture gardent `requireSession()` seul,
+ * ou un jeton machine dédié à l'écriture (`/api/capture`).
+ *
+ * L'ordre n'est pas un détail : on regarde d'abord si une pièce d'identité
+ * machine est PRÉSENTE. Un jeton machine faux répond alors « Jeton invalide »
+ * (401) plutôt que « session expirée », qui enverrait l'agent chercher un
+ * problème de cookie. Un navigateur, lui, ne pose ni Bearer ni `?token=` :
+ * il tombe toujours sur `requireSession()`.
+ */
+export async function requireSessionOrMachineToken(
+  req: Request,
+  envName: string,
+  opts?: { allowQueryToken?: boolean },
+): Promise<Response | null> {
+  if (hasMachineCredential(req, opts)) return requireMachineToken(req, envName, opts);
+  return requireSession();
 }
