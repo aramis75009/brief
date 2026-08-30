@@ -176,6 +176,18 @@ sujet proche) :
 8. **Vrais messages de modification** adaptés au design system : quand on
    reporte une tâche, déplace une carte, toute action → un toast conforme.
    **Non commencé** (aucun système de toast au design v1).
+
+### ⚠️ Une récurrence qui se termine ne se voit pas (validé par Aramis le 30/08)
+
+**Quoi :** quand la dernière occurrence d'une série est cochée,
+`completionPatch` clôt la série (`{ doneAt, rrule: null }`,
+`src/lib/completion.ts:152`) et la tâche **disparaît** — du graphe, du digest,
+de partout. Rien ne prévient. Le 30/08, « Poster 20 » et « Reposter 15 » se
+sont éteintes comme ça et Aramis l'a vécu comme un bug du graphe.
+
+Attendu : afficher « dernière occurrence » sur la tâche quand la série va se
+clore, et le confirmer au moment de la coche. `nextOccurrence` sait déjà le
+dire — elle rend `null`. Reste à le remonter jusqu'à l'écran.
 9. **Hover sur les endroits clés** : dashboard, kanban, etc. Le graphe a
    gagné du hover (× de retrait sur les arêtes, PR #3) ; le reste
    (dashboard, kanban, listes) reste à faire.
