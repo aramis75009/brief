@@ -22,8 +22,9 @@ import { skinFor, shapeFor } from "@/lib/projects";
 import { calendarForProjectName } from "@/lib/calendarMapping";
 import {
   fetchTags, createTag, deleteTag, updateTag,
-  fetchSettings, updateSettings, fetchAccount, requestPasswordReset,
+  fetchSettings, updateSettings, fetchAccount, requestPasswordReset, fetchCalDavStatus,
 } from "@/lib/api";
+import { relativeSyncLabel } from "@/lib/syncLabel";
 import type { Settings } from "@/lib/settings";
 import type { Overview, Project, Tag } from "@/lib/types";
 
@@ -306,20 +307,35 @@ function TagManager() {
 export function DesktopSettings({
   projects,
   overview,
-  calendarSyncLabel,
   pushSubscribed,
   onEnablePush,
   onLogout,
 }: {
   projects: Project[];
   overview: Overview | null;
-  calendarSyncLabel: string;
   pushSubscribed: boolean;
   onEnablePush: () => void;
   onLogout: () => void;
 }) {
   const { settings, busy, toggle } = useSettings();
   const byProject = new Map((overview?.byProject ?? []).map((p) => [p.id, p]));
+
+  // L'âge du dernier passage CalDAV est demandé ICI, pas reçu en prop.
+  // Il ne l'était que par `openAccount()` (le sheet mobile) : depuis que
+  // l'avatar ouvre cet écran au lieu du sheet, plus personne n'allait le
+  // chercher et l'écran affichait « jamais synchronisé » en permanence,
+  // synchro en marche. Un écran va chercher ce qu'il affiche.
+  const [calendarSyncAt, setCalendarSyncAt] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const { lastSyncAt } = await fetchCalDavStatus();
+        if (alive) setCalendarSyncAt(lastSyncAt);
+      } catch { /* silencieux — le libellé reste « jamais synchronisé », qui est honnête */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div className="grid h-full gap-3" style={{ gridTemplateColumns: "1fr 1fr", animation: "fade .3s both" }}>
@@ -365,7 +381,7 @@ export function DesktopSettings({
             label="Calendrier Apple (CalDAV)"
             desc={settings?.caldavSync === false
               ? "Synchro en pause — Brief n'écrit plus rien dans le calendrier."
-              : `Source de vérité des RDV — ${calendarSyncLabel}.`}
+              : `Source de vérité des RDV — ${relativeSyncLabel(calendarSyncAt)}.`}
             on={settings?.caldavSync ?? true}
             busy={busy || !settings}
             onClick={() => void toggle("caldavSync")}

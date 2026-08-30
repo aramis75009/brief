@@ -642,7 +642,6 @@ export function BriefApp() {
           projects={projects}
           overview={overview}
           transcript={transcript}
-          calendarSyncAt={calendarSyncAt}
           pushSubscribed={pushSubscribed}
           onToggleDone={toggleDone}
           onPostpone={(id) => void postponeItem(id)}
