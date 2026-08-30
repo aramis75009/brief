@@ -97,6 +97,14 @@ crontab ou un raccourci iOS ne doit pas ouvrir la même porte que le code
 qu'on tape, et doit pouvoir être révoqué seul. Chaque jeton est le sien :
 pour l'un, révoquer n'éteint pas les autres. Voir `src/lib/cron-auth.ts`.
 
+**`GET /api/agenda` porte une garde MIXTE** depuis le 2026-08-30
+(`requireSessionOrMachineToken`, `src/lib/guard.ts`) : session utilisateur
+**ou** `BRIEF_DIGEST_TOKEN`. Les deux appelants existent — l'app s'en sert
+comme source unique de l'accueil, de l'onglet Agenda et du calendrier desktop
+(`fetchAgendaDay`), et les agents (Claude Code, Hermes, Codex) doivent pouvoir
+la lire sans navigateur. **Ne poser cette garde que sur de la LECTURE** : une
+route qui écrit garde `requireSession()` seul, ou un jeton d'écriture dédié.
+
 ### Données et dates
 
 - **La priorité 1 est la PLUS HAUTE** (convention iCalendar). Une seule échelle

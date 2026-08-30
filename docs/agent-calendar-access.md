@@ -24,9 +24,10 @@ URL. La route `GET /api/digest` accepte donc aussi le jeton en query param :
 https://brief.srv1899780.hstgr.cloud/api/digest?token=<BRIEF_DIGEST_TOKEN>
 ```
 
-- **Opt-in strict** : seul `/api/digest` l'active (`allowQueryToken` dans
-  `cron-auth.ts`). Le PIN n'est **jamais** accepté en query, et aucune route
-  d'écriture (capture, items) n'accepte le query token.
+- **Opt-in strict** : seules les routes de lecture machine l'activent —
+  `/api/digest` et, depuis le 2026-08-30, `/api/agenda` (`allowQueryToken`
+  dans `cron-auth.ts`). Aucune route d'écriture (capture, items) n'accepte le
+  query token.
 - Le token figure **en clair dans l'URL** : il peut traîner dans l'historique
   du navigateur, les logs du serveur, les journaux de claude.ai. C'est
   acceptable pour un jeton de lecture seule, révocable seul — mais à ne
@@ -36,31 +37,45 @@ https://brief.srv1899780.hstgr.cloud/api/digest?token=<BRIEF_DIGEST_TOKEN>
 
 ## Secrets — jamais commités
 
-Le script lit `BRIEF_DIGEST_TOKEN` (digest) et `BRIEF_PIN` (agenda) dans cet
-ordre : variable d'environnement → `.env.local` → `.env.production` (copie
-locale). **Aucun secret ne doit entrer dans git** (`.env*` est ignoré).
+Le script lit **un seul** secret, `BRIEF_DIGEST_TOKEN`, dans cet ordre :
+variable d'environnement → `.env.local` → `.env.production` (copie locale).
+**Aucun secret ne doit entrer dans git** (`.env*` est ignoré).
 
 - **Sur le Mac d'Aramis** (Claude Code) : ajouter au `.env.local` de la copie
   locale :
   ```
   BRIEF_DIGEST_TOKEN=<valeur du VPS>
-  BRIEF_PIN=<valeur du VPS>
   ```
-  Les valeurs se lisent sur le VPS dans `/docker/brief/.env.production` —
-  jamais dans un commit, une PR ou une passation.
-- **Sur le VPS** (Hermes) : les variables existent déjà dans
-  `/docker/brief/.env.production` ; le script les trouve si on l'exécute depuis
-  `/docker/brief`, sinon les passer en environnement.
+  La valeur se lit sur le VPS dans `/docker/brief/.env.production` — jamais
+  dans un commit, une PR ou une passation. ⚠️ **Elle doit être exactement
+  celle de la prod** : un `.env.local` qui porte une valeur différente donne
+  un `{"error":"Jeton invalide."}` en 401, indiscernable d'une route cassée
+  (constaté le 2026-08-30 sur le Mac).
+- **Sur le VPS** (Hermes) : la variable existe déjà dans
+  `/docker/brief/.env.production` ; le script la trouve si on l'exécute depuis
+  `/docker/brief`, sinon la passer en environnement.
 
-## Pourquoi deux secrets
+`BRIEF_PIN` n'existe plus : le PIN a été supprimé le 2026-08-26 (auth =
+Supabase email + mot de passe). Ne pas le réintroduire.
 
-| Route | Secret | Portée |
-|---|---|---|
-| `GET /api/digest` | `BRIEF_DIGEST_TOKEN` (Bearer) | **Lecture seule**, conçu pour un automate. Retard + échéances du jour seulement. |
-| `GET /api/agenda?date=` | `BRIEF_PIN` (`x-brief-pin`) | Clé maîtresse de l'app : ouvre aussi l'écriture et `/api/transcribe`. **À n'utiliser que pour la lecture d'une date précise, jamais pour écrire.** |
+## Un seul secret, deux routes
 
-Le digest est le choix par défaut : révocable seul, sans risque d'effet de
-bord. L'agenda ne sert que quand une date précise est demandée.
+| Route | Secret | Garde | Portée |
+|---|---|---|---|
+| `GET /api/digest` | `BRIEF_DIGEST_TOKEN` (Bearer ou `?token=`) | machine seule | **Lecture seule**, conçu pour un automate. Retard + échéances du jour seulement. |
+| `GET /api/agenda?date=` | `BRIEF_DIGEST_TOKEN` (Bearer ou `?token=`) | **mixte** : session utilisateur **ou** jeton machine | **Lecture seule.** Agenda fusionné d'un jour (items Brief + instantané CalDAV). |
+
+**Pourquoi la garde de l'agenda est mixte** (décision Aramis du 2026-08-30) :
+`/api/agenda` est la source unique de l'accueil, de l'onglet Agenda et du
+calendrier desktop — l'app l'appelle avec la session de l'utilisateur. La
+basculer sur le seul jeton machine éteindrait ces trois écrans sans qu'aucune
+erreur serveur ne le signale. `requireSessionOrMachineToken`
+(`src/lib/guard.ts`) accepte les deux : jeton machine s'il y en a un de
+présenté, session sinon.
+
+⚠️ La garde mixte est réservée à la **lecture**. Aucune route d'écriture ne
+doit la porter : un secret déposé dans une crontab ou un raccourci iOS ne doit
+pas ouvrir la porte de l'écriture.
 
 ## Limites connues
 

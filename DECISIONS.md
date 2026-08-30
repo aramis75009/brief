@@ -14,6 +14,40 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-30 (nuit) · Les agents lisent l'agenda avec le jeton machine — garde MIXTE, pas un remplacement
+
+Depuis la suppression du PIN (26/08), `scripts/brief-agents.sh agenda` était
+**cassé** : il envoyait `x-brief-pin` à une route passée sous
+`requireSession()`. Un agent sans navigateur ne pouvait plus lire l'agenda
+d'Aramis, alors que `CLAUDE.md` lui demande de le faire avant de coder.
+
+**Décision — `GET /api/agenda` accepte `BRIEF_DIGEST_TOKEN` (Bearer ou
+`?token=`) EN PLUS de la session, jamais À LA PLACE.**
+`requireSessionOrMachineToken` (`src/lib/guard.ts`) : jeton machine s'il y en
+a un de présenté, session sinon. Le script n'utilise plus qu'un secret,
+`BRIEF_DIGEST_TOKEN`, pour `digest` comme pour `agenda`.
+
+*Pourquoi le mixte et pas le remplacement.* Aramis avait spécifié
+« remplacer `requireSession()` par le garde machine ». Vérification faite :
+`/api/agenda` est la **source unique** de l'écran d'accueil, de l'onglet
+Agenda et du calendrier desktop (`fetchAgendaDay`, `src/lib/api.ts`). Le
+navigateur ne porte pas le jeton machine — un remplacement pur aurait éteint
+ces trois écrans en prod, en 401, sans qu'aucune erreur serveur ne le
+signale. La garde mixte donne exactement l'accès agent demandé sans rien
+casser.
+
+*Pourquoi un seul secret pour digest et agenda.* Même portée (lecture seule),
+même révocation, un secret de moins à distribuer et à faire tourner. La règle
+« chaque jeton est le sien » sépare les portées, pas les routes de même
+portée.
+
+*Limite assumée.* `allowQueryToken` est actif sur l'agenda comme sur le
+digest : le jeton peut se retrouver en clair dans une URL (historique, logs).
+Acceptable pour de la lecture seule révocable seule — **jamais** sur une
+route d'écriture.
+
+---
+
 ## 2026-08-30 (soir) · Le graphe devient le moteur : objectifs reliables, RDV visibles, tâches faites de retour
 
 Chantier dicté par Aramis le 30/08 (après-midi). Trois nuances renversent des

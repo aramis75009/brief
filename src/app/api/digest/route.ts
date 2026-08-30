@@ -13,12 +13,17 @@ export const dynamic = "force-dynamic";
  * sait déjà notifier par Web Push item par item ; ceci répond à une autre
  * question — « qu'est-ce qui pèse sur ma journée » — en un seul message.
  *
- * ⚠️ **Jeton machine, surtout pas le PIN.** `x-brief-pin` ouvre TOUTES les
- * routes, y compris la création, la complétion, la suppression d'items et
- * `/api/transcribe` qui consomme la clé Groq. Un secret déposé dans un
- * planificateur doit se révoquer seul, sans obliger à changer le code qu'Aramis
- * tape sur son téléphone. Même raison que `/api/capture` et
- * `/api/cron/reminders`, chacun avec son propre jeton.
+ * ⚠️ **Jeton machine, jamais la session utilisateur.** Un secret déposé dans
+ * un planificateur (crontab, n8n, raccourci iOS) doit se révoquer seul, sans
+ * invalider les sessions ouvertes ni obliger Aramis à se reconnecter partout.
+ * Même raison que `/api/capture` et `/api/cron/reminders`, chacun avec son
+ * propre jeton. (L'ancien PIN partagé, qui ouvrait TOUTES les routes d'un
+ * coup — écriture et `/api/transcribe` comprises —, est supprimé depuis le
+ * 2026-08-26 : c'est exactement ce qu'on ne voulait plus.)
+ *
+ * `BRIEF_DIGEST_TOKEN` ouvre AUSSI `GET /api/agenda` depuis le 2026-08-30 :
+ * même portée (lecture seule), même révocation, un seul secret à distribuer
+ * aux agents. Voir `docs/agent-calendar-access.md`.
  *
  * Lecture seule, et volontairement : aucun `POST` ici. Le jour où un automate
  * devra écrire, ce sera une décision prise à ce moment-là, pas un effet de bord

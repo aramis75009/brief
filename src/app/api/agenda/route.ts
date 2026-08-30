@@ -1,6 +1,6 @@
 import { buildDayAgenda } from "@/lib/agenda";
 import { readAgendaSnapshot } from "@/lib/caldav";
-import { requireSession } from "@/lib/guard";
+import { requireSessionOrMachineToken } from "@/lib/guard";
 import { readItems } from "@/lib/store";
 import { shiftDays, zonedParts, zonedTime, type CalendarDate } from "@/lib/zoned";
 
@@ -16,6 +16,13 @@ export const dynamic = "force-dynamic";
  * dans l'app Calendrier + extension des séries récurrentes) vit dans
  * `buildDayAgenda` (`src/lib/agenda.ts`), testée indépendamment — cette route
  * ne fait que calculer les bornes du jour demandé et appeler cette fonction.
+ *
+ * **Garde mixte** (décision Aramis du 2026-08-30) : session utilisateur pour
+ * l'app — c'est la source unique de l'accueil, de l'onglet Agenda et du
+ * calendrier desktop — **ou** `BRIEF_DIGEST_TOKEN` en Bearer pour un agent
+ * (Claude Code, Hermes, Codex) qui n'a pas de navigateur. Lecture seule, même
+ * jeton que `/api/digest`, révocable seul. `?token=` accepté comme sur digest,
+ * pour un appelant qui ne peut poser que des URLs nues.
  */
 
 function parseDateParam(raw: string | null): CalendarDate | null {
@@ -30,7 +37,9 @@ function parseDateParam(raw: string | null): CalendarDate | null {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = await requireSession();
+  const denied = await requireSessionOrMachineToken(req, "BRIEF_DIGEST_TOKEN", {
+    allowQueryToken: true,
+  });
   if (denied) return denied;
 
   const url = new URL(req.url);

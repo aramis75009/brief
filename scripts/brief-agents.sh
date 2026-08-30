@@ -8,8 +8,11 @@
 #   bash scripts/brief-agents.sh agenda          # agenda d'aujourd'hui
 #   bash scripts/brief-agents.sh url             # URL publique digest avec ?token= (pour claude.ai)
 #
-# Auth : jeton machine BRIEF_DIGEST_TOKEN (Bearer) pour /api/digest,
-#        PIN (x-brief-pin) pour /api/agenda.
+# Auth : un seul jeton machine, BRIEF_DIGEST_TOKEN (Bearer), pour /api/digest
+#        ET /api/agenda. Le PIN a été supprimé le 2026-08-26 (auth = Supabase
+#        email + mot de passe) ; /api/agenda porte depuis le 2026-08-30 une
+#        garde MIXTE — session utilisateur pour l'app, jeton machine pour les
+#        agents (voir src/lib/guard.ts, requireSessionOrMachineToken).
 # Le jeton est lu depuis l'environnement local, JAMAIS commité.
 # claude.ai ne peut poser que des URLs nues (pas de header) : la route digest
 # accepte aussi ?token= (opt-in lecture seule) — voir `url` ci-dessous.
@@ -32,7 +35,6 @@ resolve_secret() {
 }
 
 DIGEST_TOKEN="$(resolve_secret BRIEF_DIGEST_TOKEN)"
-PIN="$(resolve_secret BRIEF_PIN)"
 
 cmd="${1:-digest}"
 
@@ -42,12 +44,12 @@ case "$cmd" in
     curl -sS -H "Authorization: Bearer $DIGEST_TOKEN" "$BASE_URL/api/digest"
     ;;
   agenda)
-    [ -n "$PIN" ] || { echo "BRIEF_PIN introuvable (env, .env.local ou .env.production)." >&2; exit 1; }
+    [ -n "$DIGEST_TOKEN" ] || { echo "BRIEF_DIGEST_TOKEN introuvable (env, .env.local ou .env.production)." >&2; exit 1; }
     date="${2:-}"
     if [ -n "$date" ]; then
-      curl -sS -H "x-brief-pin: $PIN" "$BASE_URL/api/agenda?date=$date"
+      curl -sS -H "Authorization: Bearer $DIGEST_TOKEN" "$BASE_URL/api/agenda?date=$date"
     else
-      curl -sS -H "x-brief-pin: $PIN" "$BASE_URL/api/agenda"
+      curl -sS -H "Authorization: Bearer $DIGEST_TOKEN" "$BASE_URL/api/agenda"
     fi
     ;;
   url)
