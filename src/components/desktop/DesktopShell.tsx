@@ -30,14 +30,6 @@ import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overvie
 const C = { bg: "var(--color-bg)" } as const;
 
 /** Âge relatif d'un timestamp epoch, en français — pour la ligne CalDAV de « Chaîne & sync ». */
-function relativeSyncLabel(lastSyncAt: number | null): string {
-  if (lastSyncAt === null) return "jamais synchronisé";
-  const minutes = Math.max(0, Math.round((Date.now() - lastSyncAt) / 60_000));
-  if (minutes < 1) return "à l’instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
-  return `il y a ${Math.round(minutes / 60)} h`;
-}
-
 export function DesktopShell({
   items,
   activeItems,
@@ -46,7 +38,6 @@ export function DesktopShell({
   projects,
   overview,
   transcript,
-  calendarSyncAt,
   pushSubscribed,
   onToggleDone,
   onPostpone,
@@ -68,7 +59,6 @@ export function DesktopShell({
   projects: Project[];
   overview: Overview | null;
   transcript: string;
-  calendarSyncAt: number | null;
   pushSubscribed: boolean;
   onToggleDone: (id: string, completedAt?: string | null) => void;
   onPostpone: (id: string) => void;
@@ -458,7 +448,6 @@ export function DesktopShell({
             <DesktopSettings
               projects={projects}
               overview={overview}
-              calendarSyncLabel={relativeSyncLabel(calendarSyncAt)}
               pushSubscribed={pushSubscribed}
               onEnablePush={onEnablePush}
               onLogout={onLogout}
