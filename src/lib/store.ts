@@ -118,7 +118,13 @@ export async function writeTags(tags: Tag[]): Promise<void> {
  * n'est pas un item : il survit à ses tâches, les orchestre — rien à semer.
  */
 export async function readObjectives(): Promise<Objective[]> {
-  return readJson<Objective[]>("objectives.json", []);
+  const stored = await readJson<Objective[]>("objectives.json", []);
+  // Garantit `dependsOn` en mémoire sans réécrire le fichier — même principe que
+  // `normalizeItem` : une donnée absente ne doit pas obliger à migrer le disque.
+  return stored.map((o) => ({
+    ...o,
+    dependsOn: Array.isArray(o.dependsOn) ? o.dependsOn : [],
+  }));
 }
 
 export async function writeObjectives(objectives: Objective[]): Promise<void> {

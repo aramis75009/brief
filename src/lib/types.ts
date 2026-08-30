@@ -415,6 +415,19 @@ export type Objective = {
   /** Posé quand l'objectif est atteint — le nœud quitte le graphe. */
   achievedAt: string | null;
   notes?: string;
+  /**
+   * Dépendances explicites : ids d'items ET d'objectifs (ces derniers préfixés
+   * `obj:`, comme `objectiveNodeId()`). En plus des tâches qui pointent vers
+   * l'objectif par `Item.objectiveId` (lien implicite, jamais dupliqué ici).
+   */
+  dependsOn?: string[];
+  /**
+   * `true` = atteint par un geste explicite d'Aramis — collant, jamais rouvert
+   * tout seul. `false` / absent = atteint par convergence des dépendances
+   * (`reconcileObjectives`) — réversible : se rouvre si une dépendance redevient
+   * non faite ou si on en ajoute une.
+   */
+  achievedManually?: boolean;
 };
 
 /**
