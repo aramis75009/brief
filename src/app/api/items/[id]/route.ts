@@ -137,6 +137,12 @@ export function sanitizePatch(
   } else if (typeof v.columnId === "string" && v.columnId.trim()) {
     out.columnId = v.columnId.trim();
   }
+  // Lien objectif : string (ID d'objectif) ou null (détaché). Absent = on ne touche pas.
+  if (v.objectiveId === null) {
+    out.objectiveId = null;
+  } else if (typeof v.objectiveId === "string" && v.objectiveId.trim()) {
+    out.objectiveId = v.objectiveId.trim();
+  }
   return out;
 }
 

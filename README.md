@@ -123,6 +123,10 @@ jeton Bearer (machine). Tableau en lecture seule : voir
 | `GET /api/overview` | — | charge par projet, activité 7 jours |
 | `GET /api/agenda` | `?date=YYYY-MM-DD` | la vue Agenda du jour |
 | `GET /api/board` | — | le Kanban (desktop) |
+| `GET /api/objectives` | — | `[{ id, projectId, title, horizon, achievedAt }]` |
+| `POST /api/objectives` | `{ title, projectId, horizon? , notes? }` | objectif créé (`201`) |
+| `PATCH /api/objectives` | `{ id, title?, horizon?, achievedAt?, notes? }` | objectif mis à jour |
+| `DELETE /api/objectives` | `{ id }` | suppression |
 | `GET /api/search` | `?q=` | recherche plein-texte |
 | `GET /api/tags` | — | tags existants |
 | `GET /api/tags/[id]` | — | tag |

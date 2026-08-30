@@ -117,6 +117,8 @@ export type DraftItem = {
   tags?: string[];
   /** IDs d'items prédécesseurs — cette tâche ne peut pas démarrer avant. */
   dependsOn?: string[];
+  /** Objectif auquel l'item contribue (lien faible : l'objectif survit aux tâches). */
+  objectiveId?: string | null;
   /** ID de colonne Kanban (null = non placée). */
   columnId?: string | null;
   /** Fil d'origine vocal — la dictée d'où provient cet item. */
@@ -129,8 +131,6 @@ export type DraftItem = {
 
 /** Un item enregistré. */
 export type Item = DraftItem & {
-  /** Objectif auquel cet item contribue (lien faible : l'objectif survit à l'item). */
-  objectiveId?: string | null;
   createdAt: string;
   /** Horodatage du dernier rappel envoyé — empêche le double envoi. */
   remindedAt: string | null;
