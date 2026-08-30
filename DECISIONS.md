@@ -14,6 +14,60 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-30 (soir) · Le graphe devient le moteur : objectifs reliables, RDV visibles, tâches faites de retour
+
+Chantier dicté par Aramis le 30/08 (après-midi). Trois nuances renversent des
+choix pris le 30/08 au matin, quand les objectifs venaient d'apparaître et
+n'étaient qu'un nœud décoratif. Implémenté sur `feat/graphe-objectifs-moteur`
+(PR #3), par Claude Code, en autonomie.
+
+**Décision 1 — le lien tâche → objectif COMPLÈTE l'objectif (auto), il ne
+BLOQUE pas la tâche.**
+L'entrée du 30/08 (matin) posait le lien « non bloquant » : une tâche liée à
+un objectif non atteint restait « prête » dans le graphe. Ça ne change pas.
+Ce qui change : quand **toutes** les dépendances effectives d'un objectif sont
+faites (tâches ponctuelles cochées, objectifs amont atteints — jamais une
+récurrente), l'objectif passe `achievedAt` **tout seul** (`reconcileObjectives`,
+serveur). Il se rouvre si une dépendance redevient à faire ou qu'on en ajoute
+une — SAUF s'il a été marqué atteint à la main (`achievedManually`, collant).
+*Pourquoi.* Dictée d'Aramis : « quand toutes les tâches liées sont réalisées →
+l'objectif se termine ». L'objectif est le terminus d'une chaîne, pas une
+étiquette. La nuance « on complète l'objectif, on ne bloque pas la tâche »
+garde le graphe lisible : une tâche n'est jamais « bloquée par un objectif ».
+
+**Décision 2 — les objectifs sont draggables et cliquables dans le graphe.**
+L'entrée du 30/08 (matin) disait « ni draggable ni cliquable — leur écran gère
+leur cycle de vie ». Renversé.
+*Pourquoi.* Devenus l'ossature du graphe (chaînes tâche → objectif → objectif,
+tous les objectifs actifs visibles), ils doivent être manipulables : on tire
+un lien depuis/vers eux (`Objective.dependsOn`, ids de tâches et d'objectifs
+préfixés `obj:`), on les déplace, un double-clic ouvre l'écran Objectifs. Leur
+cycle de vie (créer / marquer atteint / supprimer) reste sur l'écran Objectifs.
+
+**Décision 3 — les tâches faites reviennent dans le graphe, sous condition.**
+Une décision passée (masquage total) les cachait « pour éviter le fouillis ».
+Retour *scopé* : toggle « Faites » **OFF par défaut**, et quand il est ON, on
+ne montre QUE les tâches faites reliées à une chaîne encore active — jamais une
+tâche faite isolée.
+*Pourquoi.* Le masquage total faisait perdre l'historique d'une chaîne
+(« qu'est-ce que j'ai déjà fait pour ça ? »). Le retour scopé rend ce contexte
+sans ramener le bruit qui avait motivé la décision d'origine.
+
+**Aussi tranché (sans renverser personne) :**
+- **Disposition du graphe = localStorage, par appareil.** Pas un fichier
+  serveur : c'est cosmétique, le graphe est desktop-only, « Ajuster » recalcule
+  une disposition propre, et une persistance serveur devrait être refaite au
+  pivot multi-utilisateur. Limite assumée : ne suit pas Mac ↔ Windows.
+- **`wouldCreateCycle` n'est pas étendu aux objectifs.** Une boucle
+  d'objectifs ne bloque rien (elle ne se satisfait jamais) ; le point fixe de
+  `reconcileObjectives` et le garde-cycle de `layoutObjectives` terminent.
+
+**Statut.** ✅ Codé, testé (425 tests), 2 passes `/code-review`. **PR #3 non
+mergée — recette navigateur non faite** (pas de session Supabase locale). Voir
+`HANDOFF.md`.
+
+---
+
 ## 2026-08-30 · Objectifs liés aux projets (chantier dicté le 29/08 soir)
 
 **Décision.** Un objectif Brief est un **objet dédié** lié à un projet — pas
