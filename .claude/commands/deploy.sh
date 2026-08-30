@@ -40,7 +40,9 @@ RESPONSE=$(curl -s -m 30 -w '\n%{http_code}' \
   -d "$BODY")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY_RESP=$(echo "$RESPONSE" | head -n -1)
+# `head -n -1` est GNU-only et casse sur le BSD head de macOS — on retire la
+# dernière ligne (le code HTTP) avec sed, portable.
+BODY_RESP=$(echo "$RESPONSE" | sed '$d')
 
 echo "→ POST $WEBHOOK_URL"
 echo "→ HTTP $HTTP_CODE : $BODY_RESP"
