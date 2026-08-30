@@ -38,6 +38,33 @@ export function objectiveProgress(
 }
 
 /**
+ * Progression d'un objectif sur ses dépendances EFFECTIVES (implicites via
+ * `objectiveId` + explicites via `dependsOn`, items et objectifs). C'est ce que
+ * le graphe montre : `objectiveProgress` ne compte que les liens `objectiveId`
+ * et lirait « 0/0 » sur un objectif piloté par des `dependsOn` tirés à la souris.
+ * Une tâche récurrente ne compte jamais comme faite (comme `objectiveSatisfied`).
+ */
+export function objectiveEffectiveProgress(
+  objective: Objective,
+  items: Item[],
+  objectives: Objective[],
+): { done: number; total: number; pct: number } {
+  const { itemIds, objectiveIds } = effectiveDeps(objective, items, objectives);
+  const itemById = new Map(items.map((it) => [it.id, it]));
+  const objById = new Map(objectives.map((o) => [o.id, o]));
+  let done = 0;
+  for (const id of itemIds) {
+    const it = itemById.get(id);
+    if (it && !it.rrule && it.doneAt) done += 1;
+  }
+  for (const id of objectiveIds) {
+    if (objById.get(id)?.achievedAt) done += 1;
+  }
+  const total = itemIds.length + objectiveIds.length;
+  return { done, total, pct: total === 0 ? 0 : Math.round((done / total) * 100) };
+}
+
+/**
  * Tâches actives (non terminées) rattachées à un objectif — celles qui restent
  * à faire pour l'atteindre. Triées par échéance, les sans-échéance en dernier.
  */

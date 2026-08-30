@@ -184,12 +184,11 @@ export async function PATCH(
     if (!updated) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
     }
-    // Un lien vers un objectif (ou une dépendance) qui change peut clore ou
-    // rouvrir cet objectif. `sanitizePatch` ne pose jamais `doneAt` (la coche
-    // vit sur la route de collection) — la garde y est quand même, par sûreté.
-    if ("dependsOn" in patch || "objectiveId" in patch || "doneAt" in patch) {
-      await reconcileObjectivesInStore();
-    }
+    // Réconciliation inconditionnelle : `dependsOn`, `objectiveId`, `doneAt`
+    // ET `status` (archivé/idée = hors plan de travail depuis `effectiveDeps`)
+    // peuvent tous clore ou rouvrir un objectif. `reconcileObjectives` ne
+    // réécrit rien si rien n'a bougé — pas de liste blanche de champs à tenir.
+    await reconcileObjectivesInStore();
     return Response.json({ item: updated });
   } catch (e) {
     return Response.json(
@@ -246,6 +245,9 @@ export async function DELETE(
     if (!deleted) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
     }
+    // Supprimer une tâche liée à un objectif retire une dépendance : l'objectif
+    // peut désormais être satisfait (ou n'avoir plus aucune dépendance).
+    await reconcileObjectivesInStore();
     return Response.json({ ok: true, id });
   } catch (e) {
     return Response.json(

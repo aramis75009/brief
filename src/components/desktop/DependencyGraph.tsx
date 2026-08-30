@@ -42,7 +42,7 @@ import {
 import { formatDue } from "@/lib/due";
 import { describeRrule } from "@/lib/rrule";
 import { clearGraphLayout, loadGraphLayout, saveGraphLayout } from "@/lib/graphLayout";
-import { objectiveGraphEdges, objectiveNodeId, objectiveProgress } from "@/lib/objectives";
+import { objectiveEffectiveProgress, objectiveGraphEdges, objectiveNodeId } from "@/lib/objectives";
 import { shapeFor, skinFor } from "@/lib/projects";
 import type { Item, Objective, Project, Shape, Tag } from "@/lib/types";
 
@@ -483,8 +483,10 @@ export function DependencyGraph({
     return set;
   }, [selectedId, edges, objectiveLinks]);
 
+  // Compte les nœuds bloqués — tâches ET RDV : un RDV en attente d'une tâche
+  // est « bloqué » aussi, et le filtre « Bloquées » le montre.
   const blockedCount = useMemo(
-    () => allTasks.filter((t) => t.kind === "task" && graphStatus(t, allById) === "blocked").length,
+    () => allTasks.filter((t) => graphStatus(t, allById) === "blocked").length,
     [allTasks, allById],
   );
 
@@ -767,10 +769,11 @@ export function DependencyGraph({
 
             {/* Le lien en cours de tirage — il suit le curseur jusqu'au relâchement. */}
             {link && (() => {
-              const a = pos.get(link.fromId);
+              const fromObj = link.fromId.startsWith("obj:");
+              const a = fromObj ? objectivePos.get(link.fromId) : pos.get(link.fromId);
               if (!a) return null;
-              const x1 = a.x + metrics.W;
-              const y1 = a.y + metrics.H / 2;
+              const x1 = a.x + (fromObj ? OBJ_W : metrics.W);
+              const y1 = a.y + (fromObj ? OBJ_H : metrics.H) / 2;
               const dx = Math.max(70, Math.abs(link.x - x1) * curve);
               return (
                 <g>
@@ -800,16 +803,47 @@ export function DependencyGraph({
               const x2 = dst.x - 9;
               const y2 = dst.y + OBJ_H / 2;
               const dx = Math.max(70, Math.abs(x2 - x1) * curve);
+              const key = `${fromId}=>${toId}`;
+              const curveD = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+              const mx = (x1 + x2) / 2;
+              const my = (y1 + y2) / 2;
               return (
-                <g key={`${fromId}->${toId}`} opacity={0.55}>
-                  <path
-                    d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
-                    fill="none"
-                    strokeDasharray={kind === "objective" ? "6 4" : "2 6"}
-                    strokeLinecap="round"
-                    style={{ stroke: "#B98A17", strokeWidth: kind === "objective" ? 2.4 : 1.8 }}
-                  />
-                  <circle cx={x2} cy={y2} r={3.5} style={{ fill: "#B98A17" }} />
+                <g key={key}>
+                  <g opacity={0.55}>
+                    <path
+                      d={curveD}
+                      fill="none"
+                      strokeDasharray={kind === "objective" ? "6 4" : "2 6"}
+                      strokeLinecap="round"
+                      style={{ stroke: "#B98A17", strokeWidth: kind === "objective" ? 2.4 : 1.8 }}
+                    />
+                    <circle cx={x2} cy={y2} r={3.5} style={{ fill: "#B98A17" }} />
+                  </g>
+                  {onRemoveDependency && (
+                    <>
+                      <path
+                        d={curveD}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={16}
+                        style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                        onMouseEnter={() => setHoverEdge(key)}
+                        onMouseLeave={() => setHoverEdge((k) => (k === key ? null : k))}
+                        onClick={() => onRemoveDependency(toId, fromId)}
+                      />
+                      {hoverEdge === key && (
+                        <g
+                          transform={`translate(${mx},${my})`}
+                          style={{ pointerEvents: "auto", cursor: "pointer" }}
+                          onMouseEnter={() => setHoverEdge(key)}
+                          onClick={() => onRemoveDependency(toId, fromId)}
+                        >
+                          <circle r={9} fill="var(--color-surface)" stroke="var(--color-danger)" strokeWidth={1.5} />
+                          <path d="M-3.4,-3.4 L3.4,3.4 M3.4,-3.4 L-3.4,3.4" stroke="var(--color-danger)" strokeWidth={1.8} strokeLinecap="round" />
+                        </g>
+                      )}
+                    </>
+                  )}
                 </g>
               );
             })}
@@ -991,7 +1025,7 @@ export function DependencyGraph({
               Le losange plein = atteint / prêt à valider. */}
           {objectiveNodes.map(({ objective, x, y }) => {
             const project = projectOf(objective.projectId);
-            const prog = objectiveProgress(objective, items);
+            const prog = objectiveEffectiveProgress(objective, items, objectives);
             const nodeId = objectiveNodeId(objective);
             const dropping = link?.overId === nodeId;
             const dim = !!selectedId && !neighbours.has(nodeId);

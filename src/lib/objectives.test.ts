@@ -4,6 +4,7 @@ import {
   HORIZON_LABEL,
   effectiveDeps,
   objectiveEdges,
+  objectiveEffectiveProgress,
   objectiveGraphEdges,
   objectiveNodeId,
   objectiveProgress,
@@ -166,6 +167,27 @@ describe("graphe", () => {
     ];
     const edges = objectiveEdges([objWeb, objAchieved], items);
     expect(edges).toEqual([{ fromId: "a", toId: "obj:rejoindre-webacademie" }]);
+  });
+});
+
+/* --- objectiveEffectiveProgress ---------------------------------------- */
+
+describe("objectiveEffectiveProgress", () => {
+  it("compte les dépendances explicites que `objectiveProgress` ignore", () => {
+    const items = [
+      makeItem({ id: "t1", doneAt: "2026-08-29T10:00:00.000Z" }),
+      makeItem({ id: "t2" }),
+    ];
+    const obj: Objective = { ...objCourt, dependsOn: ["t1", "t2", "obj:rejoindre-webacademie"] };
+    // objectiveProgress ne voit rien (aucun objectiveId ne pointe dessus)
+    expect(objectiveProgress(obj, items)).toEqual({ done: 0, total: 0, pct: 0 });
+    // effective : t1 fait, t2 non, objWeb non atteint → 1/3
+    expect(objectiveEffectiveProgress(obj, items, [obj, objWeb])).toEqual({ done: 1, total: 3, pct: 33 });
+  });
+
+  it("une tâche récurrente « faite » ne compte pas", () => {
+    const items = [makeItem({ id: "t1", objectiveId: "portfolio-pret", rrule: "FREQ=WEEKLY;BYDAY=MO", doneAt: "2026-08-29T10:00:00.000Z" })];
+    expect(objectiveEffectiveProgress(objCourt, items, [objCourt])).toEqual({ done: 0, total: 1, pct: 0 });
   });
 });
 

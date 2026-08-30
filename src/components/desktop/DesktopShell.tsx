@@ -183,11 +183,17 @@ export function DesktopShell({
     if (targetId.startsWith("obj:")) {
       const objId = targetId.slice(4);
       const obj = objectives.find((o) => o.id === objId);
-      if (!obj) return;
-      const updated = await updateObjective(objId, {
-        dependsOn: (obj.dependsOn ?? []).filter((d) => d !== depId),
-      });
-      setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
+      // Dépendance EXPLICITE (`dependsOn`) : on la retire de l'objectif.
+      if (obj && (obj.dependsOn ?? []).includes(depId)) {
+        const updated = await updateObjective(objId, {
+          dependsOn: (obj.dependsOn ?? []).filter((d) => d !== depId),
+        });
+        setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
+        return;
+      }
+      // Dépendance IMPLICITE : une tâche qui pointe sur cet objectif — on la détache.
+      const linked = items.find((i) => i.id === depId && i.objectiveId === objId);
+      if (linked) await onSaveItem(depId, { objectiveId: null });
       return;
     }
     const it = items.find((i) => i.id === targetId);

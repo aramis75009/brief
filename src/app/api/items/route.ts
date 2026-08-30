@@ -126,6 +126,9 @@ export async function POST(req: Request): Promise<Response> {
   if (toSave.length) {
     try {
       await saveItems(toSave);
+      // Un item créé (ou ré-enregistré) peut déjà porter un `objectiveId` :
+      // un objectif auto-atteint doit alors se rouvrir.
+      await reconcileObjectivesInStore();
     } catch (e) {
       // Le disque peut être en lecture seule (Vercel). On le dit plutôt que de
       // laisser croire que les items sont enregistrés.
@@ -188,9 +191,7 @@ export async function PATCH(req: Request): Promise<Response> {
     const updated = await patchItem(id, patch);
     if (!updated) return Response.json({ error: "Item introuvable." }, { status: 404 });
     // Cocher/décocher une tâche peut clore (ou rouvrir) l'objectif qu'elle sert.
-    // Une récurrence qui ne fait qu'AVANCER (`patch` sans `doneAt`) ne change
-    // rien pour un objectif — une récurrente ne le satisfait jamais.
-    if ("doneAt" in patch) await reconcileObjectivesInStore();
+    await reconcileObjectivesInStore();
     // `kind` permet au client de dire « repoussé à mardi » plutôt que « fait »
     // sur une récurrence — sans ça, cocher paraîtrait ne rien faire.
     return Response.json({ item: updated, outcome: kind });
