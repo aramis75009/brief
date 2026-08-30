@@ -10,145 +10,96 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-30 (soir) · Graphe & Objectifs, le moteur — codé, PR ouverte, recette à faire
+# Passation — 2026-08-30 (nuit) · Graphe & Objectifs déployé + recette round 1 — reprise par Opus 5
 
 | | |
 |---|---|
-| **Agent** | **Claude Code (Sonnet 5)** — reprend la main depuis Hermes (passation « Objectifs & Projets », archivée). |
-| **Branche** | `feat/graphe-objectifs-moteur` — **11 commits**, poussée, **PR [#3](https://github.com/aramis75009/brief/pull/3)** ouverte vers `main`. NON mergée. |
-| **Prod** | **Inchangée.** `main` (post-PR #2). Rien de ce chantier n'est déployé. |
-| **Bloqueur recette** | QA navigateur **non lancée** — pas d'accès session Supabase depuis le Mac (`.env.local` local date du 14/08, sans clés Supabase). |
+| **Agent** | **Claude Code (Sonnet 5)** — Aramis passe la main à **Opus 5** pour la suite (« tu n'es pas assez puissant »). |
+| **Branches** | `main` = `71f31a9` — **déployée en prod** (Hermes, HTTP 202 sur le webhook, `71f31a9`). `fix/deploy-sh-macos` (`6c2a3b3`, poussée, non mergée). |
+| **Prod** | `https://brief.srv1899780.hstgr.cloud` — chantier graphe/objectifs EN LIGNE, recette round 1 déployée. |
 
-## Goal — l'objectif
+## Goal
 
-Rendre le graphe des dépendances utilisable comme outil de planification
-(dictée Aramis du 30/08) : objectifs éditables et reliables, RDV dans le
-graphe, disposition qui tient, dépendances qui se créent **et** se retirent au
-geste. Chantiers A (objectifs) + B (graphe) fusionnés — Aramis les voulait
-ensemble.
+Chantier A+B (graphe = moteur de planification + objectifs éditables) livré,
+déployé, et en cours de recette par Aramis sur la prod.
 
 ## Current state — ce qui a été fait
 
-**Tout le code du chantier A+B est écrit, testé unitairement, relu deux fois
-par `/code-review high`, et poussé en PR #3.** Détail dans la description de
-la PR et dans `docs/superpowers/specs/2026-08-30-graphe-objectifs-moteur-design.md`.
+**PR #3 « graphe & objectifs — le moteur »** : mergée (`32da200`), déployée.
+Détail complet dans `docs/handoffs/2026-08-30-graphe-objectifs-moteur-pr3.md` et
+`DECISIONS.md` (entrée 2026-08-30 soir, les 3 renversements).
 
-Livré :
+**Canal de déploiement** : Hermes a monté un webhook. `bash
+.claude/commands/deploy.sh "<message>"` → POST signé → Hermes déploie
+`main` sur le VPS → confirmation Telegram. Secret `WEBHOOK_SECRET` dans
+`.env.local` du Mac (ajouté, gitignoré). **`deploy.sh` avait un bug macOS**
+(`head -n -1` GNU-only) — corrigé sur `fix/deploy-sh-macos`, **à merger**.
 
-- **Modèle** : `Objective.dependsOn` (ids de tâches + d'objectifs `obj:`),
-  `Objective.achievedManually`. `readObjectives` normalise les deux en mémoire
-  (dont le rétro-remplissage `achievedManually = achievedAt != null` — sans
-  quoi les objectifs historiques seraient rouverts en masse au 1er GET).
-- **Auto-complétion** : `objectiveSatisfied` + `reconcileObjectives` (pures,
-  testées, point fixe pour les chaînes). Réconcilié serveur-side **après toute
-  mutation d'item** (POST/PATCH/[id] PATCH/[id] DELETE) en lecture-modification-
-  écriture atomique (`store.updateObjectivesAtomically`). `reconcileObjectives`
-  rend la même référence quand rien ne bouge → pas d'écriture inutile.
-- **Écran Objectifs** : édition inline (titre / horizon / notes), bouton
-  « rouvrir », section « atteints » repliable, « Vue Asana » retiré.
-- **`layoutObjectives`** : couloir dédié à droite → **bug de superposition
-  corrigé** (capture 1). Colonnes en cascade pour les chaînes objectif→objectif.
-- **Graphe** : tous les objectifs actifs visibles ; objectifs draggables +
-  ancre de tirage + double-clic → écran Objectifs + losange plein « atteint »
-  (via `objectiveEffectiveProgress`, qui compte AUSSI les `dependsOn` explicites).
-- **RDV** : toggle « RDV » (ON) — un nœud par série, chip « RDV », récurrence
-  en clair (`describeRrule`). **Tâches faites** : toggle « Faites » (OFF) —
-  seulement celles reliées à une chaîne active (`doneTasksInActiveChains`).
-- **Retrait de dépendance** : « × » au survol d'une arête (tâche→tâche ET
-  →objectif, y compris les liens implicites via `objectiveId`), bouton dans le
-  panneau de détail.
-- **Disposition persistée** : localStorage `brief:graph-layout`, par appareil.
-  **Pas d'élagage au chargement** (l'ensemble des nœuds est incomplet au
-  montage) ; « Réinitialiser » vide tout.
+**Recette round 1 (feedback Aramis sur prod, déployé dans `71f31a9`)** — 4
+points corrigés :
 
-**Ce qui N'A PAS été fait :**
+1. **Nœud objectif illisible** → agrandi (96 px), titre = élément dominant
+   (15 px extrabold, 2 lignes), affiche le **nom du projet** en texte + barre
+   de progression. Avant : on ne voyait que « OBJECTIF · COURT TERME » et la
+   couleur.
+2. **Label de récurrence qui débordait** du nœud tâche (« tous les lundis,
+   mardis... ») → ellipsé + tooltip.
+3. **Écran Objectifs ne montrait pas les tâches reliées dans le graphe** →
+   `objectivesByProject` / `openTasksFor` utilisent `effectiveDeps`
+   (implicites `objectiveId` + explicites `dependsOn`). Progression via
+   `objectiveEffectiveProgress`.
+4. **Copywriting** « court → moyen → long terme » retiré de l'en-tête Objectifs.
 
-- **QA navigateur** — impossible sans session Supabase locale. Personne n'a vu
-  ces écrans tourner. **C'est la première chose à faire en recette.**
-- **`wouldCreateCycle` n'est pas étendu aux nœuds `obj:`** — décision assumée :
-  une boucle d'objectifs ne bloque rien (elle ne se satisfait jamais), le point
-  fixe de `reconcileObjectives` et le garde-cycle de `layoutObjectives`
-  terminent tous les deux. Documenté dans le `onUp` de `DependencyGraph`.
-- Liste des dépendances **dans l'éditeur d'objectif** (écran Objectifs) — le
-  retrait se fait par le « × » du graphe. Reporté (voir `TODOS.md`).
+## Blockers — ce qui bloque
 
-## Decisions — choix critiques ou irréversibles
+**QA navigateur authentifiée toujours pas faite.** Le `.env.local` du Mac n'a
+pas les clés Supabase (voir mémoire), et l'import de cookie Chrome via
+`/browse` attend un clic sur la popup macOS Keychain « Chrome Safe Storage »
+qu'Aramis n'a pas encore validé. Seule vérif faite : la prod charge sans crash
+JS, l'écran de connexion s'affiche, pas d'erreur console.
 
-Trois entrées ajoutées en tête de `DECISIONS.md` (2026-08-30, avec leur
-POURQUOI) :
+## Next — pour Opus 5
 
-1. **Le lien tâche → objectif complète l'objectif (auto), sans bloquer la
-   tâche.** On ne bloque pas les tâches ; l'objectif, lui, est « satisfait »
-   quand ses dépendances effectives le sont. Renverse la nuance « non bloquant »
-   du 30/08 (posée quand l'objectif était un nœud passif).
-2. **Objectifs draggables et cliquables dans le graphe.** Renverse « ni
-   draggable ni cliquable » du 30/08 — devenus l'ossature du graphe.
-3. **Tâches faites de retour dans le graphe, sous condition.** Toggle OFF par
-   défaut, chaîne active seulement. Restaure le contexte sans le fouillis qui
-   avait motivé le masquage total.
-
-`AGENTS.md` mis à jour en conséquence (section « Interface — mobile et
-desktop » et « Données et dates »).
-
-## Changed — fichiers et composants
-
-| Fichier | Nature |
-|---|---|
-| `src/lib/types.ts` | `Objective.dependsOn?`, `Objective.achievedManually?` |
-| `src/lib/store.ts` | `normalizeObjective` (rétro-remplissage), `updateObjectivesAtomically` (RMW sérialisée) |
-| `src/lib/objectives.ts` | `effectiveDeps`, `objectiveSatisfied`, `reconcileObjectives`, `objectiveGraphEdges`, `objectiveEffectiveProgress` — tous testés |
-| `src/lib/objective-reconcile.ts` | **neuf** — `reconcileObjectivesInStore` (colle serveur) |
-| `src/lib/graph.ts` | `graphNodes` (+ `doneTasksInActiveChains`), `layoutObjectives` (+ `OBJ_METRICS`), `visibleTasks` prend `showDone`/`showEvents` |
-| `src/lib/graphLayout.ts` | **neuf** — localStorage de la disposition |
-| `src/app/api/objectives/route.ts` | GET = pure lecture ; POST/PATCH/DELETE via `updateObjectivesAtomically` ; `cleanDeps` ; DELETE élague les liens `obj:<id>` |
-| `src/app/api/items/route.ts`, `src/app/api/items/[id]/route.ts` | réconciliation **inconditionnelle** après chaque écriture d'item |
-| `src/components/desktop/DependencyGraph.tsx` | persistance disposition, tous les objectifs, objectifs interactifs, toggles RDV/Faites, retrait de dépendance, nœuds RDV/faites |
-| `src/components/desktop/DesktopObjectives.tsx` | édition inline, rouvrir, « atteints », `HorizonPicker` extrait, « Vue Asana » retiré |
-| `src/components/desktop/DesktopShell.tsx` | `handleRemoveDependency`, `handleEditObjective`, `handleReopenObjective`, `refreshObjectives`, effet `itemsObjectiveSig`, `onOpenObjectives` |
-| `src/lib/api.ts` | `updateObjective` accepte `dependsOn` + `achievedManually` |
-| `docs/superpowers/specs/…`, `docs/superpowers/plans/…` | spec + plan du chantier |
+1. **Bug ouvert : « Poster 20 » / « Reposter 15 » (récurrences vendredi-
+   dimanche) absentes du graphe.** « Poster 10 » / « Reposter 10 » (lun-jeu)
+   s'affichent. Vérifier avec les données prod : `GET /api/items` (session
+   authentifiée), chercher ces titres, regarder `doneAt` / `status` / `rrule`
+   / `kind`. Hypothèses : `doneAt` posé (série marquée finie → exclue par
+   `graphNodes`, visible sous le toggle « Faites »), mauvais `status`, ou
+   juste hors écran dans la grille des isolées.
+2. **Merger `fix/deploy-sh-macos`** (`6c2a3b3`) — 1 ligne, sans quoi `deploy.sh`
+   plante sur le Mac d'Aramis.
+3. **QA complète** une fois la session prod accessible : créer un objectif →
+   Graphe → tirer un lien de l'ancre d'une tâche vers l'objectif ×2 → cocher
+   les 2 tâches → l'objectif passe « atteint » ; déplacer des nœuds + recharger
+   (disposition tenue) ; survoler une arête → « × » → dépendance retirée ;
+   toggles « RDV » et « Faites » ; nœud objectif lisible (titre + projet).
+4. Reste des notes de session 30/08 (`TODOS.md` P3) non traité : Kanban Trello,
+   raccourcis flèches, calendrier à repenser, réglages→profil, toasts, hover
+   global.
 
 ## Validations — passants / échoués / non lancés
 
 ```
-$ npx vitest run
- Test Files  31 passed | 1 skipped (32)
-      Tests  425 passed | 1 skipped (426)
-
-$ npx tsc --noEmit
-(0 erreur — après `next dev` + 1 requête, piège LayoutProps)
-
-$ npx eslint .
-✖ 30 problems (0 errors, 30 warnings)   ← les 30 warnings sont préexistants
+$ npx vitest run     → 426 passants, 1 skipped (32 fichiers)
+$ npx tsc --noEmit   → 0 erreur (après next dev + 1 requête)
+$ npx eslint .       → 0 erreur (30 warnings préexistants)
 ```
 
-- **Non lancé : QA navigateur** (`/browse`) — pas de session Supabase locale.
-  À faire en recette : créer un objectif, changer son horizon, le lier à
-  2 tâches dans le graphe (ancre de tirage), cocher les tâches → objectif
-  auto-atteint ; déplacer des nœuds + recharger → disposition tenue ; retirer
-  une dépendance (× sur l'arête) ; activer « RDV » puis « Faites ».
-- **Non lancé : `npm run build`** (un `npm run dev` tournait — règle du repo).
-- `/code-review high` : **2 passes**, 13 constats, tous traités (commits
-  `6d4a0ae` et `0c8f1bb`). Le plus grave : réouverture en masse des objectifs
-  historiques au déploiement — corrigé par le rétro-remplissage `achievedManually`.
+- **Non lancé** : QA navigateur authentifiée (blocage ci-dessus).
+- **Non lancé** : `npm run build` (dev tournait).
+- `/code-review high` : 2 passes sur PR #3, 13 constats traités. La recette
+  round 1 (`71f31a9`) n'a **pas** été relue par `/code-review`.
 
-## Blockers — ce qui bloque
+## Changed — recette round 1
 
-**La recette navigateur est bloquée côté Claude Code** : le `.env.local` du
-Mac (14/08) n'a pas les clés Supabase (`NEXT_PUBLIC_SUPABASE_URL` /
-`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). Pour débloquer : Aramis ou Hermes
-recette sur un environnement authentifié (prod-like ou VPS), OU Aramis ajoute
-les clés au `.env.local` local.
-
-Rien d'autre ne bloque — la PR est prête à être recettée puis mergée.
-
-## Next — la prochaine action
-
-**Hermes / Aramis** : recette la PR #3 sur un environnement authentifié
-(scénario ci-dessus dans « Validations »). Si OK → merge PR #3 → déploie
-(`ssh root@186.241.16.37 'cd /docker/brief && git pull origin main &&
-docker compose --env-file .env.production up -d --build'` puis
-`bash scripts/coord/status.sh`).
+| Fichier | Nature |
+|---|---|
+| `src/lib/objectives.ts` | `openTasksFor` + `objectivesByProject` via `effectiveDeps` / `objectiveEffectiveProgress` |
+| `src/lib/graph.ts` | `OBJ_METRICS` agrandi (W 264 / H 96) |
+| `src/components/desktop/DependencyGraph.tsx` | nœud objectif restructuré (titre dominant + nom projet + barre) ; label récurrence ellipsé |
+| `src/components/desktop/DesktopObjectives.tsx` | caption « court → moyen → long » retirée ; `openTasksFor` reçoit `objectives` |
+| `.claude/commands/deploy.sh` | (sur `fix/deploy-sh-macos`) `head -n -1` → `sed '$d'` |
 
 ---
 
@@ -156,8 +107,8 @@ docker compose --env-file .env.production up -d --build'` puis
 
 | Date | Sujet | Agent | Lien |
 |---|---|---|---|
-| 2026-08-30 (soir) | Graphe & Objectifs, le moteur — PR #3, recette à faire | Claude Code | (cette passation) |
+| 2026-08-30 (nuit) | Graphe & Objectifs déployé + recette round 1 — reprise Opus 5 | Claude Code | (cette passation) |
+| 2026-08-30 (soir) | Graphe & Objectifs, le moteur — PR #3 | Claude Code | [fiche](docs/handoffs/2026-08-30-graphe-objectifs-moteur-pr3.md) |
 | 2026-08-30 (session) | Chantier Objectifs & Projets codé, recette à faire | Hermes Agent | [fiche](docs/handoffs/2026-08-30-hermes-objectifs-projets-recette.md) |
 | 2026-08-30 (pré-session) | Stabilisation déployée + spec Objectifs & Projets | Hermes Agent | [fiche](docs/handoffs/2026-08-30-pre-session-spec-objectifs-projets.md) |
 | 2026-08-29 (nuit) | Occurrences manquées visibles — stabilisation 1/2 | Hermes Agent | [fiche](docs/handoffs/2026-08-29-nuit-occurrences-manquees.md) |
-| 2026-08-29 (soir) | Landing SaaS `/landing` + logo vectoriel — déployé prod | Hermes Agent | [fiche](docs/handoffs/2026-08-29-landing-saas-deployee.md) |
