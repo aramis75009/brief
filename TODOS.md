@@ -61,6 +61,22 @@ tâches, idées propres, sans partage par défaut).
 - **`<button>` imbriqué** dans `TodayRow` / `RowCheckbox` : erreur HTML
   (hydration React), à corriger quand on y touche.
 
+### ⚠️ Bug Kanban — drag & drop pas Trello (signalé par Aramis le 30/08)
+
+**Quoi :** « on ne peut pas déplacer les cartes comme on veut ». Objectif
+d'Aramis : **la copie la plus proche de Trello** — déplacer une carte
+librement (entre colonnes, réordonner dans une colonne, peut-être déplacer
+les colonnes elles-mêmes). À investiguer : `DesktopKanban.tsx` + `@dnd-kit`
+(sensors, collision detection, contraintes actuelles).
+
+### ⚠️ Onglet Réglages — PIN fantôme (signalé par Aramis le 30/08)
+
+**Quoi :** l'onglet Réglages affiche encore un **PIN** qui n'existe plus
+(depuis le 26/08, auth = Supabase email+mdp). Revoir la page Réglages :
+retirer le PIN, et **déplacer les réglages vers le profil** (clic sur
+l'avatar) — Aramis : « revoir la page réglages pour la mettre quand on
+clique sur le profil ».
+
 ---
 
 ## P1 — Mobile (iPhone PWA)
@@ -123,6 +139,34 @@ sujet proche) :
 ---
 
 ## P3 — Recherches ouvertes
+
+### Notes de session — 30/08 (Aramis, « idée floue à retravailler ensemble »)
+
+> Dictée de fin de session par Aramis. Rien n'est tranché — à rediscuter
+> avant d'implémenter. « Bara » = travail (slang d'Aramis).
+
+1. **Objectifs = moteur du graphe.** Aujourd'hui les objectifs sont à part
+   (pas d'échéance, pas de lien fort). Dans le graphe ils pourraient être le
+   **nœud final d'une chaîne de tâches dépendantes** : quand toutes les
+   tâches liées sont réalisées → l'objectif se termine (auto-complétion).
+2. **Les RDV doivent entrer dans le graphe.** Actuellement `graphTasks()`
+   exclut les `event` — or pour le Sport, ce ne sont QUE des RDV. Il faut
+   les ajouter (au moins en option/filtre).
+3. **Kanban = copie Trello** (voir P1 — bug drag & drop). Objectif assumé :
+   la copie la plus proche de Trello possible.
+4. **Objectifs personnalisables après création** : changer l'horizon
+   (court/moyen/long), ajouter une description, voir les tâches dépendantes,
+   etc. (aujourd'hui : création seule, pas d'édition).
+5. **Raccourcis de navigation** dans l'app : naviguer entre les onglets
+   avec les flèches (← →).
+6. **Revoir le calendrier** — peut-être ne pas vouloir copier le calendrier
+   Apple (ça fait doublon) mais une autre interface.
+7. **Réglages** : PIN fantôme à retirer + déplacer les réglages sur le
+   profil (voir P1).
+8. **Vrais messages de modification** adaptés au design.md : quand on
+   reporte une tâche, déplace une carte, enfin toute action → un retour
+   visuel/toast conforme au design system.
+9. **Hover sur les endroits clés** : dashboard, kanban, etc.
 
 ### Roadmap « Asana personnalisé » (vision Brief)
 
