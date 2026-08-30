@@ -182,30 +182,26 @@ export function DesktopObjectives({
               : `${activeCount} objectif${activeCount > 1 ? "s" : ""} actif${activeCount > 1 ? "s" : ""}${achievedCount ? ` · ${achievedCount} atteint${achievedCount > 1 ? "s" : ""}` : ""}`}
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          {achievedCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAchieved((v) => !v)}
-              aria-pressed={showAchieved}
-              className="text-[11px] font-bold"
-              style={{
-                padding: "5px 12px",
-                borderRadius: 99,
-                border: `1px solid ${showAchieved ? C.ink : "rgba(16,16,16,.12)"}`,
-                background: showAchieved ? C.ink : C.surface,
-                color: showAchieved ? "#fff" : C.inkMuted,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {achievedCount} atteint{achievedCount > 1 ? "s" : ""}
-            </button>
-          )}
-          <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>
-            court → moyen → long terme
-          </span>
-        </div>
+        {achievedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAchieved((v) => !v)}
+            aria-pressed={showAchieved}
+            className="text-[11px] font-bold"
+            style={{
+              padding: "5px 12px",
+              borderRadius: 99,
+              border: `1px solid ${showAchieved ? C.ink : "rgba(16,16,16,.12)"}`,
+              background: showAchieved ? C.ink : C.surface,
+              color: showAchieved ? "#fff" : C.inkMuted,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              flex: "none",
+            }}
+          >
+            {achievedCount} atteint{achievedCount > 1 ? "s" : ""}
+          </button>
+        )}
       </section>
 
       {/* Corps : une carte par projet qui a des objectifs ou un brouillon ouvert */}
@@ -231,7 +227,7 @@ export function DesktopObjectives({
 
             <div className="flex flex-col gap-2.5">
               {rows.map(({ objective, progress }) => {
-                const open = openTasksFor(objective, items).sort(compareByDue).slice(0, 5);
+                const open = openTasksFor(objective, items, objectives).sort(compareByDue).slice(0, 5);
                 return (
                   <div
                     key={objective.id}

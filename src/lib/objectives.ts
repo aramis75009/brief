@@ -65,18 +65,15 @@ export function objectiveEffectiveProgress(
 }
 
 /**
- * Tâches actives (non terminées) rattachées à un objectif — celles qui restent
- * à faire pour l'atteindre. Triées par échéance, les sans-échéance en dernier.
+ * Tâches actives (non terminées) qui restent à faire pour atteindre l'objectif
+ * — ses dépendances EFFECTIVES : les tâches liées par `objectiveId` ET celles
+ * ajoutées via `dependsOn` (tirées dans le graphe). Sans ce second cas, une
+ * tâche reliée à la souris n'apparaissait nulle part dans l'écran Objectifs.
  */
-export function openTasksFor(objective: Objective, items: Item[]): Item[] {
-  return items.filter(
-    (it) =>
-      it.objectiveId === objective.id &&
-      it.kind === "task" &&
-      !it.doneAt &&
-      it.status !== "idea" &&
-      it.status !== "archived",
-  );
+export function openTasksFor(objective: Objective, items: Item[], objectives: Objective[] = []): Item[] {
+  const { itemIds } = effectiveDeps(objective, items, objectives);
+  const wanted = new Set(itemIds);
+  return items.filter((it) => wanted.has(it.id) && it.kind === "task" && !it.doneAt);
 }
 
 /**
@@ -102,7 +99,7 @@ export function objectivesByProject(
       rows: byProject
         .get(p.id)!
         .sort((a, b) => HORIZON_ORDER[a.horizon] - HORIZON_ORDER[b.horizon])
-        .map((objective) => ({ objective, progress: objectiveProgress(objective, items) })),
+        .map((objective) => ({ objective, progress: objectiveEffectiveProgress(objective, items, objectives) })),
     }));
 }
 

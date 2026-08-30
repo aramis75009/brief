@@ -113,6 +113,17 @@ describe("openTasksFor", () => {
     const ids = openTasksFor(objWeb, items).map((i) => i.id);
     expect(ids).toEqual(["a"]);
   });
+
+  it("inclut aussi les tâches ajoutées via dependsOn (tirées dans le graphe)", () => {
+    const items: Item[] = [
+      makeItem({ id: "a", objectiveId: "rejoindre-webacademie" }),
+      makeItem({ id: "linked-in-graph" }),
+      makeItem({ id: "linked-done", doneAt: "2026-08-29T18:00:00.000Z" }),
+    ];
+    const obj: Objective = { ...objWeb, dependsOn: ["linked-in-graph", "linked-done"] };
+    const ids = openTasksFor(obj, items, [obj]).map((i) => i.id).sort();
+    expect(ids).toEqual(["a", "linked-in-graph"]);
+  });
 });
 
 /* --- objectivesByProject -------------------------------------------------- */
