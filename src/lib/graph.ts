@@ -405,8 +405,9 @@ export function layoutGraph(
 
 /* --- Nœuds objectifs — un couloir à part, jamais sur les tâches ----------- */
 
-/** Gabarit d'un nœud objectif et espacement — distinct des nœuds tâches. */
-export const OBJ_METRICS = { W: 230, H: 58, GAP_X: 130, VGAP: 20 } as const;
+/** Gabarit d'un nœud objectif et espacement — plus grand que les tâches : un
+ * objectif est le but d'une chaîne, il doit se voir. */
+export const OBJ_METRICS = { W: 264, H: 96, GAP_X: 140, VGAP: 22 } as const;
 
 /**
  * Positionne chaque objectif ACTIF dans un couloir à droite de tous les nœuds

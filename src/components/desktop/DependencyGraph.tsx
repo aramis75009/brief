@@ -962,11 +962,12 @@ export function DependencyGraph({
                   {t.title}
                 </span>
 
-                <div className="flex items-center gap-2" style={{ marginTop: "auto" }}>
+                <div className="flex items-center gap-2 overflow-hidden" style={{ marginTop: "auto" }}>
                   {project && <span style={swatchStyle(skinFor(project), shapeFor(project))} />}
                   <span
-                    className="tnum whitespace-nowrap text-[11px] font-semibold"
-                    style={{ color: st === "blocked" ? C.danger : C.inkMuted }}
+                    title={whenLabel ?? undefined}
+                    className="tnum overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold"
+                    style={{ color: st === "blocked" ? C.danger : C.inkMuted, minWidth: 0 }}
                   >
                     {whenLabel}
                   </span>
@@ -1037,13 +1038,13 @@ export function DependencyGraph({
                 data-node-id={nodeId}
                 onMouseDown={(e) => onNodeDown(nodeId, e)}
                 onDoubleClick={() => onOpenObjectives?.()}
-                className="absolute left-0 top-0 flex select-none flex-col justify-center"
+                className="absolute left-0 top-0 flex select-none flex-col"
                 style={{
                   transform: `translate(${x}px,${y}px)`,
                   width: OBJ_W,
                   height: OBJ_H,
-                  padding: "8px 12px",
-                  gap: 4,
+                  padding: "10px 13px",
+                  gap: 5,
                   background: full ? "#FBEFC9" : "#FFF8E6",
                   border: `1.5px solid ${dropping || selectedId === nodeId ? C.ink : "#B98A17"}`,
                   borderRadius: 14,
@@ -1080,22 +1081,41 @@ export function DependencyGraph({
                     }}
                   />
                 )}
-                <div className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: full ? "#8a6a12" : "#B98A17", transform: "rotate(45deg)", flex: "none" }} />
-                  <span className="font-mono" style={{ fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8a6a12" }}>
+                <div className="flex items-center gap-1.5" style={{ height: 10 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 2, background: full ? "#8a6a12" : "#B98A17", transform: "rotate(45deg)", flex: "none" }} />
+                  <span className="font-mono" style={{ fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8a6a12" }}>
                     Objectif · {objective.horizon} terme{full ? " · atteint" : ""}
                   </span>
                 </div>
+
                 <span
-                  className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-bold tracking-[-0.01em]"
-                  style={{ lineHeight: 1.2, color: C.ink }}
+                  className="overflow-hidden font-extrabold tracking-[-0.01em]"
+                  style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    fontSize: 15,
+                    lineHeight: 1.2,
+                    color: C.ink,
+                    paddingRight: 10,
+                  }}
                 >
                   {objective.title}
                 </span>
-                <div className="flex items-center gap-2">
+
+                <div className="flex items-center gap-2 overflow-hidden" style={{ marginTop: "auto" }}>
                   {project && <span style={swatchStyle(skinFor(project), shapeFor(project))} />}
-                  <span className="tnum text-[11px] font-semibold" style={{ color: "#8a6a12" }}>
-                    {prog.done}/{prog.total} faites
+                  <span
+                    className="overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-bold"
+                    style={{ color: "#8a6a12", minWidth: 0 }}
+                  >
+                    {project?.name ?? "Sans projet"}
+                  </span>
+                  <span className="tnum flex-none text-[11px] font-semibold" style={{ color: "#8a6a12", opacity: 0.8, marginLeft: "auto" }}>
+                    {prog.done}/{prog.total}
+                  </span>
+                  <span className="flex-none" style={{ width: 34, height: 4, borderRadius: 99, background: "rgba(138,106,18,.18)", overflow: "hidden" }}>
+                    <span style={{ display: "block", height: "100%", width: `${prog.pct}%`, borderRadius: 99, background: "#8a6a12" }} />
                   </span>
                 </div>
               </div>
