@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/guard";
+import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { uniqueObjectiveId } from "@/lib/objectives";
 import { readObjectives, readProjects, writeObjectives } from "@/lib/store";
 import type { Objective, ObjectiveHorizon } from "@/lib/types";
@@ -8,20 +9,40 @@ import type { Objective, ObjectiveHorizon } from "@/lib/types";
  *
  * Un objectif n'est pas un item : il survit à ses tâches, les orchestre.
  * Règle absolue : toute route sous /api/ commence par requireSession().
+ *
+ * Toute mutation (et la lecture, en garde-fou) passe par
+ * `reconcileObjectivesInStore()` : un objectif dont toutes les dépendances sont
+ * faites s'atteint tout seul, et se rouvre si l'une redevient à faire.
  */
 
 const MAX_TITLE = 80;
+const MAX_DEPS = 40;
 const HORIZONS: ObjectiveHorizon[] = ["court", "moyen", "long"];
 
 function isHorizon(v: unknown): v is ObjectiveHorizon {
   return typeof v === "string" && HORIZONS.includes(v as ObjectiveHorizon);
 }
 
+/**
+ * Nettoie une liste de dépendances d'objectif : chaînes non vides, jamais
+ * l'auto-référence (`obj:<ownId>`), plafonnée à `MAX_DEPS`. Les ids d'items et
+ * les ids d'objectifs préfixés `obj:` cohabitent — la résolution (existe /
+ * n'existe pas) se fait à la lecture dans `effectiveDeps`, pas ici.
+ */
+export function cleanDeps(v: unknown, ownId: string): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v
+    .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+    .map((d) => d.trim())
+    .filter((d) => d !== `obj:${ownId}`)
+    .slice(0, MAX_DEPS);
+}
+
 export async function GET(_req: Request): Promise<Response> {
   const denied = await requireSession();
   if (denied) return denied;
 
-  return Response.json(await readObjectives());
+  return Response.json(await reconcileObjectivesInStore());
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -58,6 +79,7 @@ export async function POST(req: Request): Promise<Response> {
     createdAt: new Date().toISOString(),
     achievedAt: null,
     notes,
+    dependsOn: [],
   };
 
   try {
@@ -69,14 +91,23 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  return Response.json(created, { status: 201 });
+  const reconciled = await reconcileObjectivesInStore();
+  return Response.json(reconciled.find((o) => o.id === created.id) ?? created, { status: 201 });
 }
 
 export async function PATCH(req: Request): Promise<Response> {
   const denied = await requireSession();
   if (denied) return denied;
 
-  let body: { id?: unknown; title?: unknown; horizon?: unknown; achievedAt?: unknown; notes?: unknown };
+  let body: {
+    id?: unknown;
+    title?: unknown;
+    horizon?: unknown;
+    achievedAt?: unknown;
+    achievedManually?: unknown;
+    notes?: unknown;
+    dependsOn?: unknown;
+  };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -97,12 +128,24 @@ export async function PATCH(req: Request): Promise<Response> {
     patch.title = title;
   }
   if (body.horizon !== undefined && isHorizon(body.horizon)) patch.horizon = body.horizon;
-  if (body.achievedAt !== undefined) {
-    patch.achievedAt = typeof body.achievedAt === "string" ? body.achievedAt : null;
-  }
   if (body.notes !== undefined) {
     const n = String(body.notes ?? "").trim().slice(0, 500);
     patch.notes = n || undefined;
+  }
+  if (body.dependsOn !== undefined) {
+    const deps = cleanDeps(body.dependsOn, id);
+    if (deps) patch.dependsOn = deps;
+  }
+  if (body.achievedAt !== undefined) {
+    const achieved = typeof body.achievedAt === "string" ? body.achievedAt : null;
+    patch.achievedAt = achieved;
+    // Un `achievedAt` posé à la main est collant (jamais rouvert par la
+    // réconciliation) ; un `achievedAt: null` explicite rend l'objectif « auto »
+    // à nouveau. Le client peut forcer via `achievedManually`.
+    patch.achievedManually =
+      typeof body.achievedManually === "boolean" ? body.achievedManually : achieved !== null;
+  } else if (typeof body.achievedManually === "boolean") {
+    patch.achievedManually = body.achievedManually;
   }
 
   const next = [...existing];
@@ -117,7 +160,8 @@ export async function PATCH(req: Request): Promise<Response> {
     );
   }
 
-  return Response.json(next[index]);
+  const reconciled = await reconcileObjectivesInStore();
+  return Response.json(reconciled.find((o) => o.id === id) ?? next[index]);
 }
 
 export async function DELETE(req: Request): Promise<Response> {
@@ -139,8 +183,19 @@ export async function DELETE(req: Request): Promise<Response> {
     return Response.json({ error: "Objectif introuvable." }, { status: 404 });
   }
 
+  // Retire aussi les liens `obj:<id>` que d'autres objectifs pointaient vers
+  // celui-ci — sinon `effectiveDeps` traînerait une référence morte.
+  const tag = `obj:${id}`;
+  const pruned = existing
+    .filter((o) => o.id !== id)
+    .map((o) =>
+      (o.dependsOn ?? []).includes(tag)
+        ? { ...o, dependsOn: (o.dependsOn ?? []).filter((d) => d !== tag) }
+        : o,
+    );
+
   try {
-    await writeObjectives(existing.filter((o) => o.id !== id));
+    await writeObjectives(pruned);
   } catch (e) {
     return Response.json(
       { error: "Objectif non supprimé côté serveur.", detail: e instanceof Error ? e.message : String(e) },
@@ -148,5 +203,6 @@ export async function DELETE(req: Request): Promise<Response> {
     );
   }
 
+  await reconcileObjectivesInStore();
   return Response.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
 import { requireSession } from "@/lib/guard";
+import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { deleteItem, patchItem, readItems, readProjects } from "@/lib/store";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
@@ -182,6 +183,12 @@ export async function PATCH(
     const updated = await patchItem(id, patch);
     if (!updated) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
+    }
+    // Un lien vers un objectif (ou une dépendance) qui change peut clore ou
+    // rouvrir cet objectif. `sanitizePatch` ne pose jamais `doneAt` (la coche
+    // vit sur la route de collection) — la garde y est quand même, par sûreté.
+    if ("dependsOn" in patch || "objectiveId" in patch || "doneAt" in patch) {
+      await reconcileObjectivesInStore();
     }
     return Response.json({ item: updated });
   } catch (e) {
