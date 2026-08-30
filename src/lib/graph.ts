@@ -14,7 +14,8 @@
  * changera, et elle seule.
  */
 
-import type { Item } from "./types";
+import { effectiveDeps, objectiveNodeId } from "./objectives";
+import type { Item, Objective } from "./types";
 
 /** Statut d'une tâche dans le graphe, dérivé de `doneAt` et de ses prédécesseurs. */
 export type GraphStatus = "ready" | "blocked" | "done";
@@ -340,6 +341,99 @@ export function layoutGraph(
     if (pos.has(id)) pos.set(id, p);
   });
   return pos;
+}
+
+/* --- Nœuds objectifs — un couloir à part, jamais sur les tâches ----------- */
+
+/** Gabarit d'un nœud objectif et espacement — distinct des nœuds tâches. */
+export const OBJ_METRICS = { W: 230, H: 58, GAP_X: 130, VGAP: 20 } as const;
+
+/**
+ * Positionne chaque objectif ACTIF dans un couloir à droite de tous les nœuds
+ * tâches/events : un nœud objectif ne partage jamais l'espace d'une tâche
+ * (c'était le bug de superposition — l'ancien code posait l'objectif à
+ * `maxX + W + gap` des seules tâches liées, qui pouvaient être n'importe où).
+ *
+ * - `x` de la première colonne = (plus grand `x` de `nodePositions`) + W + GAP_X
+ * - un objectif qui dépend d'un autre objectif → colonne suivante à droite
+ *   (chaînes objectif → objectif)
+ * - ancre verticale = moyenne des `y` des dépendances déjà placées (tâches
+ *   depuis `nodePositions`, objectifs depuis les colonnes précédentes) ;
+ *   sans dépendance placée → empilé depuis le haut du couloir
+ * - dans une colonne : tri par ancre, empilage avec `VGAP` minimum → pas de
+ *   chevauchement entre objectifs non plus
+ *
+ * `pinned` (clés `obj:<id>`) écrase le calcul, comme pour `layoutGraph`.
+ */
+export function layoutObjectives(
+  objectives: Objective[],
+  items: Item[],
+  nodePositions: Map<string, Point>,
+  metrics: GraphMetrics,
+  pinned: Record<string, Point> = {},
+): Map<string, Point> {
+  const active = objectives.filter((o) => !o.achievedAt);
+  const out = new Map<string, Point>();
+  if (active.length === 0) return out;
+
+  const xs = [...nodePositions.values()].map((p) => p.x);
+  const baseX = (xs.length ? Math.max(...xs) : 0) + metrics.W + OBJ_METRICS.GAP_X;
+
+  // Colonne d'un objectif = plus longue chaîne d'objectifs-dépendances qui y mène.
+  const colOf = new Map<string, number>();
+  const column = (o: Objective, guard: Set<string>): number => {
+    const memo = colOf.get(o.id);
+    if (memo !== undefined) return memo;
+    if (guard.has(o.id)) return 0;
+    guard.add(o.id);
+    const { objectiveIds } = effectiveDeps(o, items, active);
+    let d = 0;
+    for (const upId of objectiveIds) {
+      const up = active.find((x) => x.id === upId);
+      if (up) d = Math.max(d, column(up, guard) + 1);
+    }
+    guard.delete(o.id);
+    colOf.set(o.id, d);
+    return d;
+  };
+  active.forEach((o) => column(o, new Set()));
+
+  const anchorY = (o: Objective): number => {
+    const { itemIds, objectiveIds } = effectiveDeps(o, items, active);
+    const ys: number[] = [];
+    for (const id of itemIds) {
+      const p = nodePositions.get(id);
+      if (p) ys.push(p.y);
+    }
+    for (const id of objectiveIds) {
+      const p = out.get(objectiveNodeId({ id } as Objective));
+      if (p) ys.push(p.y);
+    }
+    return ys.length ? ys.reduce((s, y) => s + y, 0) / ys.length : Number.POSITIVE_INFINITY;
+  };
+
+  const maxCol = Math.max(...colOf.values());
+  for (let col = 0; col <= maxCol; col++) {
+    const inCol = active
+      .filter((o) => colOf.get(o.id) === col)
+      .map((o) => ({ o, y: anchorY(o) }))
+      .sort((a, b) => a.y - b.y || a.o.id.localeCompare(b.o.id));
+
+    let cursorY = 0;
+    for (const { o, y } of inCol) {
+      const placedY = Math.max(Number.isFinite(y) ? y : cursorY, cursorY);
+      out.set(objectiveNodeId(o), {
+        x: baseX + col * (OBJ_METRICS.W + OBJ_METRICS.GAP_X),
+        y: placedY,
+      });
+      cursorY = placedY + OBJ_METRICS.H + OBJ_METRICS.VGAP;
+    }
+  }
+
+  for (const [id, p] of Object.entries(pinned)) {
+    if (out.has(id)) out.set(id, p);
+  }
+  return out;
 }
 
 /** Rectangle englobant tous les nœuds — sert à cadrer la vue (« Ajuster »). */
