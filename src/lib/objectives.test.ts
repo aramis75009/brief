@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   HORIZONS,
   HORIZON_LABEL,
+  effectiveDeps,
   objectiveEdges,
   objectiveNodeId,
   objectiveProgress,
+  objectiveSatisfied,
   objectivesByProject,
   openTasksFor,
+  reconcileObjectives,
   uniqueObjectiveId,
 } from "./objectives";
 import type { Item, Objective, Project } from "./types";
@@ -162,6 +165,113 @@ describe("graphe", () => {
     ];
     const edges = objectiveEdges([objWeb, objAchieved], items);
     expect(edges).toEqual([{ fromId: "a", toId: "obj:rejoindre-webacademie" }]);
+  });
+});
+
+/* --- effectiveDeps ------------------------------------------------------- */
+
+describe("effectiveDeps", () => {
+  it("réunit les tâches liées par objectiveId et les dependsOn explicites, dédupliqués", () => {
+    const items = [
+      makeItem({ id: "t1", objectiveId: "portfolio-pret" }),
+      makeItem({ id: "t2", objectiveId: "portfolio-pret" }),
+      makeItem({ id: "t3" }),
+    ];
+    const obj: Objective = { ...objCourt, dependsOn: ["t2", "t3", "obj:rejoindre-webacademie"] };
+    const deps = effectiveDeps(obj, items, [obj, objWeb]);
+    expect([...deps.itemIds].sort()).toEqual(["t1", "t2", "t3"]);
+    expect(deps.objectiveIds).toEqual(["rejoindre-webacademie"]);
+  });
+
+  it("ignore un dependsOn qui pointe vers un objectif inexistant", () => {
+    const obj: Objective = { ...objCourt, dependsOn: ["obj:fantome"] };
+    expect(effectiveDeps(obj, [], [obj]).objectiveIds).toEqual([]);
+  });
+
+  it("ignore un dependsOn item inexistant et l'auto-référence", () => {
+    const obj: Objective = { ...objCourt, dependsOn: ["ghost", "obj:portfolio-pret"] };
+    const deps = effectiveDeps(obj, [], [obj]);
+    expect(deps.itemIds).toEqual([]);
+    expect(deps.objectiveIds).toEqual([]);
+  });
+});
+
+/* --- objectiveSatisfied ------------------------------------------------- */
+
+describe("objectiveSatisfied", () => {
+  it("faux si aucune dépendance", () => {
+    expect(objectiveSatisfied({ ...objCourt, dependsOn: [] }, [], [objCourt])).toBe(false);
+  });
+
+  it("vrai quand toutes les tâches liées sont faites", () => {
+    const items = [
+      makeItem({ id: "t1", objectiveId: "portfolio-pret", doneAt: "2026-08-29T10:00:00.000Z" }),
+      makeItem({ id: "t2", objectiveId: "portfolio-pret", doneAt: "2026-08-29T11:00:00.000Z" }),
+    ];
+    expect(objectiveSatisfied(objCourt, items, [objCourt])).toBe(true);
+  });
+
+  it("faux si une tâche liée reste à faire", () => {
+    const items = [
+      makeItem({ id: "t1", objectiveId: "portfolio-pret", doneAt: "2026-08-29T10:00:00.000Z" }),
+      makeItem({ id: "t2", objectiveId: "portfolio-pret" }),
+    ];
+    expect(objectiveSatisfied(objCourt, items, [objCourt])).toBe(false);
+  });
+
+  it("faux si une tâche liée est récurrente, même « faite »", () => {
+    const items = [
+      makeItem({ id: "t1", objectiveId: "portfolio-pret", rrule: "FREQ=WEEKLY;BYDAY=MO", doneAt: "2026-08-29T10:00:00.000Z" }),
+    ];
+    expect(objectiveSatisfied(objCourt, items, [objCourt])).toBe(false);
+  });
+
+  it("suit les objectifs-dépendances", () => {
+    const upstream: Objective = { ...objCourt, id: "amont", achievedAt: null };
+    const downstream: Objective = { ...objWeb, dependsOn: ["obj:amont"] };
+    expect(objectiveSatisfied(downstream, [], [upstream, downstream])).toBe(false);
+    const upstreamDone: Objective = { ...upstream, achievedAt: "2026-08-30T00:00:00.000Z" };
+    expect(objectiveSatisfied(downstream, [], [upstreamDone, downstream])).toBe(true);
+  });
+});
+
+/* --- reconcileObjectives ---------------------------------------------- */
+
+describe("reconcileObjectives", () => {
+  const NOW = "2026-08-30T12:00:00.000Z";
+
+  it("auto-atteint un objectif dont toutes les tâches sont faites", () => {
+    const items = [makeItem({ id: "t1", objectiveId: "portfolio-pret", doneAt: NOW })];
+    const [out] = reconcileObjectives(items, [{ ...objCourt, achievedAt: null }], NOW);
+    expect(out.achievedAt).toBe(NOW);
+  });
+
+  it("rouvre un objectif auto-atteint quand une tâche redevient à faire", () => {
+    const items = [makeItem({ id: "t1", objectiveId: "portfolio-pret" })];
+    const prev: Objective = { ...objCourt, achievedAt: "2026-08-29T00:00:00.000Z", achievedManually: false };
+    const [out] = reconcileObjectives(items, [prev], NOW);
+    expect(out.achievedAt).toBeNull();
+  });
+
+  it("ne touche jamais un objectif atteint à la main", () => {
+    const prev: Objective = { ...objCourt, achievedAt: "2026-08-29T00:00:00.000Z", achievedManually: true };
+    const [out] = reconcileObjectives([], [prev], NOW);
+    expect(out.achievedAt).toBe("2026-08-29T00:00:00.000Z");
+  });
+
+  it("cascade : un objectif aval s'atteint quand son objectif amont vient de s'atteindre", () => {
+    const items = [makeItem({ id: "t1", objectiveId: "amont", doneAt: NOW })];
+    const amont: Objective = { ...objCourt, id: "amont", achievedAt: null };
+    const aval: Objective = { ...objWeb, id: "aval", dependsOn: ["obj:amont"], achievedAt: null };
+    const out = reconcileObjectives(items, [amont, aval], NOW);
+    expect(out.find((o) => o.id === "amont")!.achievedAt).toBe(NOW);
+    expect(out.find((o) => o.id === "aval")!.achievedAt).toBe(NOW);
+  });
+
+  it("préserve l'identité des objets non modifiés", () => {
+    const untouched: Objective = { ...objSport, achievedAt: null };
+    const [out] = reconcileObjectives([], [untouched], NOW);
+    expect(out).toBe(untouched);
   });
 });
 
