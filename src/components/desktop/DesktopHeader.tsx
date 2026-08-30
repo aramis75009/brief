@@ -21,6 +21,14 @@ const C = {
   task700: "var(--color-task-700)",
 } as const;
 
+/**
+ * Les onglets de la nav.
+ *
+ * « Réglages » n'y est plus (décision Aramis du 2026-08-30) : on y va par
+ * l'AVATAR, à droite du bandeau. La nav ne garde que les écrans de travail —
+ * huit onglets dont un « Réglages » qu'on ouvre trois fois par mois, c'est
+ * sept onglets qui rétrécissent pour rien.
+ */
 const NAV_ITEMS: { screen: DesktopScreen; label: string }[] = [
   { screen: "dashboard", label: "Dashboard" },
   { screen: "calendrier", label: "Calendrier" },
@@ -29,7 +37,6 @@ const NAV_ITEMS: { screen: DesktopScreen; label: string }[] = [
   { screen: "objectifs", label: "Objectifs" },
   { screen: "graphe", label: "Graphe" },
   { screen: "idées", label: "Idées" },
-  { screen: "réglages", label: "Réglages" },
 ];
 
 export function DesktopHeader({
@@ -154,11 +161,25 @@ export function DesktopHeader({
           />
         </button>
 
+        {/* L'avatar EST l'onglet Réglages depuis le 2026-08-30 : il en porte
+            donc l'état actif, comme n'importe quel onglet de la nav. Sans cet
+            anneau, on ouvre l'écran sans aucun repère de « où je suis ». */}
         <button
           aria-label="Compte et réglages"
+          aria-current={screen === "réglages" ? "page" : undefined}
           onClick={onOpenAccount}
           className="flex items-center justify-center"
-          style={{ width: 44, height: 44, borderRadius: 99, border: "none", background: "transparent", cursor: "pointer" }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 99,
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            padding: 0,
+            boxShadow: screen === "réglages" ? `0 0 0 2px ${C.ink}` : "none",
+            transition: "box-shadow .18s",
+          }}
         >
           <AccountAvatar initials="AM" size={44} bg={C.task100} color={C.task700} />
         </button>

@@ -14,6 +14,50 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-30 (nuit) · Les Réglages passent derrière l'avatar, et aucune bascule n'est plus décorative
+
+Trois défauts signalés par Aramis le 30/08, plus un trou que personne n'avait
+vu. Implémenté sur `feat/reglages-desktop-profil` — spec complète dans
+`docs/superpowers/specs/2026-08-30-reglages-desktop-profil-design.md`.
+
+**Décision 1 — l'avatar ouvre l'écran Réglages ; l'onglet quitte la nav.**
+Huit onglets dont un « Réglages » qu'on ouvre trois fois par mois, c'est sept
+onglets qui rétrécissent pour rien. L'écran reste **plein, en deux colonnes**
+et ne devient pas un sheet : Destinations et Étiquettes sont de vraies
+interfaces de gestion, une colonne étroite les casserait. L'avatar porte
+l'anneau d'état actif — il EST un onglet, désormais.
+
+**Décision 2 — plus aucune bascule décorative. Un `settings.json` existe.**
+« Calendrier Apple » et « Digest Telegram » écrivent dans `settings.json`
+(`PATCH /api/settings`) et coupent réellement le service : la synchro CalDAV
+sort **avant tout appel réseau**, le digest rend `enabled: false`.
+*Pourquoi.* Règle d'Aramis : « bouton mort → câbler une vraie feature, jamais
+supprimer ». Une bascule qui ne fait rien est pire qu'absente — elle fait
+croire que la synchro est coupée alors qu'elle tourne.
+*Limite assumée.* C'est n8n qui ENVOIE le récap : Brief peut dire
+« désactivé », il ne peut pas retenir l'automate. Sans un nœud IF sur
+`enabled` côté n8n, le récap part quand même, vide.
+
+**Décision 3 — les défauts des réglages sont ON, définitivement.**
+Un `settings.json` absent (volume neuf, restauration partielle, `BRIEF_DATA_DIR`
+mal pointé) rend `{ caldavSync: true, digest: true }`. *Pourquoi.* Si l'absence
+valait OFF, un déploiement banal couperait la synchro calendrier et le récap
+**sans un seul message d'erreur**. Même raison pour la tolérance aux types :
+`Boolean("false")` vaut `true` en JavaScript, croire une chaîne allumerait un
+réglage qu'on venait d'éteindre.
+
+**Décision 4 — « Verrou PIN » devient un bloc « Compte ».**
+Adresse du compte, « Changer le mot de passe » (route existante), et surtout
+**« Se déconnecter »** : jusqu'ici le desktop n'avait **aucun** moyen de
+terminer sa session, seul le sheet mobile en avait un. La ligne morte devient
+la sortie qui manquait.
+
+**Hors périmètre, assumé** : `AccountSheet` (mobile) garde ses trois bascules
+décoratives. Aramis : « le mobile est en stand-by, on s'occupe du desktop ».
+Inscrit dans `TODOS.md`.
+
+---
+
 ## 2026-08-30 (nuit) · Les agents lisent l'agenda avec le jeton machine — garde MIXTE, pas un remplacement
 
 Depuis la suppression du PIN (26/08), `scripts/brief-agents.sh agenda` était

@@ -2,6 +2,7 @@ import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { SEED_PROJECTS } from "./projects";
+import { normalizeSettings, type Settings } from "./settings";
 import type { Item, KanbanBoard, Objective, Project, Tag } from "./types";
 
 /**
@@ -99,6 +100,37 @@ export async function readBoard(): Promise<KanbanBoard> {
 
 export async function writeBoard(board: KanbanBoard): Promise<void> {
   return serialize(() => writeJson("boards.json", board));
+}
+
+/* --- Réglages ------------------------------------------------------------ */
+
+/**
+ * Les réglages stockés, ramenés à une forme utilisable.
+ *
+ * ⚠️ Le défaut n'est PAS un objet vide : c'est `DEFAULT_SETTINGS`, tout à ON.
+ * Un `settings.json` absent est un état normal (premier démarrage, volume neuf,
+ * restauration partielle) — le lire comme « tout éteint » couperait la synchro
+ * calendrier et le récap du matin sans un seul message d'erreur. Voir l'en-tête
+ * de `settings.ts`.
+ */
+export async function readSettings(): Promise<Settings> {
+  return normalizeSettings(await readJson<unknown>("settings.json", null));
+}
+
+/**
+ * Lecture-modification-écriture ATOMIQUE des réglages, même patron que
+ * `updateObjectivesAtomically` : `fn` reçoit les réglages normalisés et rend
+ * les nouveaux — ou la même référence pour ne rien écrire.
+ */
+export async function updateSettingsAtomically(
+  fn: (settings: Settings) => Settings,
+): Promise<Settings> {
+  return serialize(async () => {
+    const settings = normalizeSettings(await readJson<unknown>("settings.json", null));
+    const next = fn(settings);
+    if (next !== settings) await writeJson("settings.json", next);
+    return next;
+  });
 }
 
 /* --- Tags ---------------------------------------------------------------- */

@@ -15,14 +15,25 @@ import { getSupabaseServerClient } from "./supabase/server";
  *   const denied = await requireSession();
  *   if (denied) return denied;
  */
-export async function requireSession(): Promise<Response | null> {
+/**
+ * Les claims du JWT de la session, ou `null` s'il n'y en a pas de valide.
+ *
+ * Sert quand la route a besoin de SAVOIR QUI est connecté et pas seulement
+ * QUE quelqu'un l'est — l'écran Réglages affiche l'adresse du compte, et
+ * « Changer le mot de passe » l'envoie à Supabase. Aucun appel réseau : le JWT
+ * est vérifié localement (clé publique ES256), comme pour `requireSession`.
+ */
+export async function readSessionClaims(): Promise<Record<string, unknown> | null> {
   const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims) return null;
+  return data.claims as unknown as Record<string, unknown>;
+}
 
-  if (error || !data?.claims) {
+export async function requireSession(): Promise<Response | null> {
+  if (!(await readSessionClaims())) {
     return Response.json({ error: "Session invalide ou expirée." }, { status: 401 });
   }
-
   return null;
 }
 

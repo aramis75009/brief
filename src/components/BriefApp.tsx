@@ -561,6 +561,21 @@ export function BriefApp() {
   const onOpenIdeas = useCallback(() => setScreen("ideas"), []);
   const openChat = useCallback(() => setChatOpen(true), []);
 
+  /**
+   * Termine la session. Partagé par le sheet mobile et l'écran Réglages
+   * desktop — jusqu'au 2026-08-30 cette logique ne vivait que dans le sheet,
+   * et le desktop n'avait aucun moyen de se déconnecter.
+   *
+   * Le cookie de session est httpOnly : seul le serveur peut l'effacer. On
+   * n'attend pas sa réponse pour rendre l'écran de connexion — la garde de
+   * session refusera de toute façon toute requête suivante.
+   */
+  const logout = useCallback(() => {
+    void fetch("/api/auth/logout", { method: "POST" });
+    setAccountOpen(false);
+    setUnlocked(false);
+  }, []);
+
   /** Envoie l'historique à l'assistant Brief et renvoie la réponse du modèle. */
   const handleChatSend = useCallback(
     async (messages: { role: string; content: string }[]): Promise<string> => {
@@ -650,7 +665,7 @@ export function BriefApp() {
           }}
           onOpenCapture={openCapture}
           onOpenChat={openChat}
-          onOpenAccount={openAccount}
+          onLogout={logout}
           onOpenNotifications={() => setNotificationsOpen(true)}
         />
         {renderSharedSheets()}
@@ -798,15 +813,7 @@ export function BriefApp() {
               onOpenVoice={() => { setAccountOpen(false); setVoiceSettingsOpen(true); }}
               onOpenPrivacy={() => { setAccountOpen(false); setPrivacyOpen(true); }}
               onOpenSubscription={() => { setAccountOpen(false); setSubscriptionOpen(true); }}
-              onLogout={() => {
-                // Le cookie de session est httpOnly : seul le serveur peut
-                // l'effacer. On n'attend pas sa réponse pour rendre l'écran de
-                // connexion — la garde de session refusera de toute façon toute
-                // requête suivante.
-                void fetch("/api/auth/logout", { method: "POST" });
-                setAccountOpen(false);
-                setUnlocked(false);
-              }}
+              onLogout={logout}
             />
           </div>
         )}
