@@ -146,17 +146,56 @@ export function DesktopShell({
     } catch { /* silencieux */ }
   }, [onSaveItem]);
 
+  /** Recharge les objectifs — l'auto-complétion (`reconcileObjectives`, côté
+   * serveur) peut avoir clos ou rouvert un objectif après une mutation d'item. */
+  const refreshObjectives = useCallback(async () => {
+    try {
+      setObjectives(await fetchObjectives());
+    } catch { /* silencieux — l'état courant reste affiché */ }
+  }, []);
+
   /**
    * Un seul chemin d'écriture pour « A dépend de B », partagé par la fiche
    * tâche et par le tirage de lien de la vue Graphe. Deux copies du même
    * `dependsOn` finiraient par diverger sur un détail (doublon, garde-fou).
+   *
+   * `targetId` préfixé `obj:` → c'est la dépendance d'un OBJECTIF ; sinon
+   * celle d'un item.
    */
-  const handleAddDependency = useCallback(async (itemId: string, depId: string) => {
-    const it = items.find((i) => i.id === itemId);
+  const handleAddDependency = useCallback(async (targetId: string, depId: string) => {
+    if (targetId.startsWith("obj:")) {
+      const objId = targetId.slice(4);
+      const obj = objectives.find((o) => o.id === objId);
+      if (!obj || (obj.dependsOn ?? []).includes(depId)) return;
+      const updated = await updateObjective(objId, { dependsOn: [...(obj.dependsOn ?? []), depId] });
+      setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
+      void refreshObjectives();
+      return;
+    }
+    const it = items.find((i) => i.id === targetId);
     if (!it) return;
     if ((it.dependsOn ?? []).includes(depId)) return;
-    await onSaveItem(itemId, { dependsOn: [...(it.dependsOn ?? []), depId] });
-  }, [items, onSaveItem]);
+    await onSaveItem(targetId, { dependsOn: [...(it.dependsOn ?? []), depId] });
+    void refreshObjectives();
+  }, [items, objectives, onSaveItem, refreshObjectives]);
+
+  const handleRemoveDependency = useCallback(async (targetId: string, depId: string) => {
+    if (targetId.startsWith("obj:")) {
+      const objId = targetId.slice(4);
+      const obj = objectives.find((o) => o.id === objId);
+      if (!obj) return;
+      const updated = await updateObjective(objId, {
+        dependsOn: (obj.dependsOn ?? []).filter((d) => d !== depId),
+      });
+      setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
+      void refreshObjectives();
+      return;
+    }
+    const it = items.find((i) => i.id === targetId);
+    if (!it) return;
+    await onSaveItem(targetId, { dependsOn: (it.dependsOn ?? []).filter((d) => d !== depId) });
+    void refreshObjectives();
+  }, [items, objectives, onSaveItem, refreshObjectives]);
 
   const handleToggleSub = useCallback(async (itemId: string, subId: string) => {
     const item = items.find((it) => it.id === itemId);
@@ -180,7 +219,11 @@ export function DesktopShell({
   }, []);
 
   const handleAchieveObjective = useCallback(async (id: string) => {
-    const updated = await updateObjective(id, { achievedAt: new Date().toISOString() });
+    // Geste explicite → collant : `reconcileObjectives` ne le rouvrira pas.
+    const updated = await updateObjective(id, {
+      achievedAt: new Date().toISOString(),
+      achievedManually: true,
+    });
     setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
   }, []);
 
@@ -188,6 +231,35 @@ export function DesktopShell({
     await deleteObjective(id);
     setObjectives((prev) => prev.filter((o) => o.id !== id));
   }, []);
+
+  const handleEditObjective = useCallback(
+    async (id: string, patch: { title?: string; horizon?: ObjectiveHorizon; notes?: string }) => {
+      const updated = await updateObjective(id, patch);
+      setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    },
+    [],
+  );
+
+  const handleReopenObjective = useCallback(async (id: string) => {
+    const updated = await updateObjective(id, { achievedAt: null, achievedManually: false });
+    setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
+  }, []);
+
+  /* Auto-complétion : cocher une tâche, la (dé)lier à un objectif ou changer
+     ses dépendances peut clore ou rouvrir un objectif côté serveur
+     (`reconcileObjectives`). On recharge les objectifs quand une de ces
+     signatures bouge — jamais sur un simple re-render. */
+  const itemsObjectiveSig = useMemo(
+    () =>
+      items
+        .map((it) => `${it.id}:${it.doneAt ? 1 : 0}:${it.objectiveId ?? ""}:${(it.dependsOn ?? []).join(",")}`)
+        .join("|"),
+    [items],
+  );
+  useEffect(() => {
+    const id = setTimeout(() => void refreshObjectives(), 250);
+    return () => clearTimeout(id);
+  }, [itemsObjectiveSig, refreshObjectives]);
 
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -297,6 +369,7 @@ export function DesktopShell({
               objectives={objectives}
               onOpenTask={openTask}
               onAddDependency={handleAddDependency}
+              onRemoveDependency={handleRemoveDependency}
             />
           )}
 
@@ -310,6 +383,8 @@ export function DesktopShell({
               onCreateObjective={handleCreateObjective}
               onAchieveObjective={handleAchieveObjective}
               onDeleteObjective={handleDeleteObjective}
+              onEditObjective={handleEditObjective}
+              onReopenObjective={handleReopenObjective}
             />
           )}
 
