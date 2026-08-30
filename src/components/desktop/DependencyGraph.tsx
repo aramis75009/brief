@@ -161,12 +161,7 @@ export function DependencyGraph({
   const [pan, setPan] = useState<Point>({ x: 40, y: 30 });
   const [zoom, setZoom] = useState(0.92);
   // Disposition manuelle, restaurée depuis localStorage au montage (par appareil).
-  const [pinned, setPinned] = useState<Record<string, Point>>(() => {
-    const known = new Set<string>();
-    for (const it of items) if (it.kind === "task") known.add(it.id);
-    for (const o of objectives) known.add(objectiveNodeId(o));
-    return loadGraphLayout(known);
-  });
+  const [pinned, setPinned] = useState<Record<string, Point>>(() => loadGraphLayout());
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [blockedOnly, setBlockedOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);

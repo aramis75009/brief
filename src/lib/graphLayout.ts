@@ -8,6 +8,14 @@ import type { Point } from "./graph";
  * est desktop-only, et « Ajuster » sait toujours recalculer une disposition
  * propre. Toute lecture/écriture est défensive (SSR, quota, mode privé, JSON
  * corrompu) : un échec de persistance ne doit jamais casser la vue.
+ *
+ * ⚠️ **Pas d'élagage des ids inconnus au chargement.** On ne connaît pas
+ * l'ensemble complet des nœuds au montage — les objectifs arrivent d'un fetch
+ * asynchrone, les tâches faites sont hors de `activeItems`. Élaguer contre un
+ * ensemble incomplet, puis réécrire, effacerait silencieusement des positions
+ * valides. `layoutGraph` / `layoutObjectives` ignorent déjà les ids qu'ils ne
+ * connaissent pas ; quelques clés mortes dans localStorage sont sans
+ * conséquence. « Réinitialiser la disposition » vide tout.
  */
 
 const KEY = "brief:graph-layout";
@@ -21,11 +29,7 @@ function isPoint(v: unknown): v is Point {
   );
 }
 
-/**
- * Positions mémorisées, élaguées aux `knownIds` — un nœud supprimé depuis la
- * dernière session ne doit pas laisser de position fantôme.
- */
-export function loadGraphLayout(knownIds: Set<string>): Record<string, Point> {
+export function loadGraphLayout(): Record<string, Point> {
   if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(KEY);
@@ -33,7 +37,7 @@ export function loadGraphLayout(knownIds: Set<string>): Record<string, Point> {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const out: Record<string, Point> = {};
     for (const [id, p] of Object.entries(parsed)) {
-      if (knownIds.has(id) && isPoint(p)) out[id] = { x: p.x, y: p.y };
+      if (isPoint(p)) out[id] = { x: p.x, y: p.y };
     }
     return out;
   } catch {

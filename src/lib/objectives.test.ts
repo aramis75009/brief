@@ -194,6 +194,16 @@ describe("effectiveDeps", () => {
     expect(deps.itemIds).toEqual([]);
     expect(deps.objectiveIds).toEqual([]);
   });
+
+  it("ne compte pas une tâche archivée / repassée en idée, ni un event, liés par objectiveId", () => {
+    const items = [
+      makeItem({ id: "t1", objectiveId: "portfolio-pret" }),
+      makeItem({ id: "t2", objectiveId: "portfolio-pret", status: "archived" }),
+      makeItem({ id: "t3", objectiveId: "portfolio-pret", status: "idea" }),
+      makeItem({ id: "t4", objectiveId: "portfolio-pret", kind: "event" }),
+    ];
+    expect(effectiveDeps(objCourt, items, [objCourt]).itemIds).toEqual(["t1"]);
+  });
 });
 
 /* --- objectiveSatisfied ------------------------------------------------- */

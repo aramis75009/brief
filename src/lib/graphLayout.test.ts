@@ -16,42 +16,36 @@ function fakeStorage(): Storage {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("graphLayout", () => {
-  it("save puis load rend les positions connues", () => {
+  it("save puis load rend toutes les positions", () => {
     vi.stubGlobal("window", { localStorage: fakeStorage() });
     saveGraphLayout({ a: { x: 1, y: 2 }, b: { x: 3, y: 4 } });
-    expect(loadGraphLayout(new Set(["a", "b"]))).toEqual({ a: { x: 1, y: 2 }, b: { x: 3, y: 4 } });
-  });
-
-  it("load élague les ids inconnus", () => {
-    vi.stubGlobal("window", { localStorage: fakeStorage() });
-    saveGraphLayout({ a: { x: 1, y: 2 }, gone: { x: 9, y: 9 } });
-    expect(loadGraphLayout(new Set(["a"]))).toEqual({ a: { x: 1, y: 2 } });
+    expect(loadGraphLayout()).toEqual({ a: { x: 1, y: 2 }, b: { x: 3, y: 4 } });
   });
 
   it("load renvoie {} sans window (SSR)", () => {
     vi.stubGlobal("window", undefined);
-    expect(loadGraphLayout(new Set(["a"]))).toEqual({});
+    expect(loadGraphLayout()).toEqual({});
   });
 
   it("load renvoie {} sur JSON corrompu", () => {
     const s = fakeStorage();
     s.setItem("brief:graph-layout", "{not json");
     vi.stubGlobal("window", { localStorage: s });
-    expect(loadGraphLayout(new Set(["a"]))).toEqual({});
+    expect(loadGraphLayout()).toEqual({});
   });
 
   it("load ignore une entrée qui n'est pas un point", () => {
     const s = fakeStorage();
     s.setItem("brief:graph-layout", JSON.stringify({ a: { x: 1 }, b: "nope", c: { x: 2, y: 3 } }));
     vi.stubGlobal("window", { localStorage: s });
-    expect(loadGraphLayout(new Set(["a", "b", "c"]))).toEqual({ c: { x: 2, y: 3 } });
+    expect(loadGraphLayout()).toEqual({ c: { x: 2, y: 3 } });
   });
 
   it("clear vide la clé", () => {
     vi.stubGlobal("window", { localStorage: fakeStorage() });
     saveGraphLayout({ a: { x: 1, y: 2 } });
     clearGraphLayout();
-    expect(loadGraphLayout(new Set(["a"]))).toEqual({});
+    expect(loadGraphLayout()).toEqual({});
   });
 
   it("save n'explose pas si localStorage jette (quota)", () => {

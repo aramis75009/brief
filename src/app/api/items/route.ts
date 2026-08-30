@@ -188,7 +188,9 @@ export async function PATCH(req: Request): Promise<Response> {
     const updated = await patchItem(id, patch);
     if (!updated) return Response.json({ error: "Item introuvable." }, { status: 404 });
     // Cocher/décocher une tâche peut clore (ou rouvrir) l'objectif qu'elle sert.
-    await reconcileObjectivesInStore();
+    // Une récurrence qui ne fait qu'AVANCER (`patch` sans `doneAt`) ne change
+    // rien pour un objectif — une récurrente ne le satisfait jamais.
+    if ("doneAt" in patch) await reconcileObjectivesInStore();
     // `kind` permet au client de dire « repoussé à mardi » plutôt que « fait »
     // sur une récurrence — sans ça, cocher paraîtrait ne rien faire.
     return Response.json({ item: updated, outcome: kind });

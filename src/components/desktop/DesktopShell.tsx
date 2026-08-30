@@ -167,17 +167,17 @@ export function DesktopShell({
       const objId = targetId.slice(4);
       const obj = objectives.find((o) => o.id === objId);
       if (!obj || (obj.dependsOn ?? []).includes(depId)) return;
+      // Le serveur réconcilie ; l'objectif peut revenir atteint/rouvert.
       const updated = await updateObjective(objId, { dependsOn: [...(obj.dependsOn ?? []), depId] });
       setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
-      void refreshObjectives();
       return;
     }
     const it = items.find((i) => i.id === targetId);
-    if (!it) return;
-    if ((it.dependsOn ?? []).includes(depId)) return;
+    if (!it || (it.dependsOn ?? []).includes(depId)) return;
+    // La réconciliation des objectifs est déclenchée par l'effet `itemsObjectiveSig`
+    // quand `items` reflète le nouveau `dependsOn`.
     await onSaveItem(targetId, { dependsOn: [...(it.dependsOn ?? []), depId] });
-    void refreshObjectives();
-  }, [items, objectives, onSaveItem, refreshObjectives]);
+  }, [items, objectives, onSaveItem]);
 
   const handleRemoveDependency = useCallback(async (targetId: string, depId: string) => {
     if (targetId.startsWith("obj:")) {
@@ -188,14 +188,12 @@ export function DesktopShell({
         dependsOn: (obj.dependsOn ?? []).filter((d) => d !== depId),
       });
       setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
-      void refreshObjectives();
       return;
     }
     const it = items.find((i) => i.id === targetId);
     if (!it) return;
     await onSaveItem(targetId, { dependsOn: (it.dependsOn ?? []).filter((d) => d !== depId) });
-    void refreshObjectives();
-  }, [items, objectives, onSaveItem, refreshObjectives]);
+  }, [items, objectives, onSaveItem]);
 
   const handleToggleSub = useCallback(async (itemId: string, subId: string) => {
     const item = items.find((it) => it.id === itemId);

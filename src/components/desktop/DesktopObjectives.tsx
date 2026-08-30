@@ -16,6 +16,7 @@ import { skinFor, shapeFor } from "@/lib/projects";
 import {
   HORIZONS,
   HORIZON_LABEL,
+  objectiveSatisfied,
   objectivesByProject,
   openTasksFor,
 } from "@/lib/objectives";
@@ -484,19 +485,29 @@ export function DesktopObjectives({
             <div className="flex flex-col gap-2" style={{ marginTop: 12 }}>
               {achieved.map((o) => {
                 const p = projects.find((pr) => pr.id === o.projectId);
+                // Un objectif encore « satisfait » (toutes ses tâches faites) se
+                // referme aussitôt si on le rouvre — le bouton paraîtrait mort.
+                // On propose alors « décoche une tâche » plutôt qu'un no-op.
+                const stillSatisfied = objectiveSatisfied(o, items, objectives);
                 return (
                   <div key={o.id} className="flex items-center gap-3" style={{ padding: 12, background: C.bg, borderRadius: 14 }}>
                     {p && <ProjectSwatch project={p} size={10} />}
                     <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: C.inkMuted, textDecoration: "line-through" }}>
                       {o.title}
                     </span>
-                    <button
-                      onClick={() => onReopenObjective(o.id)}
-                      className="text-[11px] font-bold"
-                      style={{ padding: "6px 12px", borderRadius: 99, border: "1px solid rgba(16,16,16,.12)", background: C.surface, color: C.ink, cursor: "pointer", fontFamily: "inherit", flex: "none" }}
-                    >
-                      Rouvrir
-                    </button>
+                    {stillSatisfied ? (
+                      <span className="text-[11px] font-semibold" style={{ color: C.inkFaint, flex: "none" }}>
+                        toutes les tâches sont faites
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onReopenObjective(o.id)}
+                        className="text-[11px] font-bold"
+                        style={{ padding: "6px 12px", borderRadius: 99, border: "1px solid rgba(16,16,16,.12)", background: C.surface, color: C.ink, cursor: "pointer", fontFamily: "inherit", flex: "none" }}
+                      >
+                        Rouvrir
+                      </button>
+                    )}
                   </div>
                 );
               })}

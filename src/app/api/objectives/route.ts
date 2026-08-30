@@ -1,7 +1,6 @@
 import { requireSession } from "@/lib/guard";
-import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
-import { uniqueObjectiveId } from "@/lib/objectives";
-import { readObjectives, readProjects, writeObjectives } from "@/lib/store";
+import { reconcileObjectives, uniqueObjectiveId } from "@/lib/objectives";
+import { readObjectives, readProjects, updateObjectivesAtomically } from "@/lib/store";
 import type { Objective, ObjectiveHorizon } from "@/lib/types";
 
 /**
@@ -10,9 +9,12 @@ import type { Objective, ObjectiveHorizon } from "@/lib/types";
  * Un objectif n'est pas un item : il survit à ses tâches, les orchestre.
  * Règle absolue : toute route sous /api/ commence par requireSession().
  *
- * Toute mutation (et la lecture, en garde-fou) passe par
- * `reconcileObjectivesInStore()` : un objectif dont toutes les dépendances sont
- * faites s'atteint tout seul, et se rouvre si l'une redevient à faire.
+ * Toute mutation passe par `updateObjectivesAtomically` (lecture-modification-
+ * écriture sérialisée) et applique `reconcileObjectives` dans la même passe :
+ * un objectif dont toutes les dépendances sont faites s'atteint tout seul, et
+ * se rouvre si l'une redevient à faire (sauf s'il a été marqué à la main).
+ * GET reste une pure lecture — la réconciliation vit au moment des mutations,
+ * jamais dans une requête de lecture.
  */
 
 const MAX_TITLE = 80;
@@ -42,7 +44,7 @@ export async function GET(_req: Request): Promise<Response> {
   const denied = await requireSession();
   if (denied) return denied;
 
-  return Response.json(await reconcileObjectivesInStore());
+  return Response.json(await readObjectives());
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -70,29 +72,31 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Projet introuvable." }, { status: 404 });
   }
 
-  const existing = await readObjectives();
-  const created: Objective = {
-    id: uniqueObjectiveId(title, new Set(existing.map((o) => o.id))),
-    projectId,
-    title,
-    horizon,
-    createdAt: new Date().toISOString(),
-    achievedAt: null,
-    notes,
-    dependsOn: [],
-  };
-
+  let createdId = "";
   try {
-    await writeObjectives([...existing, created]);
+    const reconciled = await updateObjectivesAtomically((objectives, items) => {
+      const created: Objective = {
+        id: uniqueObjectiveId(title, new Set(objectives.map((o) => o.id))),
+        projectId,
+        title,
+        horizon,
+        createdAt: new Date().toISOString(),
+        achievedAt: null,
+        achievedManually: false,
+        notes,
+        dependsOn: [],
+      };
+      createdId = created.id;
+      return reconcileObjectives(items, [...objectives, created], new Date().toISOString());
+    });
+    const created = reconciled.find((o) => o.id === createdId);
+    return Response.json(created, { status: 201 });
   } catch (e) {
     return Response.json(
       { error: "Objectif non enregistré côté serveur.", detail: e instanceof Error ? e.message : String(e) },
       { status: 503 },
     );
   }
-
-  const reconciled = await reconcileObjectivesInStore();
-  return Response.json(reconciled.find((o) => o.id === created.id) ?? created, { status: 201 });
 }
 
 export async function PATCH(req: Request): Promise<Response> {
@@ -116,10 +120,6 @@ export async function PATCH(req: Request): Promise<Response> {
 
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
-
-  const existing = await readObjectives();
-  const index = existing.findIndex((o) => o.id === id);
-  if (index === -1) return Response.json({ error: "Objectif introuvable." }, { status: 404 });
 
   const patch: Partial<Objective> = {};
   if (body.title !== undefined) {
@@ -148,20 +148,24 @@ export async function PATCH(req: Request): Promise<Response> {
     patch.achievedManually = body.achievedManually;
   }
 
-  const next = [...existing];
-  next[index] = { ...next[index], ...patch };
-
+  let found = false;
   try {
-    await writeObjectives(next);
+    const reconciled = await updateObjectivesAtomically((objectives, items) => {
+      const index = objectives.findIndex((o) => o.id === id);
+      if (index === -1) return null;
+      found = true;
+      const next = [...objectives];
+      next[index] = { ...next[index], ...patch };
+      return reconcileObjectives(items, next, new Date().toISOString());
+    });
+    if (!found) return Response.json({ error: "Objectif introuvable." }, { status: 404 });
+    return Response.json(reconciled.find((o) => o.id === id));
   } catch (e) {
     return Response.json(
       { error: "Objectif non mis à jour côté serveur.", detail: e instanceof Error ? e.message : String(e) },
       { status: 503 },
     );
   }
-
-  const reconciled = await reconcileObjectivesInStore();
-  return Response.json(reconciled.find((o) => o.id === id) ?? next[index]);
 }
 
 export async function DELETE(req: Request): Promise<Response> {
@@ -178,31 +182,29 @@ export async function DELETE(req: Request): Promise<Response> {
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
 
-  const existing = await readObjectives();
-  if (!existing.some((o) => o.id === id)) {
-    return Response.json({ error: "Objectif introuvable." }, { status: 404 });
-  }
-
-  // Retire aussi les liens `obj:<id>` que d'autres objectifs pointaient vers
-  // celui-ci — sinon `effectiveDeps` traînerait une référence morte.
   const tag = `obj:${id}`;
-  const pruned = existing
-    .filter((o) => o.id !== id)
-    .map((o) =>
-      (o.dependsOn ?? []).includes(tag)
-        ? { ...o, dependsOn: (o.dependsOn ?? []).filter((d) => d !== tag) }
-        : o,
-    );
-
+  let found = false;
   try {
-    await writeObjectives(pruned);
+    await updateObjectivesAtomically((objectives, items) => {
+      if (!objectives.some((o) => o.id === id)) return null;
+      found = true;
+      // Retire aussi les liens `obj:<id>` que d'autres objectifs pointaient
+      // vers celui-ci — sinon `effectiveDeps` traînerait une référence morte.
+      const pruned = objectives
+        .filter((o) => o.id !== id)
+        .map((o) =>
+          (o.dependsOn ?? []).includes(tag)
+            ? { ...o, dependsOn: (o.dependsOn ?? []).filter((d) => d !== tag) }
+            : o,
+        );
+      return reconcileObjectives(items, pruned, new Date().toISOString());
+    });
+    if (!found) return Response.json({ error: "Objectif introuvable." }, { status: 404 });
+    return Response.json({ ok: true });
   } catch (e) {
     return Response.json(
       { error: "Objectif non supprimé côté serveur.", detail: e instanceof Error ? e.message : String(e) },
       { status: 503 },
     );
   }
-
-  await reconcileObjectivesInStore();
-  return Response.json({ ok: true });
 }

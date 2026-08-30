@@ -144,7 +144,11 @@ export function effectiveDeps(
   items: Item[],
   objectives: Objective[],
 ): { itemIds: string[]; objectiveIds: string[] } {
-  const itemById = new Map(items.map((it) => [it.id, it]));
+  // Une tâche archivée ou repassée en idée ne fait plus partie du plan de
+  // travail : même filtre que `objectiveProgress` / `openTasksFor`, sinon la
+  // barre affiche 3/3 pendant que l'objectif ne se clôt jamais.
+  const counts = (it: Item) => it.status !== "idea" && it.status !== "archived";
+  const itemById = new Map(items.filter(counts).map((it) => [it.id, it]));
   const objById = new Map(objectives.map((o) => [o.id, o]));
 
   const itemIds: string[] = [];
@@ -153,7 +157,7 @@ export function effectiveDeps(
   const seenObjs = new Set<string>();
 
   for (const it of items) {
-    if (it.objectiveId === objective.id && !seenItems.has(it.id)) {
+    if (it.objectiveId === objective.id && it.kind === "task" && counts(it) && !seenItems.has(it.id)) {
       seenItems.add(it.id);
       itemIds.push(it.id);
     }
@@ -236,8 +240,10 @@ export function reconcileObjectives(
       }
       return o;
     });
-    current = next;
+    // Rien n'a bougé cette passe : on rend la référence d'origine intacte
+    // (permet à l'appelant de sauter l'écriture disque).
     if (!changed) break;
+    current = next;
   }
   return current;
 }
