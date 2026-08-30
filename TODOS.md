@@ -142,31 +142,32 @@ sujet proche) :
 
 ### Notes de session — 30/08 (Aramis, « idée floue à retravailler ensemble »)
 
-> Dictée de fin de session par Aramis. Rien n'est tranché — à rediscuter
-> avant d'implémenter. « Bara » = travail (slang d'Aramis).
+> Dictée de fin de session par Aramis. « Bara » = travail (slang d'Aramis).
+> Les points 1, 2, 4 sont livrés sur `feat/graphe-objectifs-moteur`
+> (**PR #3, en recette** — voir `docs/handoffs/` et `DECISIONS.md` 30/08 soir).
 
-1. **Objectifs = moteur du graphe.** Aujourd'hui les objectifs sont à part
-   (pas d'échéance, pas de lien fort). Dans le graphe ils pourraient être le
-   **nœud final d'une chaîne de tâches dépendantes** : quand toutes les
-   tâches liées sont réalisées → l'objectif se termine (auto-complétion).
-2. **Les RDV doivent entrer dans le graphe.** Actuellement `graphTasks()`
-   exclut les `event` — or pour le Sport, ce ne sont QUE des RDV. Il faut
-   les ajouter (au moins en option/filtre).
+1. ~~**Objectifs = moteur du graphe** / auto-complétion~~ — **livré (PR #3)**.
+2. ~~**Les RDV dans le graphe**~~ — **livré (PR #3)** : toggle « RDV », un nœud
+   par série.
 3. **Kanban = copie Trello** (voir P1 — bug drag & drop). Objectif assumé :
-   la copie la plus proche de Trello possible.
-4. **Objectifs personnalisables après création** : changer l'horizon
-   (court/moyen/long), ajouter une description, voir les tâches dépendantes,
-   etc. (aujourd'hui : création seule, pas d'édition).
+   la copie la plus proche de Trello possible. **Non commencé.**
+4. ~~**Objectifs personnalisables après création** (horizon, description)~~ —
+   **livré (PR #3)** : édition inline titre / horizon / notes, bouton rouvrir.
+   *Reste* : liste des dépendances **dans l'éditeur d'objectif** (le retrait
+   ne se fait que par le « × » du graphe pour l'instant).
 5. **Raccourcis de navigation** dans l'app : naviguer entre les onglets
-   avec les flèches (← →).
+   avec les flèches (← →). **Non commencé.**
 6. **Revoir le calendrier** — peut-être ne pas vouloir copier le calendrier
-   Apple (ça fait doublon) mais une autre interface.
+   Apple (ça fait doublon) mais une autre interface. **Non commencé** —
+   chantier de conception (brainstorming + livrable Claude Design).
 7. **Réglages** : PIN fantôme à retirer + déplacer les réglages sur le
-   profil (voir P1).
-8. **Vrais messages de modification** adaptés au design.md : quand on
-   reporte une tâche, déplace une carte, enfin toute action → un retour
-   visuel/toast conforme au design system.
-9. **Hover sur les endroits clés** : dashboard, kanban, etc.
+   profil (voir P1). **Non commencé.**
+8. **Vrais messages de modification** adaptés au design system : quand on
+   reporte une tâche, déplace une carte, toute action → un toast conforme.
+   **Non commencé** (aucun système de toast au design v1).
+9. **Hover sur les endroits clés** : dashboard, kanban, etc. Le graphe a
+   gagné du hover (× de retrait sur les arêtes, PR #3) ; le reste
+   (dashboard, kanban, listes) reste à faire.
 
 ### Roadmap « Asana personnalisé » (vision Brief)
 

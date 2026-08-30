@@ -14,7 +14,8 @@
  * changera, et elle seule.
  */
 
-import type { Item } from "./types";
+import { effectiveDeps, objectiveNodeId } from "./objectives";
+import type { Item, Objective } from "./types";
 
 /** Statut d'une tâche dans le graphe, dérivé de `doneAt` et de ses prédécesseurs. */
 export type GraphStatus = "ready" | "blocked" | "done";
@@ -76,6 +77,61 @@ export function graphTasks(items: Item[]): Item[] {
   return items.filter((it) => it.kind === "task" && !it.doneAt);
 }
 
+/** Options d'inclusion de la vue Graphe (toggles de la barre de filtres). */
+export type GraphNodeOpts = { showDone?: boolean; showEvents?: boolean };
+
+/**
+ * Tâches faites qui appartiennent à une chaîne encore active — jamais une
+ * tâche faite isolée. On part des nœuds déjà affichés et on marche les arêtes
+ * `dependsOn` dans les DEUX sens à travers toutes les tâches : une tâche faite
+ * n'est gardée que si un chemin la relie à du travail encore en cours.
+ */
+function doneTasksInActiveChains(items: Item[], shownIds: Set<string>): Item[] {
+  const byId = indexById(items);
+  const adj = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => {
+    (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b);
+  };
+  for (const t of items) {
+    for (const dep of t.dependsOn ?? []) {
+      if (!byId.has(dep)) continue;
+      link(t.id, dep);
+      link(dep, t.id);
+    }
+  }
+  const keep = new Set(shownIds);
+  const stack = [...shownIds];
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const n of adj.get(id) ?? []) {
+      if (!keep.has(n)) {
+        keep.add(n);
+        stack.push(n);
+      }
+    }
+  }
+  return items.filter((t) => t.kind === "task" && !!t.doneAt && keep.has(t.id));
+}
+
+/**
+ * Les nœuds de la vue Graphe :
+ *   - tâches actives (toujours)
+ *   - + rendez-vous actifs si `showEvents` (défaut ON — le Sport n'est QUE des
+ *     RDV) : un nœud par série, pas par occurrence
+ *   - + tâches faites si `showDone` (défaut OFF) : uniquement celles reliées à
+ *     une chaîne encore active
+ *
+ * `graphTasks` reste pour le badge « bloquées » (il ne parle que de tâches).
+ */
+export function graphNodes(items: Item[], opts: GraphNodeOpts = {}): Item[] {
+  const { showDone = false, showEvents = true } = opts;
+  const tasks = items.filter((it) => it.kind === "task" && !it.doneAt);
+  const events = showEvents ? items.filter((it) => it.kind === "event") : [];
+  const base = [...tasks, ...events];
+  if (!showDone) return base;
+  return [...base, ...doneTasksInActiveChains(items, new Set(base.map((n) => n.id)))];
+}
+
 /**
  * Ce que la vue affiche, une fois les filtres appliqués.
  *
@@ -87,9 +143,14 @@ export function graphTasks(items: Item[]): Item[] {
  */
 export function visibleTasks(
   all: Item[],
-  { projectFilter, blockedOnly }: { projectFilter: string[]; blockedOnly: boolean },
+  {
+    projectFilter,
+    blockedOnly,
+    showDone = false,
+    showEvents = true,
+  }: { projectFilter: string[]; blockedOnly: boolean } & GraphNodeOpts,
 ): Item[] {
-  const tasks = graphTasks(all);
+  const tasks = graphNodes(all, { showDone, showEvents });
   const byId = indexById(tasks);
   const byProject = projectFilter.length === 0
     ? tasks
@@ -340,6 +401,99 @@ export function layoutGraph(
     if (pos.has(id)) pos.set(id, p);
   });
   return pos;
+}
+
+/* --- Nœuds objectifs — un couloir à part, jamais sur les tâches ----------- */
+
+/** Gabarit d'un nœud objectif et espacement — distinct des nœuds tâches. */
+export const OBJ_METRICS = { W: 230, H: 58, GAP_X: 130, VGAP: 20 } as const;
+
+/**
+ * Positionne chaque objectif ACTIF dans un couloir à droite de tous les nœuds
+ * tâches/events : un nœud objectif ne partage jamais l'espace d'une tâche
+ * (c'était le bug de superposition — l'ancien code posait l'objectif à
+ * `maxX + W + gap` des seules tâches liées, qui pouvaient être n'importe où).
+ *
+ * - `x` de la première colonne = (plus grand `x` de `nodePositions`) + W + GAP_X
+ * - un objectif qui dépend d'un autre objectif → colonne suivante à droite
+ *   (chaînes objectif → objectif)
+ * - ancre verticale = moyenne des `y` des dépendances déjà placées (tâches
+ *   depuis `nodePositions`, objectifs depuis les colonnes précédentes) ;
+ *   sans dépendance placée → empilé depuis le haut du couloir
+ * - dans une colonne : tri par ancre, empilage avec `VGAP` minimum → pas de
+ *   chevauchement entre objectifs non plus
+ *
+ * `pinned` (clés `obj:<id>`) écrase le calcul, comme pour `layoutGraph`.
+ */
+export function layoutObjectives(
+  objectives: Objective[],
+  items: Item[],
+  nodePositions: Map<string, Point>,
+  metrics: GraphMetrics,
+  pinned: Record<string, Point> = {},
+): Map<string, Point> {
+  const active = objectives.filter((o) => !o.achievedAt);
+  const out = new Map<string, Point>();
+  if (active.length === 0) return out;
+
+  const xs = [...nodePositions.values()].map((p) => p.x);
+  const baseX = (xs.length ? Math.max(...xs) : 0) + metrics.W + OBJ_METRICS.GAP_X;
+
+  // Colonne d'un objectif = plus longue chaîne d'objectifs-dépendances qui y mène.
+  const colOf = new Map<string, number>();
+  const column = (o: Objective, guard: Set<string>): number => {
+    const memo = colOf.get(o.id);
+    if (memo !== undefined) return memo;
+    if (guard.has(o.id)) return 0;
+    guard.add(o.id);
+    const { objectiveIds } = effectiveDeps(o, items, active);
+    let d = 0;
+    for (const upId of objectiveIds) {
+      const up = active.find((x) => x.id === upId);
+      if (up) d = Math.max(d, column(up, guard) + 1);
+    }
+    guard.delete(o.id);
+    colOf.set(o.id, d);
+    return d;
+  };
+  active.forEach((o) => column(o, new Set()));
+
+  const anchorY = (o: Objective): number => {
+    const { itemIds, objectiveIds } = effectiveDeps(o, items, active);
+    const ys: number[] = [];
+    for (const id of itemIds) {
+      const p = nodePositions.get(id);
+      if (p) ys.push(p.y);
+    }
+    for (const id of objectiveIds) {
+      const p = out.get(objectiveNodeId({ id } as Objective));
+      if (p) ys.push(p.y);
+    }
+    return ys.length ? ys.reduce((s, y) => s + y, 0) / ys.length : Number.POSITIVE_INFINITY;
+  };
+
+  const maxCol = Math.max(...colOf.values());
+  for (let col = 0; col <= maxCol; col++) {
+    const inCol = active
+      .filter((o) => colOf.get(o.id) === col)
+      .map((o) => ({ o, y: anchorY(o) }))
+      .sort((a, b) => a.y - b.y || a.o.id.localeCompare(b.o.id));
+
+    let cursorY = 0;
+    for (const { o, y } of inCol) {
+      const placedY = Math.max(Number.isFinite(y) ? y : cursorY, cursorY);
+      out.set(objectiveNodeId(o), {
+        x: baseX + col * (OBJ_METRICS.W + OBJ_METRICS.GAP_X),
+        y: placedY,
+      });
+      cursorY = placedY + OBJ_METRICS.H + OBJ_METRICS.VGAP;
+    }
+  }
+
+  for (const [id, p] of Object.entries(pinned)) {
+    if (out.has(id)) out.set(id, p);
+  }
+  return out;
 }
 
 /** Rectangle englobant tous les nœuds — sert à cadrer la vue (« Ajuster »). */

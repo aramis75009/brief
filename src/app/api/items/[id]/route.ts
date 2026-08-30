@@ -1,6 +1,7 @@
 import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
 import { requireSession } from "@/lib/guard";
+import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { deleteItem, patchItem, readItems, readProjects } from "@/lib/store";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
@@ -183,6 +184,11 @@ export async function PATCH(
     if (!updated) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
     }
+    // Réconciliation inconditionnelle : `dependsOn`, `objectiveId`, `doneAt`
+    // ET `status` (archivé/idée = hors plan de travail depuis `effectiveDeps`)
+    // peuvent tous clore ou rouvrir un objectif. `reconcileObjectives` ne
+    // réécrit rien si rien n'a bougé — pas de liste blanche de champs à tenir.
+    await reconcileObjectivesInStore();
     return Response.json({ item: updated });
   } catch (e) {
     return Response.json(
@@ -239,6 +245,9 @@ export async function DELETE(
     if (!deleted) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
     }
+    // Supprimer une tâche liée à un objectif retire une dépendance : l'objectif
+    // peut désormais être satisfait (ou n'avoir plus aucune dépendance).
+    await reconcileObjectivesInStore();
     return Response.json({ ok: true, id });
   } catch (e) {
     return Response.json(

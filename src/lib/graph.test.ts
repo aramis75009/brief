@@ -1,19 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPACT,
+  OBJ_METRICS,
   boundingBox,
   connectedComponents,
   depths,
   wouldCreateCycle,
   graphEdges,
+  graphNodes,
   graphStatus,
   graphTasks,
   indexById,
   layoutGraph,
+  layoutObjectives,
   unlocks,
   visibleTasks,
 } from "./graph";
-import type { Item } from "./types";
+import type { Item, Objective } from "./types";
 
 function item(over: Partial<Item> = {}): Item {
   return {
@@ -92,6 +95,33 @@ describe("graphTasks — le graphe ne parle que de tâches actives", () => {
       item({ id: "b", doneAt: "2026-08-23T10:00:00+02:00" }),
     ];
     expect(graphTasks(list).map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+describe("graphNodes — tâches, RDV, tâches faites selon les toggles", () => {
+  it("par défaut : tâches actives + RDV, pas les faites", () => {
+    const list = [
+      item({ id: "a" }),
+      item({ id: "e", kind: "event" }),
+      item({ id: "d", doneAt: "2026-08-23T10:00:00+02:00" }),
+    ];
+    expect(graphNodes(list).map((n) => n.id).sort()).toEqual(["a", "e"]);
+  });
+
+  it("showEvents:false retire les RDV", () => {
+    const list = [item({ id: "a" }), item({ id: "e", kind: "event" })];
+    expect(graphNodes(list, { showEvents: false }).map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("showDone garde une tâche faite reliée à une chaîne active, pas une isolée", () => {
+    const list = [
+      item({ id: "act" }),
+      item({ id: "doneLinked", doneAt: "2026-08-20T10:00:00+02:00" }),
+      item({ id: "act2", dependsOn: ["doneLinked"] }),
+      item({ id: "doneAlone", doneAt: "2026-08-20T10:00:00+02:00" }),
+    ];
+    const ids = graphNodes(list, { showDone: true }).map((n) => n.id).sort();
+    expect(ids).toEqual(["act", "act2", "doneLinked"]);
   });
 });
 
@@ -379,5 +409,54 @@ describe("unlocks", () => {
 
   it("rend une liste vide quand rien n'attend", () => {
     expect(unlocks(CHAIN[2], CHAIN)).toEqual([]);
+  });
+});
+
+describe("layoutObjectives", () => {
+  const M = COMPACT;
+  const objCourt: Objective = {
+    id: "oc", projectId: "p", title: "Court", horizon: "court",
+    createdAt: "2026-08-01T00:00:00.000Z", achievedAt: null,
+  };
+  const objLong: Objective = {
+    id: "ol", projectId: "p", title: "Long", horizon: "long",
+    createdAt: "2026-08-01T00:00:00.000Z", achievedAt: null, dependsOn: ["obj:oc"],
+  };
+
+  it("place l'objectif dans un couloir à droite de tous les nœuds tâches", () => {
+    const nodes = new Map([["t1", { x: 0, y: 0 }], ["t2", { x: 500, y: 200 }]]);
+    const items = [item({ id: "t1", objectiveId: "oc" })];
+    const pos = layoutObjectives([objCourt], items, nodes, M);
+    expect(pos.get("obj:oc")!.x).toBe(500 + M.W + OBJ_METRICS.GAP_X);
+  });
+
+  it("un objectif qui dépend d'un objectif va une colonne plus à droite", () => {
+    const nodes = new Map([["t1", { x: 0, y: 0 }]]);
+    const items = [item({ id: "t1", objectiveId: "oc" })];
+    const pos = layoutObjectives([objCourt, objLong], items, nodes, M);
+    expect(pos.get("obj:ol")!.x).toBeGreaterThan(pos.get("obj:oc")!.x);
+  });
+
+  it("deux objectifs ancrés au même y ne se superposent pas", () => {
+    const nodes = new Map([["t1", { x: 0, y: 100 }], ["t2", { x: 0, y: 100 }]]);
+    const objD: Objective = { ...objCourt, id: "od" };
+    const items = [item({ id: "t1", objectiveId: "oc" }), item({ id: "t2", objectiveId: "od" })];
+    const pos = layoutObjectives([objCourt, objD], items, nodes, M);
+    expect(Math.abs(pos.get("obj:oc")!.y - pos.get("obj:od")!.y)).toBeGreaterThanOrEqual(OBJ_METRICS.H);
+  });
+
+  it("un objectif épinglé garde sa position", () => {
+    const pos = layoutObjectives([objCourt], [], new Map(), M, { "obj:oc": { x: 42, y: 99 } });
+    expect(pos.get("obj:oc")).toEqual({ x: 42, y: 99 });
+  });
+
+  it("un objectif atteint n'est pas placé", () => {
+    const pos = layoutObjectives([{ ...objCourt, achievedAt: "2026-08-29T00:00:00.000Z" }], [], new Map(), M);
+    expect(pos.size).toBe(0);
+  });
+
+  it("objectif sans dépendance placée : empilé depuis le haut du couloir", () => {
+    const pos = layoutObjectives([objCourt], [], new Map(), M);
+    expect(pos.get("obj:oc")).toBeDefined();
   });
 });

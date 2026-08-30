@@ -140,6 +140,25 @@ pour l'un, révoquer n'éteint pas les autres. Voir `src/lib/cron-auth.ts`.
 - **C'est le serveur qui possède l'horloge.** iOS ne donne aucune API de
   notification programmée à une PWA — ni Notification Triggers, ni Background
   Sync, ni Periodic Background Sync, ni Background Fetch.
+- **Un objectif se COMPLÈTE tout seul, il ne BLOQUE rien** (décision
+  2026-08-30 soir, `DECISIONS.md`). `reconcileObjectives` (`src/lib/objectives.ts`)
+  pose `achievedAt` quand **toutes** les dépendances effectives d'un objectif
+  sont faites — implicites (`Item.objectiveId`) + explicites
+  (`Objective.dependsOn`, ids de tâches et d'objectifs préfixés `obj:`). Une
+  tâche récurrente ne satisfait jamais un objectif. Un objectif marqué atteint
+  **à la main** (`achievedManually`) n'est jamais rouvert automatiquement.
+  `graphStatus` d'une tâche ne regarde toujours QUE `dependsOn` entre items —
+  jamais l'objectif.
+- **La réconciliation des objectifs tourne après TOUTE écriture d'item**
+  (`/api/items` POST/PATCH, `/api/items/[id]` PATCH/DELETE), sans liste blanche
+  de champs — via `reconcileObjectivesInStore` en RMW sérialisée
+  (`store.updateObjectivesAtomically`). `reconcileObjectives` rend la même
+  référence quand rien ne change, donc l'écriture disque est sautée. Le cron
+  des rappels écrit par `patchItems` directement et n'est **pas** concerné.
+- **`readObjectives` rétro-remplit `achievedManually = achievedAt != null`**
+  en mémoire. Sans ça, tout objectif atteint avant le 2026-08-30 (le seul
+  moyen était le bouton « Atteint », donc manuel) serait rouvert en masse au
+  premier GET.
 
 ### Interface — mobile et desktop
 
@@ -156,6 +175,18 @@ pour l'un, révoquer n'éteint pas les autres. Voir `src/lib/cron-auth.ts`.
   TaskDetail, Dashboard, Ideas, Tasks, Settings, Command palette, Dependency
   graph) ne s'affichent qu'en vue desktop ; les composants mobiles restent
   inchangés.
+- **Le graphe (`DependencyGraph.tsx`, desktop) montre tâches + RDV + objectifs.**
+  Toggles « RDV » (ON par défaut — un nœud par série) et « Faites » (OFF — que
+  les tâches faites reliées à une chaîne active). Les objectifs sont des nœuds
+  dorés interactifs : déplaçables, cible/source de tirage de lien
+  (`Objective.dependsOn`), double-clic → écran Objectifs. La logique pure vit
+  dans `src/lib/graph.ts` (`graphNodes`, `layoutObjectives`) et
+  `src/lib/objectives.ts` (`objectiveGraphEdges`, `objectiveEffectiveProgress`),
+  testée sans DOM.
+- **La disposition manuelle du graphe est dans localStorage**
+  (`brief:graph-layout`, `src/lib/graphLayout.ts`), par appareil — même patron
+  que `src/lib/queue.ts`. Jamais côté serveur. Pas d'élagage des ids inconnus
+  au chargement (l'ensemble des nœuds est incomplet au montage).
 - Le design system Claude Design v1 est la source de vérité visuelle : les
   tokens viennent de `docs/design-system-ref.dc.html` (iOS) et les recettes
   du desktop (Kanban, calendar lanes, fiche) sont dans `DESIGN.md`.

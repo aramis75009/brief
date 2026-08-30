@@ -380,7 +380,14 @@ export async function createObjective(
 
 export async function updateObjective(
   id: string,
-  patch: { title?: string; horizon?: ObjectiveHorizon; achievedAt?: string | null; notes?: string },
+  patch: {
+    title?: string;
+    horizon?: ObjectiveHorizon;
+    achievedAt?: string | null;
+    achievedManually?: boolean;
+    notes?: string;
+    dependsOn?: string[];
+  },
 ): Promise<Objective> {
   return jsonFetch<Objective>(
     "/api/objectives",

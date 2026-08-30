@@ -1,6 +1,7 @@
 import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
 import { requireSession } from "@/lib/guard";
+import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import { patchItem, readItems, readProjects, saveItems } from "@/lib/store";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
@@ -125,6 +126,9 @@ export async function POST(req: Request): Promise<Response> {
   if (toSave.length) {
     try {
       await saveItems(toSave);
+      // Un item créé (ou ré-enregistré) peut déjà porter un `objectiveId` :
+      // un objectif auto-atteint doit alors se rouvrir.
+      await reconcileObjectivesInStore();
     } catch (e) {
       // Le disque peut être en lecture seule (Vercel). On le dit plutôt que de
       // laisser croire que les items sont enregistrés.
@@ -186,6 +190,8 @@ export async function PATCH(req: Request): Promise<Response> {
   try {
     const updated = await patchItem(id, patch);
     if (!updated) return Response.json({ error: "Item introuvable." }, { status: 404 });
+    // Cocher/décocher une tâche peut clore (ou rouvrir) l'objectif qu'elle sert.
+    await reconcileObjectivesInStore();
     // `kind` permet au client de dire « repoussé à mardi » plutôt que « fait »
     // sur une récurrence — sans ça, cocher paraîtrait ne rien faire.
     return Response.json({ item: updated, outcome: kind });

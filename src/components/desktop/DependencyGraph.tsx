@@ -24,12 +24,14 @@ import { CloseIcon } from "../icons";
 import {
   COMPACT,
   CONFORTABLE,
+  OBJ_METRICS,
   boundingBox,
   graphEdges,
+  graphNodes,
   graphStatus,
-  graphTasks,
   indexById,
   layoutGraph,
+  layoutObjectives,
   unlocks,
   visibleTasks,
   wouldCreateCycle,
@@ -38,7 +40,9 @@ import {
   type Point,
 } from "@/lib/graph";
 import { formatDue } from "@/lib/due";
-import { objectiveEdges, objectiveNodeId, objectiveProgress } from "@/lib/objectives";
+import { describeRrule } from "@/lib/rrule";
+import { clearGraphLayout, loadGraphLayout, saveGraphLayout } from "@/lib/graphLayout";
+import { objectiveEffectiveProgress, objectiveGraphEdges, objectiveNodeId } from "@/lib/objectives";
 import { shapeFor, skinFor } from "@/lib/projects";
 import type { Item, Objective, Project, Shape, Tag } from "@/lib/types";
 
@@ -126,7 +130,9 @@ export function DependencyGraph({
   tags,
   objectives = [],
   onOpenTask,
+  onOpenObjectives,
   onAddDependency,
+  onRemoveDependency,
   density = "compact",
   showGrid = true,
   curve = 0.5,
@@ -138,11 +144,19 @@ export function DependencyGraph({
   objectives?: Objective[];
   /** Ouvre la vraie fiche tâche (double-clic sur un nœud, ou « Ouvrir la fiche »). */
   onOpenTask: (id: string) => void;
+  /** Va à l'écran Objectifs (double-clic sur un nœud objectif). */
+  onOpenObjectives?: () => void;
   /**
    * Crée « `itemId` dépend de `depId` ». Absent, les ancres de tirage ne
    * s'affichent pas : pas de poignée qui ne mène à rien.
    */
   onAddDependency?: (itemId: string, depId: string) => void;
+  /**
+   * Retire « `targetId` dépend de `depId` ». `targetId` peut être un id d'item
+   * ou un nœud objectif (`obj:<id>`). Absent, ni le « × » au survol d'une arête
+   * ni le bouton du panneau ne s'affichent.
+   */
+  onRemoveDependency?: (targetId: string, depId: string) => void;
   density?: "compact" | "confortable";
   showGrid?: boolean;
   /** Cambrure des arêtes, 0.2 (raide) → 0.9 (ample). */
@@ -150,9 +164,12 @@ export function DependencyGraph({
 }) {
   const [pan, setPan] = useState<Point>({ x: 40, y: 30 });
   const [zoom, setZoom] = useState(0.92);
-  const [pinned, setPinned] = useState<Record<string, Point>>({});
+  // Disposition manuelle, restaurée depuis localStorage au montage (par appareil).
+  const [pinned, setPinned] = useState<Record<string, Point>>(() => loadGraphLayout());
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [blockedOnly, setBlockedOnly] = useState(false);
+  const [showEvents, setShowEvents] = useState(true);
+  const [showDone, setShowDone] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [grabbing, setGrabbing] = useState(false);
   /** Incrémenté pour demander un recadrage — un booléen ne redéclencherait pas deux fois. */
@@ -161,59 +178,56 @@ export function DependencyGraph({
   const [link, setLink] = useState<LinkDrag | null>(null);
   /** Motif d'un refus de lien, affiché puis effacé — jamais un échec muet. */
   const [linkRefusal, setLinkRefusal] = useState<string | null>(null);
+  /** Arête survolée (clé `from->to`) — porte le « × » de suppression. */
+  const [hoverEdge, setHoverEdge] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<Drag | null>(null);
 
   const metrics: GraphMetrics = density === "confortable" ? CONFORTABLE : COMPACT;
 
-  const allTasks = useMemo(() => graphTasks(items), [items]);
+  // Tout ce qui PEUT être un nœud (tâches + RDV + faites) — sert à résoudre une
+  // sélection, un voisinage, un statut. La vue rendue, elle, suit les toggles.
+  const allTasks = useMemo(() => graphNodes(items, { showDone: true, showEvents: true }), [items]);
   const allById = useMemo(() => indexById(allTasks), [allTasks]);
   const list = useMemo(
-    () => visibleTasks(items, { projectFilter, blockedOnly }),
-    [items, projectFilter, blockedOnly],
+    () => visibleTasks(items, { projectFilter, blockedOnly, showDone, showEvents }),
+    [items, projectFilter, blockedOnly, showDone, showEvents],
   );
   const pos = useMemo(() => layoutGraph(list, metrics, pinned), [list, metrics, pinned]);
   const edges = useMemo(() => graphEdges(list), [list]);
   const byId = useMemo(() => indexById(list), [list]);
 
-  /* --- Nœuds objectifs (spec 29/08) — colonne à droite des tâches liées ---
+  /* --- Nœuds objectifs — un couloir dédié à droite de tous les nœuds ---
    *
-   * Un objectif n'est pas un Item : il n'a ni `dependsOn`, ni `doneAt`. Sa
-   * place se déduit des tâches qui y pointent (`objectiveId`) : à droite du
-   * nœud le plus profond de son groupe, centrée verticalement sur elles.
-   * Un objectif sans tâche liée n'apparaît pas — un nœud orphelin dans le
-   * vide apprendrait moins que l'écran Objectifs.
+   * TOUS les objectifs actifs apparaissent (plus la condition « ≥1 tâche liée
+   * visible »). `layoutObjectives` (testé dans `@/lib/graph`) les place dans un
+   * couloir à part : un nœud objectif ne chevauche jamais un nœud tâche, et un
+   * objectif qui dépend d'un autre va une colonne plus à droite.
    */
-  const OBJ_W = 230;
-  const OBJ_H = 58;
-  const OBJ_GAP_X = 130;
+  const OBJ_W = OBJ_METRICS.W;
+  const OBJ_H = OBJ_METRICS.H;
 
-  const objectiveNodes = useMemo(() => {
-    const active = objectives.filter((o) => !o.achievedAt);
-    const byObjective = new Map<string, Item[]>();
-    for (const t of list) {
-      if (!t.objectiveId) continue;
-      const l = byObjective.get(t.objectiveId) ?? [];
-      l.push(t);
-      byObjective.set(t.objectiveId, l);
-    }
-    const nodes: { objective: Objective; x: number; y: number; tasks: Item[] }[] = [];
-    for (const o of active) {
-      const linked = byObjective.get(o.id) ?? [];
-      if (linked.length === 0) continue;
-      const ps = linked.map((t) => pos.get(t.id)).filter((p): p is Point => !!p);
-      if (ps.length === 0) continue;
-      const maxX = Math.max(...ps.map((p) => p.x));
-      const midY = (Math.min(...ps.map((p) => p.y)) + Math.max(...ps.map((p) => p.y))) / 2;
-      nodes.push({ objective: o, x: maxX + metrics.W + OBJ_GAP_X, y: midY - (OBJ_H - metrics.H) / 2, tasks: linked });
-    }
-    return nodes;
-  }, [objectives, list, pos, metrics]);
+  const objectivePos = useMemo(
+    () => layoutObjectives(objectives, items, pos, metrics, pinned),
+    [objectives, items, pos, metrics, pinned],
+  );
+
+  const objectiveNodes = useMemo(
+    () =>
+      objectives
+        .filter((o) => !o.achievedAt)
+        .map((objective) => {
+          const p = objectivePos.get(objectiveNodeId(objective));
+          return p ? { objective, x: p.x, y: p.y } : null;
+        })
+        .filter((n): n is { objective: Objective; x: number; y: number } => !!n),
+    [objectives, objectivePos],
+  );
 
   const objectiveLinks = useMemo(
-    () => objectiveEdges(objectives, list),
-    [objectives, list],
+    () => objectiveGraphEdges(objectives, items, new Set(list.map((t) => t.id))),
+    [objectives, items, list],
   );
 
   /* Les gestionnaires posés une seule fois (molette, glisser) et `fit` lisent
@@ -369,17 +383,30 @@ export function DependencyGraph({
       const l = linkRef.current;
       setLink(null);
       if (!l || !l.overId || !onAddDependency) return;
-      const dependentId = l.overId;
-      const dependencyId = l.fromId;
-      const all = allTasksRef.current;
-      const dependent = all.find((t) => t.id === dependentId);
-      if ((dependent?.dependsOn ?? []).includes(dependencyId)) {
-        setLinkRefusal("Ce lien existe déjà.");
+      const fromObj = l.fromId.startsWith("obj:");
+      const overObj = l.overId.startsWith("obj:");
+      // Depuis un objectif : l'objectif dépend de la cible. Depuis une tâche :
+      // la cible (tâche OU objectif) dépend de la tâche — « d'abord ceci, ensuite cela ».
+      const dependentId = fromObj ? l.fromId : l.overId;
+      const dependencyId = fromObj ? l.overId : l.fromId;
+      if (dependentId === dependencyId) {
+        setLinkRefusal("Un lien d'une chose vers elle-même n'a pas de sens.");
         return;
       }
-      if (wouldCreateCycle(dependentId, dependencyId, all)) {
-        setLinkRefusal("Refusé : les deux tâches s'attendraient l'une l'autre, et aucune ne serait jamais prête.");
-        return;
+      const all = allTasksRef.current;
+      // Garde-fous seulement entre tâches — les chaînes d'objectifs ne bloquent
+      // rien (une boucle d'objectifs ne fait que ne jamais se satisfaire), et
+      // les doublons sont écartés côté `handleAddDependency`.
+      if (!fromObj && !overObj) {
+        const dependent = all.find((t) => t.id === dependentId);
+        if ((dependent?.dependsOn ?? []).includes(dependencyId)) {
+          setLinkRefusal("Ce lien existe déjà.");
+          return;
+        }
+        if (wouldCreateCycle(dependentId, dependencyId, all)) {
+          setLinkRefusal("Refusé : les deux tâches s'attendraient l'une l'autre, et aucune ne serait jamais prête.");
+          return;
+        }
       }
       onAddDependency(dependentId, dependencyId);
     };
@@ -397,6 +424,13 @@ export function DependencyGraph({
     const id = setTimeout(() => setLinkRefusal(null), 5000);
     return () => clearTimeout(id);
   }, [linkRefusal]);
+
+  /* Persiste la disposition manuelle, débouncée — un glisser pousse `pinned` à
+     ~60 Hz, on n'écrit dans localStorage qu'une fois le geste retombé. */
+  useEffect(() => {
+    const id = setTimeout(() => saveGraphLayout(pinned), 400);
+    return () => clearTimeout(id);
+  }, [pinned]);
 
   /* La molette doit pouvoir annuler le défilement de la page : `passive: false`
      est impossible à obtenir via onWheel de React, d'où l'écoute manuelle. */
@@ -428,7 +462,7 @@ export function DependencyGraph({
 
   const onNodeDown = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const p = pos.get(id) ?? { x: 0, y: 0 };
+    const p = (id.startsWith("obj:") ? objectivePos.get(id) : pos.get(id)) ?? { x: 0, y: 0 };
     dragRef.current = { type: "node", id, sx: e.clientX, sy: e.clientY, nx: p.x, ny: p.y, moved: false };
   };
 
@@ -442,9 +476,15 @@ export function DependencyGraph({
       if (from.id === selectedId) set.add(to.id);
       if (to.id === selectedId) set.add(from.id);
     });
+    objectiveLinks.forEach(({ fromId, toId }) => {
+      if (fromId === selectedId) set.add(toId);
+      if (toId === selectedId) set.add(fromId);
+    });
     return set;
-  }, [selectedId, edges]);
+  }, [selectedId, edges, objectiveLinks]);
 
+  // Compte les nœuds bloqués — tâches ET RDV : un RDV en attente d'une tâche
+  // est « bloqué » aussi, et le filtre « Bloquées » le montre.
   const blockedCount = useMemo(
     () => allTasks.filter((t) => graphStatus(t, allById) === "blocked").length,
     [allTasks, allById],
@@ -506,6 +546,31 @@ export function DependencyGraph({
         </div>
 
         <div className="ml-auto flex flex-none items-center gap-2">
+          {([
+            ["RDV", showEvents, () => setShowEvents((v) => !v)],
+            ["Faites", showDone, () => setShowDone((v) => !v)],
+          ] as const).map(([label, on, toggle]) => (
+            <button
+              key={label}
+              onClick={() => { toggle(); setSelectedId(null); requestFit(); }}
+              aria-pressed={on}
+              className="whitespace-nowrap"
+              style={{
+                height: 36,
+                padding: "0 13px",
+                borderRadius: 99,
+                border: `1px solid ${on ? C.ink : "rgba(16,16,16,.12)"}`,
+                background: on ? C.ink : C.surface,
+                color: on ? "#FFFFFF" : C.inkMuted,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {label}
+            </button>
+          ))}
           <button
             onClick={() => {
               setBlockedOnly((v) => !v);
@@ -548,8 +613,11 @@ export function DependencyGraph({
           <button
             onClick={() => {
               setPinned({});
+              clearGraphLayout();
               setProjectFilter([]);
               setBlockedOnly(false);
+              setShowEvents(true);
+              setShowDone(false);
               setSelectedId(null);
               requestFit();
             }}
@@ -641,10 +709,14 @@ export function DependencyGraph({
               const color = fromStatus === "done" ? C.inkFaint : C.ink;
               const width = touches ? 2.6 : front ? 2 : 1.5;
               const baseOpacity = front ? 0.9 : 0.4;
+              const key = `${from.id}->${to.id}`;
+              const curveD = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+              const mx = (x1 + x2) / 2;
+              const my = (y1 + y2) / 2;
               return (
-                <g key={`${from.id}->${to.id}`} opacity={selectedId ? (touches ? 1 : 0.14) : baseOpacity}>
+                <g key={key} opacity={selectedId ? (touches ? 1 : 0.14) : baseOpacity}>
                   <path
-                    d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
+                    d={curveD}
                     fill="none"
                     // Plein = la source est prête, le lien est actionnable ;
                     // pointillé = la source attend encore quelqu'un.
@@ -659,16 +731,49 @@ export function DependencyGraph({
                     strokeLinejoin="round"
                     style={{ stroke: color, strokeWidth: width }}
                   />
+                  {onRemoveDependency && (
+                    <>
+                      {/* Zone de survol invisible et large — le <svg> parent est
+                          pointer-events-none, on le rouvre juste sur ce tracé. */}
+                      <path
+                        d={curveD}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={16}
+                        style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                        onMouseEnter={() => setHoverEdge(key)}
+                        onMouseLeave={() => setHoverEdge((k) => (k === key ? null : k))}
+                        onClick={() => onRemoveDependency(to.id, from.id)}
+                      />
+                      {hoverEdge === key && (
+                        <g
+                          transform={`translate(${mx},${my})`}
+                          style={{ pointerEvents: "auto", cursor: "pointer" }}
+                          onMouseEnter={() => setHoverEdge(key)}
+                          onClick={() => onRemoveDependency(to.id, from.id)}
+                        >
+                          <circle r={9} fill="var(--color-surface)" stroke="var(--color-danger)" strokeWidth={1.5} />
+                          <path
+                            d="M-3.4,-3.4 L3.4,3.4 M3.4,-3.4 L-3.4,3.4"
+                            stroke="var(--color-danger)"
+                            strokeWidth={1.8}
+                            strokeLinecap="round"
+                          />
+                        </g>
+                      )}
+                    </>
+                  )}
                 </g>
               );
             })}
 
             {/* Le lien en cours de tirage — il suit le curseur jusqu'au relâchement. */}
             {link && (() => {
-              const a = pos.get(link.fromId);
+              const fromObj = link.fromId.startsWith("obj:");
+              const a = fromObj ? objectivePos.get(link.fromId) : pos.get(link.fromId);
               if (!a) return null;
-              const x1 = a.x + metrics.W;
-              const y1 = a.y + metrics.H / 2;
+              const x1 = a.x + (fromObj ? OBJ_W : metrics.W);
+              const y1 = a.y + (fromObj ? OBJ_H : metrics.H) / 2;
               const dx = Math.max(70, Math.abs(link.x - x1) * curve);
               return (
                 <g>
@@ -684,26 +789,61 @@ export function DependencyGraph({
               );
             })()}
 
-            {/* Arêtes tâche → objectif (pointillés dorés : ce lien n'est pas une dépendance bloquante). */}
-            {objectiveLinks.map(({ fromId, toId }) => {
-              const a = pos.get(fromId);
-              const target = objectiveNodes.find((n) => objectiveNodeId(n.objective) === toId);
-              if (!a || !target) return null;
-              const x1 = a.x + metrics.W;
-              const y1 = a.y + metrics.H / 2;
-              const x2 = target.x - 9;
-              const y2 = target.y + OBJ_H / 2;
+            {/* Arêtes vers un objectif — dorées, pointillées : ce lien complète
+                l'objectif, il ne bloque pas la tâche. Trait plus épais pour une
+                chaîne objectif → objectif. */}
+            {objectiveLinks.map(({ fromId, toId, kind }) => {
+              const src = kind === "objective" ? objectivePos.get(fromId) : pos.get(fromId);
+              const dst = objectivePos.get(toId);
+              if (!src || !dst) return null;
+              const srcW = kind === "objective" ? OBJ_W : metrics.W;
+              const srcH = kind === "objective" ? OBJ_H : metrics.H;
+              const x1 = src.x + srcW;
+              const y1 = src.y + srcH / 2;
+              const x2 = dst.x - 9;
+              const y2 = dst.y + OBJ_H / 2;
               const dx = Math.max(70, Math.abs(x2 - x1) * curve);
+              const key = `${fromId}=>${toId}`;
+              const curveD = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+              const mx = (x1 + x2) / 2;
+              const my = (y1 + y2) / 2;
               return (
-                <g key={`${fromId}->${toId}`} opacity={0.55}>
-                  <path
-                    d={`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`}
-                    fill="none"
-                    strokeDasharray="2 6"
-                    strokeLinecap="round"
-                    style={{ stroke: "#B98A17", strokeWidth: 1.8 }}
-                  />
-                  <circle cx={x2} cy={y2} r={3.5} style={{ fill: "#B98A17" }} />
+                <g key={key}>
+                  <g opacity={0.55}>
+                    <path
+                      d={curveD}
+                      fill="none"
+                      strokeDasharray={kind === "objective" ? "6 4" : "2 6"}
+                      strokeLinecap="round"
+                      style={{ stroke: "#B98A17", strokeWidth: kind === "objective" ? 2.4 : 1.8 }}
+                    />
+                    <circle cx={x2} cy={y2} r={3.5} style={{ fill: "#B98A17" }} />
+                  </g>
+                  {onRemoveDependency && (
+                    <>
+                      <path
+                        d={curveD}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={16}
+                        style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                        onMouseEnter={() => setHoverEdge(key)}
+                        onMouseLeave={() => setHoverEdge((k) => (k === key ? null : k))}
+                        onClick={() => onRemoveDependency(toId, fromId)}
+                      />
+                      {hoverEdge === key && (
+                        <g
+                          transform={`translate(${mx},${my})`}
+                          style={{ pointerEvents: "auto", cursor: "pointer" }}
+                          onMouseEnter={() => setHoverEdge(key)}
+                          onClick={() => onRemoveDependency(toId, fromId)}
+                        >
+                          <circle r={9} fill="var(--color-surface)" stroke="var(--color-danger)" strokeWidth={1.5} />
+                          <path d="M-3.4,-3.4 L3.4,3.4 M3.4,-3.4 L-3.4,3.4" stroke="var(--color-danger)" strokeWidth={1.8} strokeLinecap="round" />
+                        </g>
+                      )}
+                    </>
+                  )}
                 </g>
               );
             })}
@@ -718,6 +858,11 @@ export function DependencyGraph({
             const subs = t.subtasks ?? [];
             const doneSubs = subs.filter((s) => s.done).length;
             const hasAudio = !!(t.audioOrigin || t.audioId);
+            const isEvent = t.kind === "event";
+            const isDone = !!t.doneAt;
+            const whenLabel = t.rrule
+              ? describeRrule(t.rrule) ?? "récurrent"
+              : formatDue(t.due, t.allDay);
             return (
               <div
                 key={t.id}
@@ -782,7 +927,16 @@ export function DependencyGraph({
                   />
                 )}
 
-                <div className="flex flex-wrap gap-1 overflow-hidden" style={{ height: 8 }}>
+                <div className="flex flex-wrap items-center gap-1 overflow-hidden" style={{ height: 8 }}>
+                  {isEvent && (
+                    <span
+                      title="Rendez-vous"
+                      className="font-mono"
+                      style={{ fontSize: 7, lineHeight: 1, letterSpacing: "0.06em", padding: "1px 4px", borderRadius: 4, background: "var(--color-meet-100)", color: "var(--color-meet-700)" }}
+                    >
+                      RDV
+                    </span>
+                  )}
                   {(t.tags ?? []).slice(0, 4).map((tagId) => {
                     const tag = tags.find((x) => x.id === tagId);
                     if (!tag) return null;
@@ -801,8 +955,8 @@ export function DependencyGraph({
                   style={{
                     lineHeight: 1.25,
                     paddingRight: 14,
-                    color: C.ink,
-                    textDecoration: "none",
+                    color: isDone ? C.inkFaint : C.ink,
+                    textDecoration: isDone ? "line-through" : "none",
                   }}
                 >
                   {t.title}
@@ -814,7 +968,7 @@ export function DependencyGraph({
                     className="tnum whitespace-nowrap text-[11px] font-semibold"
                     style={{ color: st === "blocked" ? C.danger : C.inkMuted }}
                   >
-                    {formatDue(t.due, t.allDay)}
+                    {whenLabel}
                   </span>
                   {subs.length > 0 && (
                     <span className="inline-flex items-center gap-1.5">
@@ -866,15 +1020,23 @@ export function DependencyGraph({
             );
           })}
 
-          {/* --- Nœuds objectifs — la cible dorée vers laquelle convergent les tâches ---
-              Un objectif n'est ni draggable ni cliquable (son écran dédié gère son
-              cycle de vie) : c'est une borne de lecture — « tout ça mène ici ». */}
+          {/* --- Nœuds objectifs — la cible dorée d'une chaîne ---
+              Déplaçables, cible d'un tirage de lien, double-clic → écran Objectifs.
+              Le losange plein = atteint / prêt à valider. */}
           {objectiveNodes.map(({ objective, x, y }) => {
             const project = projectOf(objective.projectId);
-            const prog = objectiveProgress(objective, items);
+            const prog = objectiveEffectiveProgress(objective, items, objectives);
+            const nodeId = objectiveNodeId(objective);
+            const dropping = link?.overId === nodeId;
+            const dim = !!selectedId && !neighbours.has(nodeId);
+            const full = prog.total > 0 && prog.done === prog.total;
             return (
               <div
-                key={objectiveNodeId(objective)}
+                key={nodeId}
+                data-node="1"
+                data-node-id={nodeId}
+                onMouseDown={(e) => onNodeDown(nodeId, e)}
+                onDoubleClick={() => onOpenObjectives?.()}
                 className="absolute left-0 top-0 flex select-none flex-col justify-center"
                 style={{
                   transform: `translate(${x}px,${y}px)`,
@@ -882,18 +1044,46 @@ export function DependencyGraph({
                   height: OBJ_H,
                   padding: "8px 12px",
                   gap: 4,
-                  background: "#FFF8E6",
-                  border: "1.5px solid #B98A17",
+                  background: full ? "#FBEFC9" : "#FFF8E6",
+                  border: `1.5px solid ${dropping || selectedId === nodeId ? C.ink : "#B98A17"}`,
                   borderRadius: 14,
-                  boxShadow: "0 4px 14px rgba(185,138,23,.16)",
+                  boxShadow: dropping
+                    ? "0 0 0 3px rgba(16,16,16,.14)"
+                    : selectedId === nodeId
+                      ? "0 6px 20px rgba(185,138,23,.28)"
+                      : "0 4px 14px rgba(185,138,23,.16)",
+                  opacity: dim && !dropping ? 0.34 : 1,
+                  cursor: "grab",
+                  transition: "opacity .18s, box-shadow .18s",
                 }}
-                title={`${objective.title} — ${prog.done}/${prog.total} tâches faites`}
+                title={`${objective.title} — ${prog.done}/${prog.total} tâches faites${full ? " · atteint" : ""}`}
               >
+                {onAddDependency && (
+                  <span
+                    role="button"
+                    aria-label={`Tirer un lien depuis l'objectif « ${objective.title} »`}
+                    onMouseDown={(e) => startLink(nodeId, e)}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    className="absolute"
+                    style={{
+                      right: -7,
+                      top: OBJ_H / 2 - 7,
+                      width: 14,
+                      height: 14,
+                      borderRadius: 99,
+                      background: "#B98A17",
+                      border: "2.5px solid var(--color-surface)",
+                      cursor: "crosshair",
+                      opacity: link?.fromId === nodeId ? 1 : 0.5,
+                      transform: link?.fromId === nodeId ? "scale(1.25)" : "none",
+                      transition: "opacity .15s, transform .15s",
+                    }}
+                  />
+                )}
                 <div className="flex items-center gap-1.5">
-                  {/* Losange doré — la marque « objectif » dans tout Brief. */}
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: "#B98A17", transform: "rotate(45deg)", flex: "none" }} />
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: full ? "#8a6a12" : "#B98A17", transform: "rotate(45deg)", flex: "none" }} />
                   <span className="font-mono" style={{ fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8a6a12" }}>
-                    Objectif · {objective.horizon} terme
+                    Objectif · {objective.horizon} terme{full ? " · atteint" : ""}
                   </span>
                 </div>
                 <span
@@ -1071,6 +1261,7 @@ export function DependencyGraph({
             onSelect={setSelectedId}
             onClose={() => setSelectedId(null)}
             onOpenTask={onOpenTask}
+            onRemoveDependency={onRemoveDependency}
           />
         )}
       </div>
@@ -1096,6 +1287,7 @@ function DetailPanel({
   onSelect,
   onClose,
   onOpenTask,
+  onRemoveDependency,
 }: {
   item: Item;
   allTasks: Item[];
@@ -1105,6 +1297,7 @@ function DetailPanel({
   onSelect: (id: string) => void;
   onClose: () => void;
   onOpenTask: (id: string) => void;
+  onRemoveDependency?: (targetId: string, depId: string) => void;
 }) {
   const project = projects.find((p) => p.id === item.projectId);
   const st = graphStatus(item, allById);
@@ -1114,34 +1307,47 @@ function DetailPanel({
   const doneSubs = subs.filter((s) => s.done).length;
   const itemTags = (item.tags ?? []).map((id) => tags.find((t) => t.id === id)).filter((t): t is Tag => !!t);
 
-  const link = (x: Item) => {
+  const link = (x: Item, onRemove?: () => void) => {
     const p = projects.find((q) => q.id === x.projectId);
     return (
-      <button
+      <div
         key={x.id}
-        onClick={() => onSelect(x.id)}
-        className="flex w-full items-center gap-2.5 text-left"
+        className="flex w-full items-center"
         style={{
-          padding: "11px 12px",
           background: "var(--color-surface)",
           border: "1px solid rgba(16,16,16,.06)",
           borderLeft: `3px solid ${p ? skinFor(p).bg : "#A9A9A2"}`,
           borderRadius: 12,
-          cursor: "pointer",
-          fontFamily: "inherit",
         }}
       >
-        <span style={{ width: 8, height: 8, flex: "none", borderRadius: 99, background: STATUS[graphStatus(x, allById)].color }} />
-        <span
-          className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold"
-          style={{ color: C.ink, textDecoration: "none" }}
+        <button
+          onClick={() => onSelect(x.id)}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          style={{ padding: "11px 12px", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
         >
-          {x.title}
-        </span>
-        <span className="whitespace-nowrap text-[11px] font-bold" style={{ color: C.inkMuted }}>
-          à faire
-        </span>
-      </button>
+          <span style={{ width: 8, height: 8, flex: "none", borderRadius: 99, background: STATUS[graphStatus(x, allById)].color }} />
+          <span
+            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold"
+            style={{ color: C.ink, textDecoration: "none" }}
+          >
+            {x.title}
+          </span>
+          <span className="whitespace-nowrap text-[11px] font-bold" style={{ color: C.inkMuted }}>
+            à faire
+          </span>
+        </button>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            aria-label={`Retirer la dépendance « ${x.title} »`}
+            title="Retirer cette dépendance"
+            className="flex items-center justify-center"
+            style={{ width: 30, height: 30, flex: "none", marginRight: 4, borderRadius: 99, border: "none", background: "none", color: C.inkFaint, cursor: "pointer" }}
+          >
+            <CloseIcon size={13} />
+          </button>
+        )}
+      </div>
     );
   };
 
@@ -1231,7 +1437,9 @@ function DetailPanel({
               Aucune dépendance — cette tâche ouvre sa chaîne.
             </span>
           ) : (
-            deps.map(link)
+            deps.map((d) =>
+              link(d, onRemoveDependency ? () => onRemoveDependency(item.id, d.id) : undefined),
+            )
           )}
         </div>
 
@@ -1242,7 +1450,7 @@ function DetailPanel({
               Rien n&apos;attend cette tâche.
             </span>
           ) : (
-            next.map(link)
+            next.map((x) => link(x))
           )}
         </div>
 

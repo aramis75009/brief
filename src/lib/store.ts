@@ -117,12 +117,50 @@ export async function writeTags(tags: Tag[]): Promise<void> {
  * Les objectifs stockés, ou une liste vide au premier démarrage. Un objectif
  * n'est pas un item : il survit à ses tâches, les orchestre — rien à semer.
  */
+function normalizeObjective(o: Objective): Objective {
+  return {
+    ...o,
+    dependsOn: Array.isArray(o.dependsOn) ? o.dependsOn : [],
+    // ⚠️ Avant cette branche, le SEUL moyen d'atteindre un objectif était le
+    // bouton « Atteint » (geste manuel). Un objectif historique a donc
+    // `achievedAt` posé et `achievedManually` absent : sans ce défaut à `true`,
+    // `reconcileObjectives` le rouvrirait en masse au premier GET après déploiement.
+    achievedManually:
+      typeof o.achievedManually === "boolean" ? o.achievedManually : o.achievedAt != null,
+  };
+}
+
 export async function readObjectives(): Promise<Objective[]> {
-  return readJson<Objective[]>("objectives.json", []);
+  const stored = await readJson<Objective[]>("objectives.json", []);
+  // Normalisation en mémoire sans réécrire le fichier — même principe que
+  // `normalizeItem` : une donnée absente ne doit pas obliger à migrer le disque.
+  return stored.map(normalizeObjective);
 }
 
 export async function writeObjectives(objectives: Objective[]): Promise<void> {
   return serialize(() => writeJson("objectives.json", objectives));
+}
+
+/**
+ * Lecture-modification-écriture ATOMIQUE des objectifs : `fn` reçoit les
+ * objectifs (normalisés) et les items du moment, renvoie le nouveau tableau —
+ * ou `null` pour ne rien écrire. Toute la séquence tient dans la file
+ * sérialisée, donc deux mutations concurrentes ne s'écrasent pas (une route
+ * qui écrivait puis re-réconciliait en deux temps laissait une fenêtre).
+ */
+export async function updateObjectivesAtomically(
+  fn: (objectives: Objective[], items: Item[]) => Objective[] | null,
+): Promise<Objective[]> {
+  return serialize(async () => {
+    const [rawObjs, items] = await Promise.all([
+      readJson<Objective[]>("objectives.json", []),
+      readItems(),
+    ]);
+    const objectives = rawObjs.map(normalizeObjective);
+    const next = fn(objectives, items);
+    if (next && next !== objectives) await writeJson("objectives.json", next);
+    return next ?? objectives;
+  });
 }
 
 /* --- Items --------------------------------------------------------------- */
