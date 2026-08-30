@@ -366,6 +366,7 @@ export function DesktopShell({
               tags={tags}
               objectives={objectives}
               onOpenTask={openTask}
+              onOpenObjectives={() => setScreen("objectifs")}
               onAddDependency={handleAddDependency}
               onRemoveDependency={handleRemoveDependency}
             />

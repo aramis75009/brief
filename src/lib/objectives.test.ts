@@ -4,6 +4,7 @@ import {
   HORIZON_LABEL,
   effectiveDeps,
   objectiveEdges,
+  objectiveGraphEdges,
   objectiveNodeId,
   objectiveProgress,
   objectiveSatisfied,
@@ -242,6 +243,30 @@ describe("objectiveSatisfied", () => {
     expect(objectiveSatisfied(downstream, [], [upstream, downstream])).toBe(false);
     const upstreamDone: Objective = { ...upstream, achievedAt: "2026-08-30T00:00:00.000Z" };
     expect(objectiveSatisfied(downstream, [], [upstreamDone, downstream])).toBe(true);
+  });
+});
+
+/* --- objectiveGraphEdges --------------------------------------------- */
+
+describe("objectiveGraphEdges", () => {
+  it("tâche visible → objectif, et objectif → objectif pour les chaînes", () => {
+    const amont: Objective = { ...objCourt, id: "amont", achievedAt: null };
+    const aval: Objective = { ...objWeb, id: "aval", dependsOn: ["obj:amont"], achievedAt: null };
+    const items = [
+      makeItem({ id: "t1", objectiveId: "amont" }),
+      makeItem({ id: "t2", objectiveId: "amont" }),
+    ];
+    const edges = objectiveGraphEdges([amont, aval], items, new Set(["t1"]));
+    expect(edges).toContainEqual({ fromId: "t1", toId: "obj:amont", kind: "task" });
+    // t2 n'est pas visible → pas d'arête
+    expect(edges.find((e) => e.fromId === "t2")).toBeUndefined();
+    expect(edges).toContainEqual({ fromId: "obj:amont", toId: "obj:aval", kind: "objective" });
+  });
+
+  it("aucune arête vers un objectif atteint", () => {
+    const done: Objective = { ...objCourt, id: "d", achievedAt: "2026-08-29T00:00:00.000Z" };
+    const items = [makeItem({ id: "t1", objectiveId: "d" })];
+    expect(objectiveGraphEdges([done], items, new Set(["t1"]))).toEqual([]);
   });
 });
 

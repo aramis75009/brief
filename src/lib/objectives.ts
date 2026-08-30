@@ -178,6 +178,33 @@ export function effectiveDeps(
 }
 
 /**
+ * Arêtes du graphe qui MÈNENT à un objectif, tirées de ses dépendances
+ * effectives : `fromId` → nœud objectif. Une dépendance-tâche n'est incluse
+ * que si son nœud est visible (`visibleTaskIds`) ; une dépendance-objectif
+ * l'est toujours (tous les objectifs actifs sont dessinés). `kind` sert au
+ * style (trait doré tâche→objectif, trait doré épais objectif→objectif).
+ */
+export function objectiveGraphEdges(
+  objectives: Objective[],
+  items: Item[],
+  visibleTaskIds: Set<string>,
+): { fromId: string; toId: string; kind: "task" | "objective" }[] {
+  const active = objectives.filter((o) => !o.achievedAt);
+  const out: { fromId: string; toId: string; kind: "task" | "objective" }[] = [];
+  for (const o of active) {
+    const toId = objectiveNodeId(o);
+    const { itemIds, objectiveIds } = effectiveDeps(o, items, active);
+    for (const id of itemIds) {
+      if (visibleTaskIds.has(id)) out.push({ fromId: id, toId, kind: "task" });
+    }
+    for (const id of objectiveIds) {
+      out.push({ fromId: objectiveNodeId({ id } as Objective), toId, kind: "objective" });
+    }
+  }
+  return out;
+}
+
+/**
  * Un objectif est « satisfait » quand il a au moins une dépendance effective
  * ET que toutes sont accomplies : les tâches-dépendances ont `doneAt`, les
  * objectifs-dépendances ont `achievedAt`.

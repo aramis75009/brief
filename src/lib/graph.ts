@@ -77,6 +77,61 @@ export function graphTasks(items: Item[]): Item[] {
   return items.filter((it) => it.kind === "task" && !it.doneAt);
 }
 
+/** Options d'inclusion de la vue Graphe (toggles de la barre de filtres). */
+export type GraphNodeOpts = { showDone?: boolean; showEvents?: boolean };
+
+/**
+ * Tâches faites qui appartiennent à une chaîne encore active — jamais une
+ * tâche faite isolée. On part des nœuds déjà affichés et on marche les arêtes
+ * `dependsOn` dans les DEUX sens à travers toutes les tâches : une tâche faite
+ * n'est gardée que si un chemin la relie à du travail encore en cours.
+ */
+function doneTasksInActiveChains(items: Item[], shownIds: Set<string>): Item[] {
+  const byId = indexById(items);
+  const adj = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => {
+    (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b);
+  };
+  for (const t of items) {
+    for (const dep of t.dependsOn ?? []) {
+      if (!byId.has(dep)) continue;
+      link(t.id, dep);
+      link(dep, t.id);
+    }
+  }
+  const keep = new Set(shownIds);
+  const stack = [...shownIds];
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const n of adj.get(id) ?? []) {
+      if (!keep.has(n)) {
+        keep.add(n);
+        stack.push(n);
+      }
+    }
+  }
+  return items.filter((t) => t.kind === "task" && !!t.doneAt && keep.has(t.id));
+}
+
+/**
+ * Les nœuds de la vue Graphe :
+ *   - tâches actives (toujours)
+ *   - + rendez-vous actifs si `showEvents` (défaut ON — le Sport n'est QUE des
+ *     RDV) : un nœud par série, pas par occurrence
+ *   - + tâches faites si `showDone` (défaut OFF) : uniquement celles reliées à
+ *     une chaîne encore active
+ *
+ * `graphTasks` reste pour le badge « bloquées » (il ne parle que de tâches).
+ */
+export function graphNodes(items: Item[], opts: GraphNodeOpts = {}): Item[] {
+  const { showDone = false, showEvents = true } = opts;
+  const tasks = items.filter((it) => it.kind === "task" && !it.doneAt);
+  const events = showEvents ? items.filter((it) => it.kind === "event") : [];
+  const base = [...tasks, ...events];
+  if (!showDone) return base;
+  return [...base, ...doneTasksInActiveChains(items, new Set(base.map((n) => n.id)))];
+}
+
 /**
  * Ce que la vue affiche, une fois les filtres appliqués.
  *
@@ -88,9 +143,14 @@ export function graphTasks(items: Item[]): Item[] {
  */
 export function visibleTasks(
   all: Item[],
-  { projectFilter, blockedOnly }: { projectFilter: string[]; blockedOnly: boolean },
+  {
+    projectFilter,
+    blockedOnly,
+    showDone = false,
+    showEvents = true,
+  }: { projectFilter: string[]; blockedOnly: boolean } & GraphNodeOpts,
 ): Item[] {
-  const tasks = graphTasks(all);
+  const tasks = graphNodes(all, { showDone, showEvents });
   const byId = indexById(tasks);
   const byProject = projectFilter.length === 0
     ? tasks

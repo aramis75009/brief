@@ -7,6 +7,7 @@ import {
   depths,
   wouldCreateCycle,
   graphEdges,
+  graphNodes,
   graphStatus,
   graphTasks,
   indexById,
@@ -94,6 +95,33 @@ describe("graphTasks — le graphe ne parle que de tâches actives", () => {
       item({ id: "b", doneAt: "2026-08-23T10:00:00+02:00" }),
     ];
     expect(graphTasks(list).map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+describe("graphNodes — tâches, RDV, tâches faites selon les toggles", () => {
+  it("par défaut : tâches actives + RDV, pas les faites", () => {
+    const list = [
+      item({ id: "a" }),
+      item({ id: "e", kind: "event" }),
+      item({ id: "d", doneAt: "2026-08-23T10:00:00+02:00" }),
+    ];
+    expect(graphNodes(list).map((n) => n.id).sort()).toEqual(["a", "e"]);
+  });
+
+  it("showEvents:false retire les RDV", () => {
+    const list = [item({ id: "a" }), item({ id: "e", kind: "event" })];
+    expect(graphNodes(list, { showEvents: false }).map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("showDone garde une tâche faite reliée à une chaîne active, pas une isolée", () => {
+    const list = [
+      item({ id: "act" }),
+      item({ id: "doneLinked", doneAt: "2026-08-20T10:00:00+02:00" }),
+      item({ id: "act2", dependsOn: ["doneLinked"] }),
+      item({ id: "doneAlone", doneAt: "2026-08-20T10:00:00+02:00" }),
+    ];
+    const ids = graphNodes(list, { showDone: true }).map((n) => n.id).sort();
+    expect(ids).toEqual(["act", "act2", "doneLinked"]);
   });
 });
 

@@ -222,7 +222,13 @@ Chacun aura son entrée datée en tête de `DECISIONS.md`, avec son POURQUOI.
 
 ## 10. Découpage pour `writing-plans`
 
-### Branche 1 — `feat/graphe-objectifs-moteur` (≈ « B‑1 + A‑1 »)
+> **Mise à jour 2026-08-30 (exécution)** : les deux lots sont livrés sur **une
+> seule branche** `feat/graphe-objectifs-moteur` et **un seul PR** — Aramis veut
+> A+B ensemble, et Hermes fait une seule recette + un seul déploiement. Les
+> « points de contrôle » ci-dessous restent des jalons de revue, pas des
+> branches git séparées.
+
+### Lot 1 (≈ « B‑1 + A‑1 »)
 
 Fondations + corrections, zéro nouvelle interaction risquée.
 
@@ -234,7 +240,7 @@ Fondations + corrections, zéro nouvelle interaction risquée.
 6. Persistance localStorage de la disposition + élagage
 7. Retrait de dépendance : `onRemoveDependency`, geste sur l'arête, bouton dans le panneau
 
-### Branche 2 — 2ᵉ PR du même chantier (≈ « B‑2 + A‑2 »)
+### Lot 2 (≈ « B‑2 + A‑2 »)
 
 Les interactions.
 
