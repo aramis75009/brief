@@ -14,6 +14,49 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-30 · Objectifs liés aux projets (chantier dicté le 29/08 soir)
+
+**Décision.** Un objectif Brief est un **objet dédié** lié à un projet — pas
+un `Item` : il survit aux tâches, les orchestre, n'a pas d'échéance propre.
+Schéma : `Objective { id, projectId, title, horizon: "court"|"moyen"|"long",
+createdAt, achievedAt, notes? }`, stocké dans `objectives.json` (store JSON
+atomique comme les projets et le board). Une tâche s'y rattache par
+`Item.objectiveId` (lien faible, nullable, absent = pas d'objectif).
+
+**Pourquoi.** Spec dictée par Aramis le 29/08 : « objectifs assignés à des
+projets, avec horizon court/moyen/long terme », exemple explicite
+« Web@cadémie → objectif "Rejoindre la Web@cadémie" ». Le HANDOFF prévoyait
+de faire valider le schéma avant de coder ; la session du 30/08 ordonne
+l'autonomie complète — le schéma est celui de la spec sans invention
+supplémentaire.
+
+**Comment.**
+- `src/lib/types.ts` : `Objective`, `ObjectiveHorizon`, `Item.objectiveId`
+  (côté `DraftItem` pour que `onSaveItem` / `sanitizePatch` le traversent).
+- `src/lib/store.ts` : `readObjectives`/`writeObjectives` (fichier
+  `objectives.json`, file sérialisée + écriture atomique identiques à
+  `projects.json`).
+- `src/lib/objectives.ts` : logique pure testée (10 tests) — progression
+  `objectiveProgress`, regroupement `objectivesByProject` (par projet, trié
+  court → moyen → long), `openTasksFor`, `uniqueObjectiveId`, arêtes de
+  graphe `objectiveEdges` / `objectiveNodeId` (`obj:<id>` pour ne jamais
+  confondre avec un `Item.id`).
+- API `/api/objectives` (GET/POST/PATCH/DELETE), `requireSession()` partout,
+  `uniqueObjectiveId` slug stable, `achievedAt` posé par PATCH.
+- UI desktop : nouvel écran **Objectifs** (nav), carte **Aujourd'hui ↔
+  Demain** sur le dashboard, fiche tâche avec sélecteur « Contribue à »,
+  graphe : nœuds objectifs dorés à droite des tâches liées.
+
+**Conséquence volontaire.** Le lien tâche → objectif n'est **pas** une
+dépendance bloquante : une tâche liée à un objectif non atteint reste « prête »
+dans le graphe (le statut de blocage ne regarde que `dependsOn`). Les arêtes
+du graphe vers un objectif sont dorées et pointillées pour le distinguer.
+
+**Statut.** ✅ Implémenté sur `feat/objectifs-projets` (2 commits). Non déployé
+— recette Aramis avant merge sur `main` (chantier visible).
+
+---
+
 ## 2026-08-26 · Grand ménage du repo — `main` devient la source de vérité unique (Hermes, avec Claude Code)
 
 **Décision.** Consolidation : tous les fichiers de contrat (AGENTS / README /
