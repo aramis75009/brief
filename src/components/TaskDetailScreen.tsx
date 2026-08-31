@@ -3,7 +3,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Chip } from "./Chip";
 import { TypeSegmented } from "./TypeSegmented";
-import { VoiceBadge } from "./VoiceBadge";
 import { WaveformStatic } from "./Waveform";
 import {
   ChevronLeftIcon,

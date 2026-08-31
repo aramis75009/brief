@@ -17,16 +17,14 @@ que tu remplaces dans `docs/handoffs/`.
 | **Agent** | **Claude Code (Opus 5)**. Même agent que la passation précédente — session coupée en cours de chantier, reprise le 31/08 vers 10 h 45. |
 | **Branche** | `feat/kanban-trello` · **Base** `main` (`fb39b9c`) |
 | **GitHub** | **`origin/main` = `49b4d59`** — [PR #9](https://github.com/aramis75009/brief/pull/9) **mergée** le 31/08 à 17 h 43 UTC (`v1.1.0.0`, 12 commits). |
-| **Prod** | **`fb39b9c`** — déployée et vérifiée par Hermes le 31/08. Conteneur recréé, écran de connexion rendu par un vrai moteur JS, zéro erreur console. |
+| **Prod** | **`5662ff32`** — v1.1.0.0 déployée et vérifiée par Hermes le 31/08 après-midi. `cat /app/VERSION` → `1.1.0.0`, conteneur `Healthy`, HTTP 200 en 98 ms, React hydraté sans exception. |
 
 ## Goal
-
 Chantier A du plan `docs/plans/2026-08-31-kanban-trello-calendrier.md` — le
 Kanban « copie Trello » : glisser-déposer réel des cartes et des colonnes,
 suppression de colonne qui ne perd plus les cartes, échec qui cesse d'être muet.
 
 ## Current state
-
 **T1 → T12 faits. T13 à moitié.** Le détail par tâche est dans le plan, cases
 cochées, avec une section « État au 2026-08-31, 11 h » en fin de fichier.
 
@@ -95,8 +93,60 @@ et `role="button"` sur les pilules · **clavier toujours fonctionnel** (Espace �
 ET `/api/items`) → toast affiché, carte restée à sa place, **zéro rejet non
 capturé**.
 
-## Decisions
+### Déployé en prod — 2026-08-31 après-midi
 
+Hermes a déployé `5662ff32`. **Le premier déploiement portant un `VERSION`
+est passé du premier coup** : `docker exec brief-app-1 cat /app/VERSION` rend
+`1.1.0.0`, la ligne `COPY` du Dockerfile n'a pas bronché.
+
+⚠️ **Le glisser-déposer n'est PAS recetté en production.** Hermes n'a aucun
+compte pour se connecter, donc il n'a pas pu ouvrir le Kanban. Il a seulement
+vérifié que les routes répondent sans session : `/api/board` → 401,
+`/api/items` → 401, `/api/board/cards` → **405 sur GET, ce qui est voulu** (la
+route est PATCH uniquement ; le préflight CORS qu'impose `application/json`
+est ce qui la protège du CSRF). **La recette du glisser-déposer en prod reste
+à faire par Aramis** — 2 minutes : ouvrir le Kanban, déplacer une carte,
+recharger, vérifier qu'elle reste.
+
+`scripts/coord/status.sh` **existe bien** sur le disque de prod : Hermes avait
+listé la racine et `deploy/`, jamais `scripts/coord/`. Sa réponse de la veille
+était fausse, la consigne de `docs/coordination.md` est applicable.
+
+### Vercel supprimé — 2026-08-31 après-midi
+**Vercel est supprimé.** Aramis : « Vercel n'a pas lieu d'être, normalement
+c'est tout sur le VPS » — ce que `CLAUDE.md` disait déjà. Deux projets
+existaient (`brief` et un `brief-design-system-ios-…` créé par accident). Ce
+n'était pas que du bruit de CI :
+
+- `https://brief-ten-jet.vercel.app` servait **publiquement** `<title>Brief</title>`.
+  Il ne laissait entrer personne, mais **par accident** : `/api/auth/session`
+  rendait 500 parce que les variables Supabase manquaient. Une panne qui fait
+  office de garde, pas une garde.
+- Le projet stockait quatre secrets, dont deux pour du code disparu :
+  `GROQ_API_KEY` (facturable, vivante), `VAPID_PRIVATE_KEY`,
+  `TODOIST_API_TOKEN` (zéro occurrence dans `src/`) et **`BRIEF_PIN`** — le
+  mécanisme supprimé du code le 26/08.
+
+Supprimés, vérifié : `vercel project inspect brief` ne trouve plus rien.
+`brief-ten-jet.vercel.app` répond encore en **cache CDN périmé**
+(`x-vercel-cache: HIT`, `age` 4 h 36) ; l'origine est morte, ça expirera seul.
+
+**⚠️ À faire par Aramis, hors de portée d'un agent :** révoquer le
+`TODOIST_API_TOKEN` chez Todoist (plus aucun code ne l'utilise, c'est un jeton
+vivant pour rien). Le `GROQ_API_KEY` et la `VAPID_PRIVATE_KEY` servent encore
+sur le VPS — ne les faire tourner que si le compte Vercel est suspect ; faire
+tourner la clé VAPID **casserait tous les abonnements push** (l'iPhone devrait
+se réabonner).
+
+**La revue de la PR #9 n'a eu qu'une passe indépendante.** La seconde
+(`/code-review high 9`) est morte sur un plafond de dépense mensuel (HTTP 429,
+réinitialisation 16 h 40). Relecture faite à la main à la place — elle a trouvé
+un vrai défaut dans le correctif Dockerfile du jour même : `COPY` d'un fichier
+absent fait ÉCHOUER un build, donc redéployer un commit d'avant le 31/08 aurait
+cassé. Corrigé par un repli avant le merge. **Le reste du matériel ajouté après
+la première revue n'a pas été relu par un agent indépendant.**
+
+## Decisions
 **Ajoutée en tête de `DECISIONS.md` (2026-08-31) : Brief est versionné.**
 `VERSION` et `CHANGELOG.md` existent enfin — sans eux `/ship` sautait en
 silence ses étapes de bump et de changelog. `main` est situé rétroactivement à
@@ -117,50 +167,27 @@ Une décision de méthode, prise pendant la reprise et assumée :
   relu, git le rend comme une suppression plus un ajout — la revue y perdrait.
   À faire dans son propre commit **après** `/code-review`.
 
-## Blockers
+## Changed — livré dans la PR #9 (12 commits bisectables)
+| Fichier | Nature |
+|---|---|
+| `src/lib/types.ts` | `Item.columnOrder`, `KanbanColumn.wipLimit` |
+| `src/lib/kanban.ts` + `.test.ts` | **neuf** — `sortColumnItems`, `columnItems`, `moveCardPlan`, `reorderColumnIds`, `detachColumn` |
+| `src/app/api/board/route.ts` (`GET`) | passe de récupération des orphelines des suppressions passées |
+| `src/lib/store.ts` | `updateItemsAtomically`, `updateBoardAtomically`, `normalizeItem` normalise `columnOrder` |
+| `src/app/api/board/cards/route.ts` + `.test.ts` | **neuve** — `PATCH`, intention voisin-relative, calcul en file |
+| `src/app/api/board/route.ts` | `delete` détache les cartes · action `wip` · les 5 actions en file · **fix `renumber`** |
+| `src/app/api/board/route.test.ts` | **neuf** — 19 cas, la route n'en avait aucun |
+| `src/app/api/items/route.ts`, `items/[id]/route.ts` | `coerce` / `sanitizePatch` acceptent `columnId` + `columnOrder` |
+| `src/lib/api.ts` | `moveCard()`, `setColumnWip()` |
+| `src/components/desktop/DesktopKanban.tsx` | réécriture dnd-kit multi-conteneur, WIP, confirmation de suppression, composeur |
+| `src/components/desktop/KanbanCard.tsx` | cesse d'être un `<button>` ; bouton « ouvrir » au survol ; radius 18 |
+| `src/components/desktop/DesktopShell.tsx` | tous les gestes du board câblés, toasts `err` |
+| `src/components/BriefApp.tsx` | `quickAddTask` accepte `columnId` ; `onRefreshItems` / `onFlash` passés au desktop |
+| `docs/plans/2026-08-31-kanban-trello-calendrier.md` | **neuf** — le plan `/autoplan`, cases à jour |
 
-1. **Pas de SSH vers le VPS depuis le Mac** — inchangé. Déployer et lire les
-   logs passe par Hermes.
-2. **Le webhook `deploy.sh` ne passe toujours pas** (202 sans effet,
-   approbation Telegram). Contourné le 31/08 en envoyant un message à Hermes à
-   la main, ce qui a marché du premier coup. Aramis : « on corrigera ce
-   problème de webhook et d'approve plus tard. »
-
-### ⚠️ Le blocker « PR #7 non déployée » était FAUX depuis deux passations
-
-Hermes l'a établi le 31/08 : la prod tournait **déjà sur `fe0c8d8`**, conteneur
-rebuildé le **30/08 à 21 h 12 UTC**. La PR #7 était en production depuis le
-soir même. Les trois `deploy.sh` restés en 202 n'avaient rien déclenché, mais
-un déploiement ANTÉRIEUR l'avait emportée.
-
-La leçon n'est pas celle qu'on avait écrite. On savait déjà qu'« un 202 ne
-prouve pas un déploiement » ; l'erreur inverse a coûté plus cher : **avoir
-conclu de l'absence de confirmation que rien n'était déployé**, et avoir
-traîné un faux blocker sur deux passations sans jamais demander l'état réel.
-Le VPS est injoignable depuis le Mac — la seule source de vérité était
-d'écrire à Hermes, ce que personne n'avait fait.
-
-## Next — la prochaine action
-
-1. **Déployer `49b4d59`** en écrivant à Hermes (le webhook ne passe pas). Elle
-   touche `store.ts`, `/api/board` et `/api/items` — pas seulement de l'UI.
-   ⚠️ **Premier déploiement avec un fichier `VERSION`** : le Dockerfile le copie
-   désormais dans `/app`, et un repli le crée s'il manque (retour arrière sur un
-   commit d'avant le 31/08). À surveiller au build.
-3. **Vérifier `scripts/coord/status.sh` sur le VPS.** Hermes dit qu'il n'existe
-   pas dans `/docker/brief` ; il est pourtant commité et présent dans `fe0c8d8`
-   comme dans `fb39b9c` (`git cat-file -e` vérifié le 31/08). Donc soit le
-   clone de prod est partiel, soit il a regardé ailleurs. `docs/coordination.md`
-   demande aux agents de lancer ce script : si le fichier manque vraiment
-   là-bas, la consigne est inapplicable côté VPS.
-4. Reste des chantiers : **B (calendrier)**, suspendu à un arbitrage humain
-   (`DECISIONS.md` 2026-08-26, le livrable Claude Design n'est jamais venu) —
-   voir chantier B du plan, et les six points « Signalé, non traité » à porter
-   dans `TODOS.md`, dont **`caldavSyncedDue`** (divergence silencieuse avec
-   iCloud, préalable technique à toute UI de planification).
+---
 
 ## Validations — passants / échoués / non lancés
-
 ```
 $ npx eslint .       → 0 erreur (28 warnings préexistants, −2)
 $ npx tsc --noEmit   → 0 erreur
@@ -204,29 +231,47 @@ WIP, carte de test supprimée). Vérifié à l'écran.
   connexion rendu, aucune exception console. Vérifié avec un vrai moteur JS
   (Chromium headless de Playwright, `--dump-dom`), pas avec `curl`.
 
-## Changed — livré dans la PR #9 (5 commits bisectables)
+## Blockers
+1. **Pas de SSH vers le VPS depuis le Mac** — inchangé. Déployer et lire les
+   logs passe par Hermes.
+2. **Le webhook `deploy.sh` ne passe toujours pas** (202 sans effet,
+   approbation Telegram). Contourné le 31/08 en envoyant un message à Hermes à
+   la main, ce qui a marché du premier coup. Aramis : « on corrigera ce
+   problème de webhook et d'approve plus tard. »
 
-| Fichier | Nature |
-|---|---|
-| `src/lib/types.ts` | `Item.columnOrder`, `KanbanColumn.wipLimit` |
-| `src/lib/kanban.ts` + `.test.ts` | **neuf** — `sortColumnItems`, `columnItems`, `moveCardPlan`, `reorderColumnIds`, `detachColumn` |
-| `src/app/api/board/route.ts` (`GET`) | passe de récupération des orphelines des suppressions passées |
-| `src/lib/store.ts` | `updateItemsAtomically`, `updateBoardAtomically`, `normalizeItem` normalise `columnOrder` |
-| `src/app/api/board/cards/route.ts` + `.test.ts` | **neuve** — `PATCH`, intention voisin-relative, calcul en file |
-| `src/app/api/board/route.ts` | `delete` détache les cartes · action `wip` · les 5 actions en file · **fix `renumber`** |
-| `src/app/api/board/route.test.ts` | **neuf** — 19 cas, la route n'en avait aucun |
-| `src/app/api/items/route.ts`, `items/[id]/route.ts` | `coerce` / `sanitizePatch` acceptent `columnId` + `columnOrder` |
-| `src/lib/api.ts` | `moveCard()`, `setColumnWip()` |
-| `src/components/desktop/DesktopKanban.tsx` | réécriture dnd-kit multi-conteneur, WIP, confirmation de suppression, composeur |
-| `src/components/desktop/KanbanCard.tsx` | cesse d'être un `<button>` ; bouton « ouvrir » au survol ; radius 18 |
-| `src/components/desktop/DesktopShell.tsx` | tous les gestes du board câblés, toasts `err` |
-| `src/components/BriefApp.tsx` | `quickAddTask` accepte `columnId` ; `onRefreshItems` / `onFlash` passés au desktop |
-| `docs/plans/2026-08-31-kanban-trello-calendrier.md` | **neuf** — le plan `/autoplan`, cases à jour |
+### ⚠️ Le blocker « PR #7 non déployée » était FAUX depuis deux passations
 
----
+Hermes l'a établi le 31/08 : la prod tournait **déjà sur `fe0c8d8`**, conteneur
+rebuildé le **30/08 à 21 h 12 UTC**. La PR #7 était en production depuis le
+soir même. Les trois `deploy.sh` restés en 202 n'avaient rien déclenché, mais
+un déploiement ANTÉRIEUR l'avait emportée.
+
+La leçon n'est pas celle qu'on avait écrite. On savait déjà qu'« un 202 ne
+prouve pas un déploiement » ; l'erreur inverse a coûté plus cher : **avoir
+conclu de l'absence de confirmation que rien n'était déployé**, et avoir
+traîné un faux blocker sur deux passations sans jamais demander l'état réel.
+Le VPS est injoignable depuis le Mac — la seule source de vérité était
+d'écrire à Hermes, ce que personne n'avait fait.
+
+## Next — la prochaine action
+1. **Déployer `49b4d59`** en écrivant à Hermes (le webhook ne passe pas). Elle
+   touche `store.ts`, `/api/board` et `/api/items` — pas seulement de l'UI.
+   ⚠️ **Premier déploiement avec un fichier `VERSION`** : le Dockerfile le copie
+   désormais dans `/app`, et un repli le crée s'il manque (retour arrière sur un
+   commit d'avant le 31/08). À surveiller au build.
+3. **Vérifier `scripts/coord/status.sh` sur le VPS.** Hermes dit qu'il n'existe
+   pas dans `/docker/brief` ; il est pourtant commité et présent dans `fe0c8d8`
+   comme dans `fb39b9c` (`git cat-file -e` vérifié le 31/08). Donc soit le
+   clone de prod est partiel, soit il a regardé ailleurs. `docs/coordination.md`
+   demande aux agents de lancer ce script : si le fichier manque vraiment
+   là-bas, la consigne est inapplicable côté VPS.
+4. Reste des chantiers : **B (calendrier)**, suspendu à un arbitrage humain
+   (`DECISIONS.md` 2026-08-26, le livrable Claude Design n'est jamais venu) —
+   voir chantier B du plan, et les six points « Signalé, non traité » à porter
+   dans `TODOS.md`, dont **`caldavSyncedDue`** (divergence silencieuse avec
+   iCloud, préalable technique à toute UI de planification).
 
 ## Historique des passations
-
 | Date | Sujet | Agent | Lien |
 |---|---|---|---|
 | 2026-08-31 (matin) | Kanban Trello codé et vert, recette bloquée sur la connexion | Claude Code (Opus 5) | (cette passation) |
@@ -238,38 +283,3 @@ WIP, carte de test supprimée). Vérifié à l'écran.
 
 
 ---
-
-## Post-merge — 2026-08-31 après-midi
-
-**Vercel est supprimé.** Aramis : « Vercel n'a pas lieu d'être, normalement
-c'est tout sur le VPS » — ce que `CLAUDE.md` disait déjà. Deux projets
-existaient (`brief` et un `brief-design-system-ios-…` créé par accident). Ce
-n'était pas que du bruit de CI :
-
-- `https://brief-ten-jet.vercel.app` servait **publiquement** `<title>Brief</title>`.
-  Il ne laissait entrer personne, mais **par accident** : `/api/auth/session`
-  rendait 500 parce que les variables Supabase manquaient. Une panne qui fait
-  office de garde, pas une garde.
-- Le projet stockait quatre secrets, dont deux pour du code disparu :
-  `GROQ_API_KEY` (facturable, vivante), `VAPID_PRIVATE_KEY`,
-  `TODOIST_API_TOKEN` (zéro occurrence dans `src/`) et **`BRIEF_PIN`** — le
-  mécanisme supprimé du code le 26/08.
-
-Supprimés, vérifié : `vercel project inspect brief` ne trouve plus rien.
-`brief-ten-jet.vercel.app` répond encore en **cache CDN périmé**
-(`x-vercel-cache: HIT`, `age` 4 h 36) ; l'origine est morte, ça expirera seul.
-
-**⚠️ À faire par Aramis, hors de portée d'un agent :** révoquer le
-`TODOIST_API_TOKEN` chez Todoist (plus aucun code ne l'utilise, c'est un jeton
-vivant pour rien). Le `GROQ_API_KEY` et la `VAPID_PRIVATE_KEY` servent encore
-sur le VPS — ne les faire tourner que si le compte Vercel est suspect ; faire
-tourner la clé VAPID **casserait tous les abonnements push** (l'iPhone devrait
-se réabonner).
-
-**La revue de la PR #9 n'a eu qu'une passe indépendante.** La seconde
-(`/code-review high 9`) est morte sur un plafond de dépense mensuel (HTTP 429,
-réinitialisation 16 h 40). Relecture faite à la main à la place — elle a trouvé
-un vrai défaut dans le correctif Dockerfile du jour même : `COPY` d'un fichier
-absent fait ÉCHOUER un build, donc redéployer un commit d'avant le 31/08 aurait
-cassé. Corrigé par un repli avant le merge. **Le reste du matériel ajouté après
-la première revue n'a pas été relu par un agent indépendant.**

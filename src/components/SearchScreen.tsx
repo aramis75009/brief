@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { EmptyState } from "./EmptyState";
-import { SkeletonCard } from "./Skeleton";
 import { VoiceBadge } from "./VoiceBadge";
 import { AccountAvatar } from "./AccountAvatar";
 import { SearchSmallIcon, MicIcon, ChevronLeftIcon } from "./icons";
@@ -41,10 +40,8 @@ export function SearchScreen({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [voiceActive, setVoiceActive] = useState(false);
 
   const onRecorded = useCallback(async (rec: Recording) => {
-    setVoiceActive(false);
     try {
       const text = await transcribeAudio(rec.blob, rec.mimeType, () => {});
       if (text.trim()) setQuery(text.trim());
@@ -59,7 +56,6 @@ export function SearchScreen({
     if (recorder.recording) {
       recorder.stop();
     } else {
-      setVoiceActive(true);
       void recorder.start();
     }
   }, [recorder]);

@@ -24,7 +24,6 @@ import {
   weekOpenCounts,
   weekProgressByProject,
   type TaskKindFilter,
-  type OverdueRow,
 } from "@/lib/desktopDashboard";
 import type { AgendaItem } from "@/lib/agenda";
 import type { Item, Overview, Project } from "@/lib/types";

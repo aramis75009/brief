@@ -2,9 +2,8 @@
 
 import { EmptyState } from "./EmptyState";
 import { SkeletonCard } from "./Skeleton";
-import { VoiceBadge } from "./VoiceBadge";
 import { CheckIcon, ChevronLeftIcon, CloseIcon, IdeaIcon } from "./icons";
-import type { Item, Project } from "@/lib/types";
+import type { Item } from "@/lib/types";
 
 /** Une idée de plus de 48 h est estompée (l'âge réel, pas l'index). */
 function isStale(createdAt: string | undefined): boolean {
@@ -19,7 +18,6 @@ function isStale(createdAt: string | undefined): boolean {
 
 export function IdeasScreen({
   ideas,
-  projects,
   onConvert,
   onArchive,
   onBack,
@@ -27,7 +25,6 @@ export function IdeasScreen({
   loading,
 }: {
   ideas: Item[];
-  projects: Project[];
   onConvert: (id: string) => void;
   onArchive: (id: string) => void;
   onBack: () => void;

@@ -20,16 +20,11 @@ import { PhoneFrame, StatusBar } from "./PhoneFrame";
 import { DesktopShell } from "./desktop/DesktopShell";
 import { AuthGate } from "./AuthGate";
 import { Toast } from "./Toast";
-import { EmptyState } from "./EmptyState";
-import { SkeletonList } from "./Skeleton";
-import { CheckIcon } from "./icons";
 import {
   ApiError,
   UnauthorizedError,
   chatWithAssistant,
-  createProject,
   deleteItem,
-  deleteProject,
   fetchAgendaDay,
   fetchCalDavStatus,
   fetchProjects,
@@ -49,16 +44,13 @@ import {
   enqueue,
   flushQueue,
   queueDepth,
-  queueServerSnapshot,
-  queueSnapshot,
-  subscribeQueue,
 } from "@/lib/queue";
-import { enablePush, sendTestPush, readPushState, isStandalone, isIOS, type PushState } from "@/lib/push-client";
-import { SEED_PROJECTS, fallbackProjectId } from "@/lib/projects";
+import { enablePush, sendTestPush, readPushState } from "@/lib/push-client";
+import { SEED_PROJECTS } from "@/lib/projects";
 import { useRecorder, type Recording } from "@/lib/useRecorder";
 import { useIsDesktop } from "@/lib/useIsDesktop";
 import { zonedParts, shiftDays, zonedTime } from "@/lib/zoned";
-import type { DraftItem, Item, Overview, Phase, Project, ToastKind } from "@/lib/types";
+import type { DraftItem, Item, Overview, Project, ToastKind } from "@/lib/types";
 
 /** Date du jour, `AAAA-MM-JJ` en Europe/Paris — clé attendue par `/api/agenda`. */
 function todayDateKey(): string {
@@ -127,8 +119,6 @@ export function BriefApp() {
   const [transcript, setTranscript] = useState(readStoredTranscript);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [sent, setSent] = useState<Item[]>([]);
-  const [doneBusyId, setDoneBusyId] = useState<string | null>(null);
-  const pending = useSyncExternalStore(subscribeQueue, queueSnapshot, queueServerSnapshot);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   // Source unique pour « aujourd'hui » : le même `/api/agenda` que l'onglet
@@ -137,7 +127,6 @@ export function BriefApp() {
   const [todayAgenda, setTodayAgenda] = useState<AgendaItem[]>([]);
   const [todayAgendaLoaded, setTodayAgendaLoaded] = useState(false);
   const [projects, setProjects] = useState<Project[]>(SEED_PROJECTS);
-  const [reloading, setReloading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,7 +174,7 @@ export function BriefApp() {
     toastTimer.current = setTimeout(() => setToast(null), 3200);
   }, []);
 
-  const fail = useCallback((e: unknown, fallbackTitle: string, retry?: () => void) => {
+  const fail = useCallback((e: unknown, fallbackTitle: string) => {
     if (e instanceof UnauthorizedError) {
       setUnlocked(false);
       return;
@@ -224,7 +213,6 @@ export function BriefApp() {
     const before = sent.find((t) => t.id === id);
     if (!before) return;
     const done = !before.doneAt;
-    setDoneBusyId(id);
     setSent((s) => s.map((t) => (t.id === id ? { ...t, doneAt: done ? new Date().toISOString() : null } : t)));
     try {
       const { item, outcome } = await setItemDone(id, done, completedAt);
@@ -242,7 +230,6 @@ export function BriefApp() {
       if (e instanceof UnauthorizedError) { fail(e, ""); return; }
       flash(e instanceof ApiError ? e.message : "La coche n'a pas été enregistrée.", "err");
     } finally {
-      setDoneBusyId(null);
     }
   }, [sent, flash, refreshOverview, refreshTodayAgenda, fail]);
 
@@ -379,15 +366,13 @@ export function BriefApp() {
   }, [flash, fail, refreshItems]);
 
   /* --- Projects --- */
-  const loadProjects = useCallback(async (opts: { silent?: boolean } = {}) => {
-    if (!opts.silent) setReloading(true);
+  const loadProjects = useCallback(async () => {
     try {
       const list = await fetchProjects();
       if (list.length) setProjects(list);
     } catch (e) {
       if (e instanceof UnauthorizedError) { setUnlocked(false); }
     } finally {
-      setReloading(false);
     }
   }, []);
 
@@ -399,13 +384,13 @@ export function BriefApp() {
     try {
       if (!loadedRef.current) {
         loadedRef.current = true;
-        await loadProjects({ silent: true });
+        await loadProjects();
       }
       const items = await parseNote(source);
       setDrafts(items);
       setCaptureStage("done");
     } catch (e) {
-      fail(e, "La structuration a échoué.", () => structureRef.current(source));
+      fail(e, "La structuration a échoué.");
       setCaptureStage("idle");
     }
   }, [fail, loadProjects]);
@@ -527,7 +512,7 @@ export function BriefApp() {
         setCaptureOpen(false);
         flash(`Hors ligne — ${ready.length} en attente.`, "err");
       } else {
-        fail(e, "L'enregistrement a échoué.", () => sendRef.current());
+        fail(e, "L'enregistrement a échoué.");
       }
     }
   }, [drafts, transcript, flash, fail, refreshItems]);
@@ -539,7 +524,7 @@ export function BriefApp() {
     if (!hydrated || !unlocked) return;
     let alive = true;
     void (async () => { if (alive) await refreshItems(); })();
-    void (async () => { if (alive) await loadProjects({ silent: true }); })();
+    void (async () => { if (alive) await loadProjects(); })();
     // Vérifier l'état d'abonnement push au démarrage — sans ça, le statut
     // repasse à "Désactivées" à chaque réouverture même si l'utilisateur
     // a déjà activé les notifications.
@@ -696,7 +681,6 @@ export function BriefApp() {
             todayAgenda={todayAgenda}
             ideaCount={ideaItems.length}
             projects={projects}
-            overview={overview}
             loading={loading}
             onToggleDone={toggleDoneSimple}
             onOpenTask={openTask}
@@ -734,14 +718,13 @@ export function BriefApp() {
         {screen === "ideas" && (
           <IdeasScreen
             ideas={ideaItems}
-            projects={projects}
             onConvert={(id) => {
               void (async () => {
                 try {
                   const updated = await updateItem(id, { status: "active" });
                   setSent((s) => s.map((t) => (t.id === id ? updated : t)));
                   flash("Idée convertie en tâche.");
-                } catch (e) {
+                } catch {
                   flash("Conversion impossible.", "err");
                 }
               })();
@@ -843,7 +826,7 @@ export function BriefApp() {
               onTestPush={() => {
                 void (async () => {
                   try {
-                    const { sent, total } = await sendTestPush();
+                    const { sent } = await sendTestPush();
                     if (sent > 0) flash("Notification envoyée — vérifie ton écran.");
                     else flash("Aucun abonnement actif. Active les notifications d'abord.", "err");
                   } catch (e) {
