@@ -102,6 +102,27 @@ export async function writeBoard(board: KanbanBoard): Promise<void> {
   return serialize(() => writeJson("boards.json", board));
 }
 
+/**
+ * Lecture-modification-écriture ATOMIQUE du board : `fn` reçoit le board du
+ * moment et rend le nouveau — ou la même référence pour ne rien écrire.
+ *
+ * `writeBoard` ne sérialise que l'écriture : `readBoard()` puis mutation puis
+ * `writeBoard()` laisse une fenêtre où deux modifications concurrentes perdent
+ * l'une des deux. C'était théorique tant que `reorder` n'avait aucun appelant ;
+ * le glisser-déposer des colonnes en fait un geste rapide et répété.
+ */
+export async function updateBoardAtomically(
+  fn: (board: KanbanBoard) => KanbanBoard,
+): Promise<KanbanBoard> {
+  return serialize(async () => {
+    const stored = await readJson<KanbanBoard | null>("boards.json", null);
+    const board = stored === null ? SEED_BOARD : stored;
+    const next = fn(board);
+    if (next !== board) await writeJson("boards.json", next);
+    return next;
+  });
+}
+
 /* --- Réglages ------------------------------------------------------------ */
 
 /**
@@ -224,6 +245,19 @@ function normalizeItem(it: Item): Item {
     tags: Array.isArray(it.tags) ? it.tags : [],
     dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
     columnId: it.columnId ?? null,
+    // Même règle que `due` appliquée à un nombre : un `"3"` (chaîne) ou un
+    // `NaN` venu d'un `items.json` édité à la main atteindrait le comparateur
+    // de `kanban.ts` et rendrait l'ordre de la colonne non spécifié — sans
+    // qu'aucune erreur ne soit levée.
+    //
+    // Le test est le MÊME que celui des deux chemins d'écriture (`coerce`,
+    // `sanitizePatch`) : entier ≥ 0. Un `Number.isFinite` seul laissait passer
+    // `-3` et `2.5`, que ni l'API ni l'UI ne peuvent produire — la
+    // normalisation était plus faible que ce que son commentaire promettait.
+    columnOrder:
+      Number.isInteger(it.columnOrder) && (it.columnOrder as number) >= 0
+        ? it.columnOrder
+        : undefined,
     objectiveId: it.objectiveId ?? null,
   };
 }
@@ -278,6 +312,34 @@ export async function deleteItem(id: string): Promise<boolean> {
  * appels séparés, c'est dix cycles lecture-écriture et autant d'occasions de
  * réenvoyer un rappel déjà parti si le processus s'arrête au milieu.
  */
+/**
+ * Lecture-modification-écriture ATOMIQUE des items : `fn` reçoit tous les items
+ * du moment et rend la liste des patches à appliquer — ou un tableau vide pour
+ * ne rien écrire. Même patron que `updateObjectivesAtomically`.
+ *
+ * Ce que `patchItems` seul ne suffit pas à garantir : il relit bien dans la
+ * file, mais le CALCUL des patches se ferait avant, hors file, sur un état
+ * périmé. Pour un déplacement de carte Kanban — qui renumérote jusqu'à deux
+ * colonnes entières à partir de ce qu'il a lu — ça produit un ordre faux sans
+ * qu'aucune requête n'échoue.
+ */
+export async function updateItemsAtomically(
+  fn: (items: Item[]) => { id: string; patch: Partial<Item> }[],
+): Promise<Item[]> {
+  return serialize(async () => {
+    const items = await readItems();
+    const patches = fn(items);
+    if (!patches.length) return items;
+    const byId = new Map(patches.map((p) => [p.id, p.patch]));
+    const next = items.map((item) => {
+      const patch = byId.get(item.id);
+      return patch ? { ...item, ...patch, id: item.id } : item;
+    });
+    await writeJson("items.json", next);
+    return next;
+  });
+}
+
 export async function patchItems(
   patches: { id: string; patch: Partial<Item> }[],
 ): Promise<number> {
