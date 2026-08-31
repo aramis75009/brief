@@ -116,8 +116,8 @@ export type Store = {
   saveSubscription(sub: Omit<PushSubscriptionRecord, "createdAt">): Promise<void>;
   removeSubscription(endpoint: string): Promise<void>;
   // caldav
-  readLastSync(): Promise<number | null>;
-  writeLastSync(at: number): Promise<void>;
+  readLastCalDavSync(): Promise<number | null>;
+  writeLastCalDavSync(at: number): Promise<void>;
 };
 
 /** Le store d'un compte. Lève si `userId` n'est pas un UUID. */
