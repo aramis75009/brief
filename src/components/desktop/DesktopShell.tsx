@@ -21,11 +21,12 @@ import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
 import { CommandPalette } from "./CommandPalette";
 import { leastUrgentId, type TaskKindFilter } from "@/lib/desktopDashboard";
+import { fallbackProjectId } from "@/lib/projects";
 import { graphStatus, graphTasks, indexById } from "@/lib/graph";
-import { fetchBoard, addColumn, renameColumn, deleteColumn, fetchTags, createTag, fetchObjectives, createObjective, updateObjective, deleteObjective } from "@/lib/api";
+import { fetchBoard, addColumn, renameColumn, deleteColumn, reorderColumns, setColumnWip, moveCard, fetchTags, createTag, fetchObjectives, createObjective, updateObjective, deleteObjective } from "@/lib/api";
 import type { DesktopScreen } from "./types";
 import type { AgendaItem } from "@/lib/agenda";
-import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, Tag } from "@/lib/types";
+import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, Tag, ToastKind } from "@/lib/types";
 
 const C = { bg: "var(--color-bg)" } as const;
 
@@ -45,6 +46,8 @@ export function DesktopShell({
   onPromoteIdea,
   onSaveItem,
   onQuickAddTask,
+  onRefreshItems,
+  onFlash,
   onDeleteItem,
   onEnablePush,
   onOpenCapture,
@@ -65,7 +68,11 @@ export function DesktopShell({
   onArchiveIdea: (id: string) => void;
   onPromoteIdea: (id: string) => void;
   onSaveItem: (id: string, patch: Partial<DraftItem>) => Promise<boolean>;
-  onQuickAddTask: (title: string, projectId: string) => void;
+  onQuickAddTask: (title: string, projectId: string, columnId?: string) => void;
+  /** Relit les items depuis le serveur — après un geste qui écrit hors `onSaveItem`. */
+  onRefreshItems: () => Promise<void>;
+  /** Le bandeau de `BriefApp`. Un dépôt qui échoue doit se voir (`TODOS.md` P3 #8). */
+  onFlash: (msg: string, kind?: ToastKind) => void;
   onDeleteItem: (id: string) => void;
   onEnablePush: () => void;
   onOpenCapture: () => void;
@@ -110,32 +117,100 @@ export function DesktopShell({
     })();
   }, []);
 
+  /**
+   * ⚠️ Les gestes du board ne sont plus muets.
+   *
+   * Les cinq `catch` vides d'origine faisaient revenir la carte à sa place
+   * sans un mot : indiscernable d'un dépôt refusé, d'une session expirée ou
+   * d'une panne réseau. Le succès, lui, reste muet — Trello ne dit
+   * rien quand un déplacement marche.
+   */
   const handleAddColumn = useCallback(async (name: string) => {
     try {
-      const b = await addColumn(name);
-      setBoard(b);
-    } catch { /* silencieux */ }
-  }, []);
+      setBoard(await addColumn(name));
+    } catch {
+      onFlash("La liste n'a pas été créée.", "err");
+    }
+  }, [onFlash]);
 
   const handleRenameColumn = useCallback(async (id: string, name: string) => {
     try {
-      const b = await renameColumn(id, name);
-      setBoard(b);
-    } catch { /* silencieux */ }
-  }, []);
+      setBoard(await renameColumn(id, name));
+    } catch {
+      onFlash("Le nom n'a pas été enregistré.", "err");
+    }
+  }, [onFlash]);
 
-  const handleDeleteColumn = useCallback(async (id: string) => {
+  const handleDeleteColumn = useCallback(async (id: string, _cardCount: number) => {
     try {
-      const b = await deleteColumn(id);
-      setBoard(b);
-    } catch { /* silencieux */ }
-  }, []);
+      setBoard(await deleteColumn(id));
+      // Relecture INCONDITIONNELLE. `cardCount` vient du `items` du client,
+      // qui peut être en retard : une carte posée sur cette colonne depuis un
+      // autre onglet, par l'iPhone ou par la synchro CalDAV donne `0` ici alors
+      // que le serveur en détache une. On sauterait alors le rafraîchissement,
+      // et cette carte garderait côté client un `columnId` mort — elle ne
+      // s'afficherait ni dans une colonne ni dans « Non placées ». C'est
+      // exactement la disparition que cette PR corrige.
+      await onRefreshItems();
+    } catch {
+      onFlash("La liste n'a pas été supprimée.", "err");
+    }
+  }, [onFlash, onRefreshItems]);
 
-  const handleMoveCard = useCallback(async (itemId: string, columnId: string) => {
+  const handleSetWip = useCallback(async (columnId: string, limit: number | null) => {
     try {
-      await onSaveItem(itemId, { columnId });
-    } catch { /* silencieux */ }
-  }, [onSaveItem]);
+      setBoard(await setColumnWip(columnId, limit));
+    } catch {
+      onFlash("La limite n'a pas été enregistrée.", "err");
+    }
+  }, [onFlash]);
+
+  const handleReorderColumns = useCallback(async (ids: string[]) => {
+    try {
+      setBoard(await reorderColumns(ids));
+    } catch {
+      onFlash("L'ordre des listes n'a pas été enregistré.", "err");
+      try { setBoard(await fetchBoard()); } catch { /* le board affiché reste celui d'avant */ }
+    }
+  }, [onFlash]);
+
+  /**
+   * Déplacement d'une carte. On envoie une INTENTION (les voisins au point de
+   * dépôt), jamais des rangs : l'écran ne voit qu'une partie de la colonne.
+   * Le serveur numérote, on relit.
+   *
+   * Ne passe PAS par `onSaveItem` : celui-ci flashe « Modifications
+   * enregistrées » à chaque appel — un dépôt en produirait un par carte
+   * renumérotée.
+   */
+  const handleMoveCard = useCallback(
+    async (intent: { itemId: string; toColumnId: string | null; beforeId?: string; afterId?: string }) => {
+      try {
+        await moveCard(intent);
+      } catch {
+        onFlash("Le déplacement n'a pas été enregistré.", "err");
+      }
+      // Dans les deux cas : on relit. Après un succès pour prendre les rangs
+      // que le serveur a calculés, après un échec pour que la carte revienne à
+      // sa place SERVEUR et non à celle qu'on croyait.
+      //
+      // Le `catch` est indispensable : si c'est le réseau qui est tombé, cette
+      // relecture échoue aussi, et un rejet non capturé ici remonterait dans le
+      // `.finally` de `DesktopKanban` sans que rien ne l'attrape.
+      try {
+        await onRefreshItems();
+      } catch { /* l'état affiché reste celui d'avant — le toast a déjà parlé */ }
+    },
+    [onFlash, onRefreshItems],
+  );
+
+  /** Le « + » d'une colonne crée une vraie carte, en bas, sur le projet filtré. */
+  const handleAddCard = useCallback(
+    (columnId: string, title: string, projectId: string | null) => {
+      onQuickAddTask(title, projectId ?? fallbackProjectId(projects), columnId);
+    },
+    [onQuickAddTask, projects],
+  );
 
   /** Recharge les objectifs — l'auto-complétion (`reconcileObjectives`, côté
    * serveur) peut avoir clos ou rouvert un objectif après une mutation d'item. */
@@ -352,9 +427,12 @@ export function DesktopShell({
               board={board}
               tags={tags}
               onMoveCard={handleMoveCard}
+              onReorderColumns={handleReorderColumns}
               onAddColumn={handleAddColumn}
               onRenameColumn={handleRenameColumn}
               onDeleteColumn={handleDeleteColumn}
+              onSetWip={handleSetWip}
+              onAddCard={handleAddCard}
               onOpenTask={openTask}
             />
           )}

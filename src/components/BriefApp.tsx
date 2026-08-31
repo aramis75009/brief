@@ -347,20 +347,30 @@ export function BriefApp() {
   }, [flash, refreshOverview, refreshTodayAgenda]);
 
   /** Tâches : ajout rapide sans passer par la voix (écran Tâches desktop). */
-  const quickAddTask = useCallback((title: string, projectId: string) => {
+  /**
+   * Ajout rapide d'une tâche. `columnId` la pose directement sur une colonne du
+   * Kanban : dans ce cas elle naît **sans échéance**, parce qu'une carte posée
+   * sur un tableau ne demande pas à sonner demain à 9 h — l'échéance par défaut
+   * n'a de sens que pour la capture rapide de l'accueil.
+   */
+  const quickAddTask = useCallback((title: string, projectId: string, columnId?: string) => {
     const t = title.trim();
     if (!t) { flash("Écris quelque chose d'abord.", "err"); return; }
     void (async () => {
       try {
         const tomorrow = shiftDays(zonedParts(new Date()), 1);
-        const due = toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
+        const due = columnId
+          ? null
+          : toIsoWithOffset(zonedTime(tomorrow.y, tomorrow.m, tomorrow.d, 9, 0));
         const draft: DraftItem = {
-          id: uid(), kind: "task", title: t, projectId, due, allDay: false,
+          id: uid(), kind: "task", title: t, projectId, due, allDay: !due,
           priority: 2, rrule: null, status: "active",
+          ...(columnId ? { columnId } : {}),
         };
         const { saved, total } = await saveItems([draft]);
         if (saved < total) { flash("Non enregistré.", "err"); return; }
         await refreshItems();
+        if (columnId) return; // le Kanban montre la carte : un toast serait du bruit
         flash(`Rangé dans ${projectsRef.current.find((p) => p.id === projectId)?.name ?? projectId}.`);
       } catch (e) {
         fail(e, "L'ajout a échoué.");
@@ -649,6 +659,8 @@ export function BriefApp() {
           onPromoteIdea={promoteIdeaTomorrow}
           onSaveItem={saveItemEdit}
           onQuickAddTask={quickAddTask}
+          onRefreshItems={refreshItems}
+          onFlash={flash}
           onDeleteItem={(id) => void removeItem(id)}
           onEnablePush={() => {
             void (async () => {

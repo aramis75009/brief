@@ -55,6 +55,24 @@ function isLate(due: string | null | undefined): boolean {
   return due ? new Date(due).getTime() < Date.now() : false;
 }
 
+/**
+ * La carte n'est PAS un `<button>`.
+ *
+ * `useSortable` pose `role="button"` et `tabIndex=0` sur le nœud qu'il rend
+ * saisissable. Un `<button>` à l'intérieur donnait deux arrêts de tabulation
+ * par carte et, surtout, capturait Espace : le capteur clavier de dnd-kit
+ * attend Espace pour SAISIR la carte, le bouton l'entendait comme un clic et
+ * ouvrait la fiche. Le déplacement au clavier était donc inatteignable.
+ *
+ * L'ouverture passe par un bouton révélé au survol (et par un double-clic sur
+ * la carte, pour qui connaît le raccourci).
+ *
+ * ⚠️ Ce bouton n'est PAS le seul élément focusable de la carte : `useSortable`
+ * pose `tabIndex=0` sur le conteneur, qui reste donc un arrêt de tabulation —
+ * c'est voulu, c'est lui qu'on saisit au clavier. Le conteneur porte en
+ * revanche `role="group"` et non `role="button"` (`DesktopKanban.tsx`), sans
+ * quoi ce `<button>` serait un élément interactif imbriqué dans un autre.
+ */
 export function KanbanCard({
   item,
   project,
@@ -77,20 +95,47 @@ export function KanbanCard({
   const blocked = items ? isBlocked(item, items) : false;
 
   return (
-    <button
-      onClick={onClick}
-      className="flex w-full flex-col text-left"
+    <div
+      onDoubleClick={onClick}
+      className="group/card relative flex w-full flex-col text-left"
       style={{
         padding: "12px 13px",
         background: C.surface,
-        borderRadius: 16,
+        borderRadius: 18,
         border: "1px solid rgba(16,16,16,.06)",
         boxShadow: "0 2px 8px rgba(16,16,16,.04)",
-        cursor: "pointer",
         fontFamily: "inherit",
         gap: 0,
       }}
     >
+      {/* Ouvrir la fiche — révélé au survol, seul élément focusable de la carte */}
+      <button
+        onClick={onClick}
+        onPointerDown={(e) => e.stopPropagation()}
+        aria-label={`Ouvrir « ${item.title} »`}
+        className="absolute opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100"
+        style={{
+          top: 8,
+          right: 8,
+          width: 24,
+          height: 24,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: C.bg,
+          border: "1px solid rgba(16,16,16,.08)",
+          borderRadius: 99,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          fontSize: 12,
+          fontWeight: 700,
+          color: C.inkMuted,
+          lineHeight: 1,
+          zIndex: 2,
+        }}
+      >
+        ↗
+      </button>
       {/* Tags — barres compactes colorées en haut */}
       {item.tags && item.tags.length > 0 && (
         <div className="flex flex-wrap gap-1" style={{ marginBottom: 8 }}>
@@ -203,6 +248,6 @@ export function KanbanCard({
           </span>
         )}
       </div>
-    </button>
+    </div>
   );
 }
