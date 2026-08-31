@@ -75,6 +75,24 @@ d'une colonne **supprimait la colonne**, et l'action `reorder` de
 `PATCH /api/board` n'avait aucun appelant — puis, une fois branchée, ne
 réordonnait rien.
 
+### ⚠️ « Reporter » perd l'heure et ne retire pas l'occurrence du jour (Aramis, 31/08)
+
+**Signalé à l'oral, non reproduit, non investigué** — noté ici pour ne pas le
+perdre. Deux symptômes dans le même geste :
+
+1. La tâche part bien au **lendemain**, mais **pas à la même heure** que la date
+   d'origine.
+2. L'occurrence **d'aujourd'hui ne disparaît pas** — elle apparaît donc deux
+   fois.
+
+Constaté sur un **RDV**. Aramis l'a déplacé à la main dans l'app Calendrier.
+
+Piste à ne PAS traiter comme acquise : `caldavSyncedDue` est déjà signalé comme
+divergeant en silence d'iCloud quand une écriture locale touche `due`
+(`docs/plans/2026-08-31-kanban-trello-calendrier.md`, « Signalé, non traité »
+#1) — et le bouton « Repousser +1j » de `DesktopCalendar.tsx` y est nommément
+cité. Les deux observations peuvent être la même cause, ou pas.
+
 ### Réglages mobile — les 3 bascules décoratives d'`AccountSheet`
 
 **Quoi :** `AccountSheet.tsx` (mobile) porte encore trois bascules qui ne font
