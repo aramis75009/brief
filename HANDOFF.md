@@ -17,7 +17,7 @@ que tu remplaces dans `docs/handoffs/`.
 | **Agent** | **Claude Code (Opus 5)**. Même agent que la passation précédente — session coupée en cours de chantier, reprise le 31/08 vers 10 h 45. |
 | **Branche** | `feat/kanban-trello` · **Base** `main` (`fb39b9c`) |
 | **GitHub** | **`origin/main` = `49b4d59`** — [PR #9](https://github.com/aramis75009/brief/pull/9) **mergée** le 31/08 à 17 h 43 UTC (`v1.1.0.0`, 12 commits). |
-| **Prod** | **`5662ff32`** — v1.1.0.0 déployée et vérifiée par Hermes le 31/08 après-midi. `cat /app/VERSION` → `1.1.0.0`, conteneur `Healthy`, HTTP 200 en 98 ms, React hydraté sans exception. |
+| **Prod** | **`72a7d1db`** — PR #9, #10, #11 déployées et vérifiées par Hermes le 31/08. `cat /app/VERSION` → `1.1.0.0`, HTTP 200 en 73 ms, hydratation propre, 8 chunks JS en 200, zéro exception console. **Alignée sur `origin/main`.** |
 
 ## Goal
 Chantier A du plan `docs/plans/2026-08-31-kanban-trello-calendrier.md` — le
@@ -232,6 +232,29 @@ WIP, carte de test supprimée). Vérifié à l'écran.
   (Chromium headless de Playwright, `--dump-dom`), pas avec `curl`.
 
 ## Blockers
+
+### 🔴 Structurel — aucun agent ne peut recetter un écran authentifié en prod
+
+**Rencontré trois fois le 31/08**, et c'est le blocage le plus coûteux du
+projet aujourd'hui :
+
+1. Le glisser-déposer du Kanban (PR #9) — Hermes n'a pas de compte.
+2. Les six écrans mobiles touchés par le ménage (PR #11) — même raison.
+3. Ma propre recette du 31/08 n'a été possible **qu'en local**, et seulement
+   parce qu'Aramis s'est connecté à la main dans un Chrome visible
+   (`browse handoff`).
+
+Ce qu'un agent peut prouver sans compte s'arrête à : la page d'entrée hydrate,
+les chunks JS répondent 200, les routes gardées rendent 401. **Ça ne teste
+aucun écran.** Tout ce qui a de la valeur produit est derrière `requireSession()`.
+
+**La sortie évidente : un compte de recette Supabase**, aux identifiants
+distincts de ceux d'Aramis, révocable seul, dont les données ne sont pas les
+siennes. C'est une décision produit — elle n'a jamais été posée. Sans elle,
+chaque déploiement se termine par « à vérifier par Aramis à la main », et
+c'est exactement ce qui n'est pas fait quand on est pressé.
+### Autres
+
 1. **Pas de SSH vers le VPS depuis le Mac** — inchangé. Déployer et lire les
    logs passe par Hermes.
 2. **Le webhook `deploy.sh` ne passe toujours pas** (202 sans effet,
