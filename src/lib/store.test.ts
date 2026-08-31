@@ -93,11 +93,22 @@ describe("storeForUser", () => {
     const a = storeForUser(A);
     const b = storeForUser(B);
 
-    await a.writeLastCalDavSync(1_700_000_000_000);
+    await a.writeUserJson("caldav-last-sync.json", { lastSyncAt: 1_700_000_000_000 });
 
-    expect(await a.readLastCalDavSync()).toBe(1_700_000_000_000);
+    expect(await a.readUserJson("caldav-last-sync.json", null)).toEqual({
+      lastSyncAt: 1_700_000_000_000,
+    });
     // Sans cloisonnement, la synchro de A ferait sauter celle de B pendant 15 min.
-    expect(await b.readLastCalDavSync()).toBeNull();
+    expect(await b.readUserJson("caldav-last-sync.json", null)).toBeNull();
+  });
+
+  it("refuse un nom de fichier qui sortirait du répertoire du compte", async () => {
+    const { storeForUser } = await import("./store");
+    const a = storeForUser(A);
+
+    // `readUserJson` est le SEUL point où un nom de fichier vient d'un appelant.
+    await expect(a.readUserJson(`../${B}/items.json`, null)).rejects.toThrow();
+    await expect(a.writeUserJson("../../etc/passwd", {})).rejects.toThrow();
   });
 
   it("refuse un identifiant qui n'est pas un UUID", async () => {

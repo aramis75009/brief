@@ -1,6 +1,5 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { applySettingsPatch } from "@/lib/settings";
-import { readSettings, updateSettingsAtomically } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,21 +15,23 @@ export const dynamic = "force-dynamic";
  * sûre — `PATCH` ne peut que basculer des booléens connus, jamais introduire
  * une clé (`applySettingsPatch`, testé).
  *
- * Garde : `requireSession()` seule. Un réglage est une ÉCRITURE, même quand il
+ * Garde : `requireStore()` seule. Un réglage est une ÉCRITURE, même quand il
  * ne touche qu'un booléen — pas de jeton machine ici, et surtout pas la garde
  * mixte de `/api/agenda`, qui est réservée à la lecture.
  */
 
 export async function GET(): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
-  return Response.json(await readSettings());
+  return Response.json(await store.readSettings());
 }
 
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: unknown;
   try {
@@ -41,7 +42,7 @@ export async function PATCH(req: Request): Promise<Response> {
 
   // `applySettingsPatch` rend la même référence quand rien ne bouge :
   // `updateSettingsAtomically` saute alors l'écriture disque.
-  const settings = await updateSettingsAtomically((current) =>
+  const settings = await store.updateSettingsAtomically((current) =>
     applySettingsPatch(current, body),
   );
   return Response.json(settings);

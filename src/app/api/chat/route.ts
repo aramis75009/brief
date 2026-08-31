@@ -1,5 +1,4 @@
-import { requireSession } from "@/lib/guard";
-import { readItems, readProjects } from "@/lib/store";
+import { requireStore } from "@/lib/guard";
 import { zonedParts } from "@/lib/zoned";
 import { TIMEZONE } from "@/lib/due";
 import type { Item, Project } from "@/lib/types";
@@ -94,8 +93,9 @@ function buildSystemPrompt(items: Item[], projects: Project[], now: Date): strin
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { messages?: unknown };
   try {
@@ -132,7 +132,7 @@ export async function POST(req: Request): Promise<Response> {
   const model = process.env.CHAT_MODEL || "deepseek-v4-flash:0731";
   const now = new Date();
 
-  const [items, projects] = await Promise.all([readItems(), readProjects()]);
+  const [items, projects] = await Promise.all([store.readItems(), store.readProjects()]);
   const system = buildSystemPrompt(items, projects, now);
 
   try {

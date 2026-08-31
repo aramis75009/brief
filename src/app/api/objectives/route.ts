@@ -1,13 +1,13 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { reconcileObjectives, uniqueObjectiveId } from "@/lib/objectives";
-import { readObjectives, readProjects, updateObjectivesAtomically } from "@/lib/store";
 import type { Objective, ObjectiveHorizon } from "@/lib/types";
 
 /**
  * Objectifs Brief — lecture, création, édition, suppression.
  *
  * Un objectif n'est pas un item : il survit à ses tâches, les orchestre.
- * Règle absolue : toute route sous /api/ commence par requireSession().
+ * Règle absolue : toute route sous /api/ commence par une garde —
+ * `requireStore()` quand elle touche au store, `requireSession()` sinon.
  *
  * Toute mutation passe par `updateObjectivesAtomically` (lecture-modification-
  * écriture sérialisée) et applique `reconcileObjectives` dans la même passe :
@@ -41,15 +41,17 @@ export function cleanDeps(v: unknown, ownId: string): string[] | undefined {
 }
 
 export async function GET(_req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
-  return Response.json(await readObjectives());
+  return Response.json(await store.readObjectives());
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { title?: unknown; projectId?: unknown; horizon?: unknown; notes?: unknown };
   try {
@@ -67,14 +69,14 @@ export async function POST(req: Request): Promise<Response> {
   const horizon: ObjectiveHorizon = isHorizon(body.horizon) ? body.horizon : "moyen";
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 500) || undefined : undefined;
 
-  const projects = await readProjects();
+  const projects = await store.readProjects();
   if (!projects.some((p) => p.id === projectId)) {
     return Response.json({ error: "Projet introuvable." }, { status: 404 });
   }
 
   let createdId = "";
   try {
-    const reconciled = await updateObjectivesAtomically((objectives, items) => {
+    const reconciled = await store.updateObjectivesAtomically((objectives, items) => {
       const created: Objective = {
         id: uniqueObjectiveId(title, new Set(objectives.map((o) => o.id))),
         projectId,
@@ -100,8 +102,9 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: {
     id?: unknown;
@@ -150,7 +153,7 @@ export async function PATCH(req: Request): Promise<Response> {
 
   let found = false;
   try {
-    const reconciled = await updateObjectivesAtomically((objectives, items) => {
+    const reconciled = await store.updateObjectivesAtomically((objectives, items) => {
       const index = objectives.findIndex((o) => o.id === id);
       if (index === -1) return null;
       found = true;
@@ -169,8 +172,9 @@ export async function PATCH(req: Request): Promise<Response> {
 }
 
 export async function DELETE(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { id?: unknown };
   try {
@@ -185,7 +189,7 @@ export async function DELETE(req: Request): Promise<Response> {
   const tag = `obj:${id}`;
   let found = false;
   try {
-    await updateObjectivesAtomically((objectives, items) => {
+    await store.updateObjectivesAtomically((objectives, items) => {
       if (!objectives.some((o) => o.id === id)) return null;
       found = true;
       // Retire aussi les liens `obj:<id>` que d'autres objectifs pointaient

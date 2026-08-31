@@ -1,7 +1,6 @@
 import { makeBucketOf, midnightAt } from "@/lib/buckets";
 import { TIMEZONE } from "@/lib/due";
-import { requireSession } from "@/lib/guard";
-import { readItems, readProjects } from "@/lib/store";
+import { requireStore } from "@/lib/guard";
 import { zonedParts } from "@/lib/zoned";
 
 export const runtime = "nodejs";
@@ -50,10 +49,11 @@ function weekdayLabel(d: Date, isToday: boolean): string {
 }
 
 export async function GET(_req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
-  const [items, projects] = await Promise.all([readItems(), readProjects()]);
+  const [items, projects] = await Promise.all([store.readItems(), store.readProjects()]);
   const now = new Date();
   const today = midnightAt(now, 0);
 

@@ -1,5 +1,4 @@
-import { requireSession } from "@/lib/guard";
-import { readItems } from "@/lib/store";
+import { requireStore } from "@/lib/guard";
 import type { Item } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -19,8 +18,9 @@ export const dynamic = "force-dynamic";
  * Retourne les items correspondants avec le type de match.
  */
 export async function GET(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   const url = new URL(req.url);
   const q = url.searchParams.get("q")?.trim().toLowerCase();
@@ -29,7 +29,7 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ results: [], query: "" });
   }
 
-  const items = await readItems();
+  const items = await store.readItems();
 
   const results = items
     .filter((item) => {

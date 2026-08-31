@@ -1,9 +1,8 @@
 import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
-import { deleteItem, patchItem, readItems, readProjects } from "@/lib/store";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
 
 /**
@@ -159,8 +158,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   const { id } = await params;
   if (!id.trim()) {
@@ -174,7 +174,7 @@ export async function PATCH(
     return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
   }
 
-  const projects: Project[] = await readProjects();
+  const projects: Project[] = await store.readProjects();
   const known = new Set(projects.map((p) => p.id));
   const patch = sanitizePatch(body, known, fallbackProjectId(projects));
 
@@ -188,7 +188,7 @@ export async function PATCH(
   // une écriture qui échoue doit produire un 503 en français, pas le 500
   // générique de Next — le client affiche le message tel quel.
   try {
-    const updated = await patchItem(id, patch);
+    const updated = await store.patchItem(id, patch);
     if (!updated) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
     }
@@ -196,7 +196,7 @@ export async function PATCH(
     // ET `status` (archivé/idée = hors plan de travail depuis `effectiveDeps`)
     // peuvent tous clore ou rouvrir un objectif. `reconcileObjectives` ne
     // réécrit rien si rien n'a bougé — pas de liste blanche de champs à tenir.
-    await reconcileObjectivesInStore();
+    await reconcileObjectivesInStore(store);
     return Response.json({ item: updated });
   } catch (e) {
     return Response.json(
@@ -228,8 +228,9 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   const { id } = await params;
   if (!id.trim()) {
@@ -244,18 +245,18 @@ export async function DELETE(
     // indiscernable d'un événement jamais adopté — et RECRÉE l'item avec le
     // même id déterministe. Lu AVANT `deleteItem` : après, l'item n'existe
     // plus nulle part pour retrouver son `externalUid`.
-    const before = (await readItems()).find((i) => i.id === id);
+    const before = (await store.readItems()).find((i) => i.id === id);
     if (before?.externalUid) {
-      await recordDeletedExternalUid(before.externalUid);
+      await recordDeletedExternalUid(store, before.externalUid);
     }
 
-    const deleted = await deleteItem(id);
+    const deleted = await store.deleteItem(id);
     if (!deleted) {
       return Response.json({ error: "Item introuvable." }, { status: 404 });
     }
     // Supprimer une tâche liée à un objectif retire une dépendance : l'objectif
     // peut désormais être satisfait (ou n'avoir plus aucune dépendance).
-    await reconcileObjectivesInStore();
+    await reconcileObjectivesInStore(store);
     return Response.json({ ok: true, id });
   } catch (e) {
     return Response.json(

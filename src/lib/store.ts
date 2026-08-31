@@ -82,9 +82,23 @@ export type Store = {
   readSubscriptions(): Promise<PushSubscriptionRecord[]>;
   saveSubscription(sub: Omit<PushSubscriptionRecord, "createdAt">): Promise<void>;
   removeSubscription(endpoint: string): Promise<void>;
-  readLastCalDavSync(): Promise<number | null>;
-  writeLastCalDavSync(at: number): Promise<void>;
+  /**
+   * Accès JSON générique, RELATIF au répertoire du compte.
+   *
+   * ⚠️ Réservé à `caldav.ts`, qui persiste deux fichiers dont les formats lui
+   * appartiennent (`SyncState`, `AgendaSnapshot`). Les typer ici forcerait
+   * `store.ts` à importer `caldav.ts`, qui importe déjà `store.ts` — un cycle.
+   *
+   * Le cloisonnement tient : `name` est validé et résolu sous le répertoire du
+   * compte, il ne peut pas en sortir. Ne pas s'en servir pour du code neuf :
+   * une donnée qui mérite d'exister mérite une méthode nommée.
+   */
+  readUserJson<T>(name: string, fallback: T): Promise<T>;
+  writeUserJson(name: string, value: unknown): Promise<void>;
 };
+
+/** Un nom de fichier de données, sans chemin. Interdit toute remontée (`..`). */
+const DATA_FILE_PATTERN = /^[a-z0-9-]+\.json$/;
 
 /* --- Primitives disque ---------------------------------------------------- */
 
@@ -190,6 +204,19 @@ function normalizeItem(it: Item): Item {
         : undefined,
     objectiveId: it.objectiveId ?? null,
   };
+}
+
+/**
+ * Refuse tout nom de fichier qui pourrait sortir du répertoire du compte.
+ *
+ * Sans ce garde, `readUserJson("../<autre-compte>/items.json")` traverserait le
+ * cloisonnement — et c'est le seul point du module où un nom de fichier vient
+ * d'un appelant plutôt que d'une constante.
+ */
+function assertDataFileName(name: string): void {
+  if (!DATA_FILE_PATTERN.test(name)) {
+    throw new Error(`Nom de fichier de données invalide : ${JSON.stringify(name)}`);
+  }
 }
 
 /* --- La fabrique ---------------------------------------------------------- */
@@ -467,22 +494,24 @@ function makeStore(dir: string, key: string): Store {
       });
     },
 
-    /* --- Garde-fou de synchro CalDAV ------------------------------------- */
+    /* --- Accès générique (CalDAV) ---------------------------------------- */
 
     /**
-     * Horodatage du dernier passage CalDAV RÉUSSI, ou `null`.
-     *
-     * ⚠️ Par compte : partagé, la synchro d'un utilisateur ferait sauter celle de
-     * tous les autres pendant l'intervalle de garde (15 min) — sans rien signaler.
+     * ⚠️ Par compte, comme tout le reste : partagé, le garde-fou de fréquence
+     * CalDAV d'un utilisateur ferait sauter la synchro de tous les autres
+     * pendant 15 minutes — sans rien signaler.
      */
-    async readLastCalDavSync() {
-      const stored = await readJson<{ at?: unknown } | null>("caldav-last-sync.json", null);
-      const at = stored?.at;
-      return typeof at === "number" && Number.isFinite(at) ? at : null;
+    // `async` des deux côtés, pour que le garde REJETTE au lieu de lever
+    // synchroniquement : un appelant qui fait `.catch()` sans `await` ne doit
+    // pas voir passer l'exception à côté de sa gestion d'erreur.
+    async readUserJson<T>(name: string, fallback: T): Promise<T> {
+      assertDataFileName(name);
+      return readJson<T>(name, fallback);
     },
 
-    writeLastCalDavSync(at) {
-      return serialize(() => writeJson("caldav-last-sync.json", { at }));
+    async writeUserJson(name, value) {
+      assertDataFileName(name);
+      return serialize(() => writeJson(name, value));
     },
   };
 }

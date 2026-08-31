@@ -1,5 +1,4 @@
-import { requireSession } from "@/lib/guard";
-import { readTags, writeTags } from "@/lib/store";
+import { requireStore } from "@/lib/guard";
 import { TAG_COLORS } from "@/lib/types";
 import type { TagColor } from "@/lib/types";
 
@@ -15,8 +14,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   const { id } = await params;
   let body: { name?: unknown; color?: unknown };
@@ -26,7 +26,7 @@ export async function PATCH(
     return Response.json({ error: "JSON invalide" }, { status: 400 });
   }
 
-  const tags = await readTags();
+  const tags = await store.readTags();
   const tag = tags.find((t) => t.id === id);
   if (!tag) return Response.json({ error: "Tag introuvable" }, { status: 404 });
 
@@ -39,7 +39,7 @@ export async function PATCH(
     tag.color = body.color;
   }
 
-  await writeTags(tags);
+  await store.writeTags(tags);
   return Response.json(tag);
 }
 
@@ -47,15 +47,16 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   const { id } = await params;
-  const tags = await readTags();
+  const tags = await store.readTags();
   const filtered = tags.filter((t) => t.id !== id);
   if (filtered.length === tags.length) {
     return Response.json({ error: "Tag introuvable" }, { status: 404 });
   }
-  await writeTags(filtered);
+  await store.writeTags(filtered);
   return Response.json({ ok: true });
 }
