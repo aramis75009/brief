@@ -16,7 +16,7 @@ que tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Claude Code (Opus 5)**. Même agent que la passation précédente — session coupée en cours de chantier, reprise le 31/08 vers 10 h 45. |
 | **Branche** | `feat/kanban-trello` · **Base** `main` (`fb39b9c`) |
-| **GitHub** | `origin/main` = `fb39b9c`. **[PR #9](https://github.com/aramis75009/brief/pull/9) ouverte** — 5 commits, +2749 −521 sur 19 fichiers. |
+| **GitHub** | `origin/main` = `fb39b9c`. **[PR #9](https://github.com/aramis75009/brief/pull/9) ouverte** (`v1.1.0.0`) — 7 commits, +2885 −524 sur 23 fichiers. |
 | **Prod** | inchangée depuis la passation précédente. PR #7 **toujours pas déployée** (voir Blockers). |
 
 ## Goal
@@ -97,7 +97,17 @@ capturé**.
 
 ## Decisions
 
-Rien de neuf à porter dans `DECISIONS.md`. Les décisions de conception sont
+**Ajoutée en tête de `DECISIONS.md` (2026-08-31) : Brief est versionné.**
+`VERSION` et `CHANGELOG.md` existent enfin — sans eux `/ship` sautait en
+silence ses étapes de bump et de changelog. `main` est situé rétroactivement à
+**1.0.0.0** (l'app est en production et sert tous les jours ; un `0.x` dirait
+« instable » à tort), cette PR est **1.1.0.0**. Format à quatre chiffres,
+`VERSION` fait foi, `package.json` porte la traduction npm à trois chiffres.
+**Ne jamais écrire ces fichiers à la main** — `gstack-version-bump write` les
+synchronise avec le lockfile. Les entrées du CHANGELOG antérieures à 1.1.0.0
+sont reconstituées et le disent en tête de fichier.
+
+Rien d'autre de neuf dans `DECISIONS.md`. Les décisions de conception sont
 celles du plan, déjà arbitrées par `/autoplan` le 30/08.
 
 Une décision de méthode, prise pendant la reprise et assumée :
