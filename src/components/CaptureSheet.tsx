@@ -1,11 +1,9 @@
 "use client";
 
 import { WaveformActive, WaveformCollapsed } from "./Waveform";
-import { VoiceBadge } from "./VoiceBadge";
 import { TypeSegmented } from "./TypeSegmented";
 import { ProjectSelector } from "./ProjectSelector";
-import { skinFor, shapeFor } from "@/lib/projects";
-import { CloseIcon, MicIcon, ArrowRightIcon, StopIcon } from "./icons";
+import { CloseIcon, MicIcon, ArrowRightIcon } from "./icons";
 import { isoToLocalInputValue, localInputToIso, toIsoWithOffset } from "@/lib/due";
 import { itemType, type ItemType } from "@/lib/item-type";
 import { shiftDays, zonedParts, zonedTime } from "@/lib/zoned";

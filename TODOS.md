@@ -75,6 +75,29 @@ d'une colonne **supprimait la colonne**, et l'action `reorder` de
 `PATCH /api/board` n'avait aucun appelant — puis, une fois branchée, ne
 réordonnait rien.
 
+### Quatre intentions déterrées par le ménage du 31/08 (code mort supprimé, intention conservée)
+
+Ces quatre-là n'étaient pas des oublis de nettoyage : c'est du travail
+commencé et jamais fini. Le code mort est parti, l'intention est ici.
+
+1. **« Réessayer » après un échec, jamais construit.** `fail()` acceptait un
+   callback de réessai **et le jetait**. Deux appels en construisaient un
+   (structuration d'une dictée, envoi d'items) — inatteignables : `Toast` ne
+   prend que `{ message, kind }` et il est en `pointer-events-none`, donc même
+   pas cliquable. Un échec de capture vocale n'offre aucun recours.
+2. **La file d'attente hors-ligne est invisible.** `queueSnapshot` était
+   souscrit dans `BriefApp` et **jamais rendu**. Un item mis en file quand le
+   réseau tombe n'apparaît nulle part : l'utilisateur ne sait pas qu'il a
+   quelque chose en attente. `src/lib/queue.ts` fonctionne, c'est l'affichage
+   qui manque.
+3. **`loadProjects({ silent: true })` n'a jamais été silencieux.** L'option
+   était déclarée, jamais lue. Deux appels la passaient en croyant éviter un
+   état de chargement visible.
+4. **`groupByProject` n'est utilisé que par ses propres tests.** La fonction
+   vit dans `src/lib/desktopDashboard.ts`, elle est testée, et **aucun écran
+   ne l'appelle**. Soit un écran l'attend, soit elle doit partir — mais du
+   code testé qui ne sert à rien coûte de la confiance mal placée.
+
 ### Réglages mobile — les 3 bascules décoratives d'`AccountSheet`
 
 **Quoi :** `AccountSheet.tsx` (mobile) porte encore trois bascules qui ne font

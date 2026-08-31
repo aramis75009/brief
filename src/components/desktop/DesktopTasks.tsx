@@ -28,7 +28,6 @@ import {
   TASK_KIND_FILTERS,
   filterAgendaItems,
   filterRowsByState,
-  groupByProject,
   weekOccurrenceRows,
   type TaskFilterKey,
   type TaskKindFilter,

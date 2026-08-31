@@ -29,7 +29,7 @@ import { skinFor, shapeFor } from "@/lib/projects";
 import { compareByDue } from "@/lib/due";
 import { TIMEZONE } from "@/lib/zoned";
 import type { AgendaItem } from "@/lib/agenda";
-import type { Item, Overview, Project } from "@/lib/types";
+import type { Item, Project } from "@/lib/types";
 
 /* ------------------------------------------------------------------ *
  * Formateurs Intl — créés UNE FOIS au niveau du module, pas par ligne.
@@ -64,7 +64,6 @@ interface HomeScreenProps {
   /** Nombre d'idées à trier — même liste que l'écran Idées, jamais recalculé ici. */
   ideaCount: number;
   projects: Project[];
-  overview: Overview | null;
   loading: boolean;
   onToggleDone: (id: string, completedAt?: string | null) => void;
   onOpenTask: (id: string) => void;
@@ -442,7 +441,6 @@ export function HomeScreen({
   todayAgenda,
   ideaCount,
   projects,
-  overview,
   loading,
   onToggleDone,
   onOpenTask,
