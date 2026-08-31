@@ -39,6 +39,14 @@ import type { Item, KanbanBoard, Objective, Project, Tag } from "./types";
  *      `BRIEF_DATA_DIR/users/<userId>/`. Rien dans ce module ne permet
  *      d'atteindre le répertoire d'un autre compte : `storeForUser` est le seul
  *      constructeur, et il valide son argument.
+ *
+ * ⚠️ CE MODULE N'EXPORTE AUCUNE FONCTION GLOBALE, et ce n'est pas un oubli.
+ * Jusqu'au 2026-08-31 il exportait 18 fonctions lisant un jeu de fichiers
+ * unique. En rétablir une seule rouvrirait un chemin où une route lit des
+ * données qui n'appartiennent à personne — sans erreur, sans test rouge : le
+ * fichier serait simplement absent et la route rendrait une liste vide.
+ * C'est la suppression de ces exports qui a PROUVÉ que tous les appelants
+ * étaient portés : le typecheck les a tous nommés.
  */
 
 const DATA_DIR = process.env.BRIEF_DATA_DIR || join(process.cwd(), ".data");
@@ -538,42 +546,3 @@ export function storeForUser(userId: string): Store {
   stores.set(userId, store);
   return store;
 }
-
-/* --- Exports globaux — ⚠️ EN SURSIS --------------------------------------- *
- *
- * Ces fonctions lisent le jeu de fichiers GLOBAL, partagé par tous les comptes.
- * Elles ne subsistent que le temps de porter leurs 22 appelants, et sont
- * supprimées à la tâche 8 du plan
- * `docs/superpowers/plans/2026-08-31-multi-user-lot1-cloisonnement.md`.
- *
- * Ne pas les utiliser dans du code neuf.
- */
-
-const legacyStore = makeStore(DATA_DIR, "__legacy__");
-
-export const readProjects = () => legacyStore.readProjects();
-export const writeProjects = (projects: Project[]) => legacyStore.writeProjects(projects);
-export const readBoard = () => legacyStore.readBoard();
-export const writeBoard = (board: KanbanBoard) => legacyStore.writeBoard(board);
-export const updateBoardAtomically = (fn: (board: KanbanBoard) => KanbanBoard) =>
-  legacyStore.updateBoardAtomically(fn);
-export const readSettings = () => legacyStore.readSettings();
-export const updateSettingsAtomically = (fn: (settings: Settings) => Settings) =>
-  legacyStore.updateSettingsAtomically(fn);
-export const readTags = () => legacyStore.readTags();
-export const writeTags = (tags: Tag[]) => legacyStore.writeTags(tags);
-export const readObjectives = () => legacyStore.readObjectives();
-export const writeObjectives = (objectives: Objective[]) =>
-  legacyStore.writeObjectives(objectives);
-export const updateObjectivesAtomically = (
-  fn: (objectives: Objective[], items: Item[]) => Objective[] | null,
-) => legacyStore.updateObjectivesAtomically(fn);
-export const readItems = () => legacyStore.readItems();
-export const saveItems = (items: Item[]) => legacyStore.saveItems(items);
-export const patchItem = (id: string, patch: Partial<Item>) => legacyStore.patchItem(id, patch);
-export const deleteItem = (id: string) => legacyStore.deleteItem(id);
-export const updateItemsAtomically = (
-  fn: (items: Item[]) => { id: string; patch: Partial<Item> }[],
-) => legacyStore.updateItemsAtomically(fn);
-export const patchItems = (patches: { id: string; patch: Partial<Item> }[]) =>
-  legacyStore.patchItems(patches);
