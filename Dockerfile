@@ -17,6 +17,12 @@ FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Repli si le commit construit est antérieur à l'introduction de VERSION
+# (2026-08-31). `COPY` d'un fichier absent fait ÉCHOUER le build : sans cette
+# ligne, redéployer un ancien commit — un retour arrière, typiquement — casserait
+# au lieu de tourner. Le déploiement se fait par `git pull` puis
+# `docker compose up --build` : le commit construit n'est pas toujours le dernier.
+RUN [ -f VERSION ] || echo "0.0.0.0-pre-versioning" > VERSION
 # Les variables NEXT_PUBLIC_* sont inlinées AU BUILD : sans elles ici, la clé
 # VAPID publique vaut undefined dans le bundle et l'abonnement échoue.
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
