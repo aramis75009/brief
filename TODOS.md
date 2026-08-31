@@ -45,9 +45,9 @@ tâches, idées propres, sans partage par défaut).
   attendu).
 - **Fiche tâche desktop** (`DesktopTaskDetail.tsx`) : livrée et recettée,
   refonte Claude Design à venir (décision du 26/08).
-- **Kanban desktop** : les tags `unplaced` apparaissent parfois dans la
-  colonne mauvaise — `DesktopKanban.tsx:399` filtre par projet sans tenir
-  compte du `columnId` (à vérifier en recettage).
+- ~~**Kanban desktop** : tags `unplaced` dans la mauvaise colonne~~ —
+  **périmé**, vérifié le 31/08 : le filtre tenait déjà compte du `columnId`.
+  `DesktopKanban.tsx` a été réécrit depuis (PR #9).
 - **Teintes iOS saturées** (`DesktopTaskDetail.tsx:40`) : 10 couleurs
   saturées (`#FF3B30`…) apparaissent dans la liste d'affectation projet —
   doivent être remplacées par les teintes `p1–p8` du design system.
@@ -61,13 +61,19 @@ tâches, idées propres, sans partage par défaut).
 - **`<button>` imbriqué** dans `TodayRow` / `RowCheckbox` : erreur HTML
   (hydration React), à corriger quand on y touche.
 
-### ⚠️ Bug Kanban — drag & drop pas Trello (signalé par Aramis le 30/08)
+### ~~⚠️ Bug Kanban — drag & drop pas Trello~~ — **livré (PR #9)**
 
-**Quoi :** « on ne peut pas déplacer les cartes comme on veut ». Objectif
-d'Aramis : **la copie la plus proche de Trello** — déplacer une carte
-librement (entre colonnes, réordonner dans une colonne, peut-être déplacer
-les colonnes elles-mêmes). À investiguer : `DesktopKanban.tsx` + `@dnd-kit`
-(sensors, collision detection, contraintes actuelles).
+Signalé par Aramis le 30/08 : « on ne peut pas déplacer les cartes comme on
+veut ». Livré le 31/08 : carte déplaçable entre colonnes et **à une position
+précise** dans une colonne, colonnes déplaçables, « Non placées » devenue une
+cible de dépôt, clavier (Espace / flèches / Espace). Plan et recette :
+`docs/plans/2026-08-31-kanban-trello-calendrier.md`.
+
+Trois bugs trouvés en chemin et corrigés dans la même PR : supprimer une
+colonne **faisait disparaître ses cartes** (`columnId` mort), le bouton « + »
+d'une colonne **supprimait la colonne**, et l'action `reorder` de
+`PATCH /api/board` n'avait aucun appelant — puis, une fois branchée, ne
+réordonnait rien.
 
 ### Réglages mobile — les 3 bascules décoratives d'`AccountSheet`
 
@@ -156,8 +162,10 @@ sujet proche) :
 1. ~~**Objectifs = moteur du graphe** / auto-complétion~~ — **livré (PR #3)**.
 2. ~~**Les RDV dans le graphe**~~ — **livré (PR #3)** : toggle « RDV », un nœud
    par série.
-3. **Kanban = copie Trello** (voir P1 — bug drag & drop). Objectif assumé :
-   la copie la plus proche de Trello possible. **Non commencé.**
+3. ~~**Kanban = copie Trello**~~ — **livré (PR #9)** : glisser-déposer complet
+   (cartes et colonnes), composeur « + » par colonne, limite WIP indicative,
+   suppression de colonne qui renvoie ses cartes en « Non placées ».
+   *Reste* : le Kanban **mobile**, hors périmètre assumé.
 4. ~~**Objectifs personnalisables après création** (horizon, description)~~ —
    **livré (PR #3)** : édition inline titre / horizon / notes, bouton rouvrir.
    *Reste* : liste des dépendances **dans l'éditeur d'objectif** (le retrait
@@ -173,9 +181,13 @@ sujet proche) :
    **déconnexion** — qui manquait totalement au desktop), et les bascules
    « Calendrier Apple » / « Digest Telegram » agissent vraiment via
    `settings.json`. *Reste* : le mobile (voir P1).
-8. **Vrais messages de modification** adaptés au design system : quand on
-   reporte une tâche, déplace une carte, toute action → un toast conforme.
-   **Non commencé** (aucun système de toast au design v1).
+8. **Vrais messages de modification** adaptés au design system.
+   ⚠️ **La parenthèse « aucun système de toast au design v1 » était fausse** —
+   vérifié le 31/08 : `Toast.tsx` + `flash()` existent et sont montés en
+   desktop (`BriefApp.tsx:182`, `:888`). Le Kanban s'en sert depuis la PR #9
+   (dépôt, renommage, suppression, limite : chaque échec parle). *Reste* :
+   passer les autres écrans en revue — et **le succès reste muet**, c'est une
+   décision, pas un oubli.
 
 ### ⚠️ Une récurrence qui se termine ne se voit pas (validé par Aramis le 30/08)
 
@@ -189,8 +201,10 @@ Attendu : afficher « dernière occurrence » sur la tâche quand la série va s
 clore, et le confirmer au moment de la coche. `nextOccurrence` sait déjà le
 dire — elle rend `null`. Reste à le remonter jusqu'à l'écran.
 9. **Hover sur les endroits clés** : dashboard, kanban, etc. Le graphe a
-   gagné du hover (× de retrait sur les arêtes, PR #3) ; le reste
-   (dashboard, kanban, listes) reste à faire.
+   gagné du hover (× de retrait sur les arêtes, PR #3), **le Kanban aussi**
+   (bouton « ouvrir la fiche » révélé au survol de la carte, PR #9 — c'est ce
+   qui a permis à la carte de cesser d'être un `<button>`). *Reste* :
+   dashboard et listes.
 
 ### Roadmap « Asana personnalisé » (vision Brief)
 

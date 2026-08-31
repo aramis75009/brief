@@ -121,6 +121,13 @@ export type DraftItem = {
   objectiveId?: string | null;
   /** ID de colonne Kanban (null = non placée). */
   columnId?: string | null;
+  /**
+   * Rang dans la colonne Kanban (0 = en haut). ABSENT = jamais rangée à la
+   * main : ces cartes passent après celles qui ont un rang, dans leur ordre
+   * d'écriture. C'est le serveur qui numérote (`src/lib/kanban.ts`) — le client
+   * ne voit qu'une partie de la colonne et écraserait l'ordre du reste.
+   */
+  columnOrder?: number;
   /** Fil d'origine vocal — la dictée d'où provient cet item. */
   audioOrigin?: AudioOrigin;
   /** Identifiant de l'audio persisté (`audio_…`) — pour rejouer l'enregistrement. */
@@ -261,6 +268,16 @@ export type KanbanColumn = {
   name: string;
   /** Position dans le board (0 = gauche). */
   order: number;
+  /**
+   * Limite de travail en cours (WIP). **Indicative, jamais prescriptive** : la
+   * colonne pleine accepte quand même le dépôt et se signale — bloquer
+   * demanderait d'expliquer un refus au milieu d'un glissement.
+   *
+   * Absente = pas de limite. Comptée sur la colonne COMPLÈTE, pas sur les
+   * cartes visibles : sous un filtre projet, une limite comptée à l'écran
+   * mentirait.
+   */
+  wipLimit?: number;
 };
 
 /**
