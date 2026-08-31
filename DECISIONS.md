@@ -14,6 +14,37 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-31 · Brief est versionné, et `main` part de 1.0.0.0
+
+Aramis, le 31/08 : « gstack est un outil surpuissant, il faut créer les
+fichiers qu'il demande ». Puis, sur le choix du numéro : « on trouve la
+meilleure solution » — arbitrage délégué, tranché comme suit.
+
+**Décision 1 — `VERSION` et `CHANGELOG.md` existent.** Sans eux, `/ship`
+sautait en silence ses étapes de bump, de changelog et sa file d'attente de
+versions entre workspaces. Un outil qui rend la moitié de son travail parce
+qu'un fichier manque, ça ne se voit pas — ça se constate trois mois plus tard.
+
+**Décision 2 — `main` est situé à 1.0.0.0, pas à 0.x.** Brief tourne sur le
+VPS, envoie ses rappels en Web Push sur un iPhone verrouillé, et sert tous les
+jours. Un `0.x` annonce « instable, l'API peut casser » : c'est faux, et ça
+mentirait à la première personne qui lit le dépôt. Le `0.1.0` qui traînait dans
+`package.json` était un reste du scaffold du 6 août que personne n'avait jamais
+touché — pas une intention.
+
+**Décision 3 — quatre chiffres, `VERSION` fait foi.** `MAJEUR.MINEUR.CORRECTIF
+.MICRO`, source de vérité dans `VERSION` ; `package.json` en porte la
+traduction npm à trois chiffres, npm refusant le quatrième. **Ne jamais écrire
+ces fichiers à la main** : `gstack-version-bump write` les synchronise avec le
+lockfile, un écart entre les deux bloque le `/ship` suivant.
+
+**Décision 4 — l'historique d'avant 1.1.0.0 est reconstitué, et le dit.** Les
+entrées antérieures du CHANGELOG viennent de `git log` et des passations ; elles
+n'ont pas été écrites au moment des faits. L'avertissement est en tête du
+fichier plutôt que dans une passation qui se périme — **elles situent, elles ne
+font pas foi**. À partir de 1.1.0.0, chaque entrée est écrite pendant la PR qui
+la livre.
+
 ## 2026-08-30 (nuit) · Les Réglages passent derrière l'avatar, et aucune bascule n'est plus décorative
 
 Trois défauts signalés par Aramis le 30/08, plus un trou que personne n'avait
