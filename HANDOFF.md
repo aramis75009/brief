@@ -16,7 +16,7 @@ que tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Claude Code (Opus 5)**. Même agent que la passation précédente — session coupée en cours de chantier, reprise le 31/08 vers 10 h 45. |
 | **Branche** | `feat/kanban-trello` · **Base** `main` (`fb39b9c`) |
-| **GitHub** | `origin/main` = `fb39b9c`. **Rien de poussé** : tout le chantier est en local, non commité. |
+| **GitHub** | `origin/main` = `fb39b9c`. **[PR #9](https://github.com/aramis75009/brief/pull/9) ouverte** — 5 commits, +2749 −521 sur 19 fichiers. |
 | **Prod** | inchangée depuis la passation précédente. PR #7 **toujours pas déployée** (voir Blockers). |
 
 ## Goal
@@ -116,9 +116,10 @@ Une décision de méthode, prise pendant la reprise et assumée :
 
 ## Next — la prochaine action
 
-1. **`/ship`.** Le diff est relu (9 trouvailles corrigées), recetté et vert.
-   Rien n'est commité — c'est la seule chose qui reste avant la PR.
-2. Reste des chantiers : **B (calendrier)**, suspendu à un arbitrage humain
+1. **Faire relire et merger la [PR #9](https://github.com/aramis75009/brief/pull/9).**
+2. **La déployer** — elle ne l'est pas, et PR #7 ne l'est toujours pas non
+   plus. Voir Blockers.
+3. Reste des chantiers : **B (calendrier)**, suspendu à un arbitrage humain
    (`DECISIONS.md` 2026-08-26, le livrable Claude Design n'est jamais venu) —
    voir chantier B du plan, et les six points « Signalé, non traité » à porter
    dans `TODOS.md`, dont **`caldavSyncedDue`** (divergence silencieuse avec
@@ -158,9 +159,12 @@ Les données d'Aramis ont été **remises comme trouvées** après la recette
 (6 cartes en Non placées, colonnes `À faire / En cours / Fait`, aucune limite
 WIP, carte de test supprimée). Vérifié à l'écran.
 
-- **Non lancé** : `npm run build` (règle du repo).
+- **Non lancé** : `npm run build` (règle du repo — un `npm run dev` tourne sur
+  le port 3100).
+- **Non lancé** : la PR #9 n'est **pas déployée**. Elle ne tourne que sur le
+  dev local.
 
-## Changed — tout en local, rien de commité
+## Changed — livré dans la PR #9 (5 commits bisectables)
 
 | Fichier | Nature |
 |---|---|
