@@ -14,6 +14,69 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-08-31 (soir) · Le pivot multi-utilisateur — six arbitrages
+
+**Contexte.** Aramis a demandé un compte de recette pour que les agents
+puissent tester les écrans authentifiés. Vérification faite avant d'exécuter :
+ce compte n'aurait pas été un bac à sable, mais **une seconde clé de son Brief
+réel**. L'auth Supabase du 26/08 avait été faite « en préparation au
+multi-utilisateur » — la préparation, pas le cloisonnement. Les 18 exports de
+`store.ts` étaient globaux et tous les comptes ouvraient le même Brief.
+
+**Décision 1 — les données restent des fichiers JSON, partitionnés par compte**
+(`BRIEF_DATA_DIR/users/<userId>/`), pas des tables Postgres.
+*Pourquoi* : à 2-5 comptes, migrer 18 exports et ~20 routes vers SQL coûterait
+plus que ça ne rapporte, ferait sortir les données du VPS (contre « Brief
+possède ses données », `AGENTS.md`) et obligerait à refaire `backup.sh`. Le
+cloisonnement repose donc sur du code discipliné, pas sur RLS — d'où la
+décision 6, qui rend cette discipline vérifiable.
+
+**Décision 2 — 2 à 5 comptes, créés à la main, pas d'inscription libre.**
+*Pourquoi* : le but immédiat est de débloquer la recette agent, pas d'ouvrir un
+SaaS. La landing `docs/landing/multi-user-v1.html` reste un chantier séparé.
+
+**Décision 3 — les identifiants CalDAV deviendront propres à chaque compte**,
+chiffrés au repos, saisis dans les Réglages (lot 3).
+*Pourquoi* : choix explicite d'Aramis, contre la recommandation de garder un
+seul compte iCloud. C'est le morceau le plus lourd du chantier (coffre à
+secrets, UI, rotation de clé) — d'où sa mise en **dernier lot** : un compte
+agent n'a pas de calendrier Apple, et le placer en tête aurait retardé de
+plusieurs jours la seule chose qui débloque quelqu'un aujourd'hui.
+
+**Décision 4 — les jetons `capture` et `digest` deviendront des jetons par
+compte**, hachés en base et révocables (lot 2). Les jetons de **cron** restent
+globaux.
+*Pourquoi* : une capture venue de Telegram ou d'un raccourci iOS doit savoir
+dans quel Brief elle écrit. Un jeton de cron, lui, déclenche un *passage* — il
+ne désigne pas un utilisateur, et le passage les parcourt tous.
+
+**Décision 5 — les crons itèrent en un seul appel**, pas un appel par compte.
+*Pourquoi* : Aramis n'a pas de SSH vers le VPS. Une crontab listant les comptes
+obligerait à passer par Hermes à chaque création de compte.
+
+**Décision 6 — le `userId` atteint le store par une FABRIQUE**
+(`storeForSession` / `storeForUser`), et `store.ts` n'exporte plus aucune
+fonction globale.
+*Pourquoi* : c'est ce qui transforme le cloisonnement en propriété vérifiable
+plutôt qu'en règle de vigilance. Supprimer les exports globaux a fait du
+typecheck la preuve de complétude — tout appelant oublié cesse de compiler. Et
+`no-direct-store-access.test.ts` interdit à une route de fabriquer son propre
+store, donc de choisir le compte qu'elle lit. **Ne jamais rétablir un export
+global de `store.ts`** : une route qui lirait le jeu de fichiers d'avant ne
+lèverait aucune erreur, elle rendrait simplement une liste vide.
+
+**Statut.** ✅ Lot 1 implémenté le 31/08 (branche `feat/multi-user-store`) :
+575 tests passants, migration vérifiée sur un serveur réel (les trois cas :
+migration, idempotence, blocage sans propriétaire). **Non déployé.** Lots 2 et
+3 décidés, non commencés. Design complet :
+`docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md`.
+
+⚠️ **Ne pas créer de second compte Supabase avant que le lot 1 soit déployé et
+vérifié.** Aujourd'hui en production, il donnerait un accès complet aux vraies
+données d'Aramis.
+
+---
+
 ## 2026-08-31 · Brief est versionné, et `main` part de 1.0.0.0
 
 Aramis, le 31/08 : « gstack est un outil surpuissant, il faut créer les

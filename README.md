@@ -47,6 +47,8 @@ Le micro exige un contexte sécurisé : `localhost` convient, une IP de LAN non.
 | `NEXT_PUBLIC_APP_NAME` | Titre affiché. Exposé au navigateur. | `Brief` |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL du projet Supabase. **Lue côté SERVEUR uniquement** malgré le préfixe (voir note). | — (obligatoire) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clé publique « anon » Supabase. **Lue côté SERVEUR uniquement** malgré le préfixe (voir note). | — (obligatoire) |
+| `SUPABASE_SECRET_KEY` | Clé **service-role** Supabase — celle qui contourne RLS. Lue à l'EXÉCUTION (pas au build). Sert uniquement aux crons, qui n'ont pas de session et doivent lister les comptes (`src/lib/supabase/admin.ts`). ⚠️ La clé la plus puissante du projet. | — (obligatoire) |
+| `BRIEF_OWNER_USER_ID` | UUID Supabase du compte propriétaire. Deux rôles : la migration au démarrage lui attribue les données d'avant le multi-utilisateur, et les jetons machine `capture` / `digest` écrivent dans son Brief jusqu'au lot 2. Absente, la migration ne touche à rien et le dit. | — (obligatoire) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clé publique Web Push. Exposée au navigateur. **Build-time.** | — |
 | `VAPID_PRIVATE_KEY` | Clé privée Web Push. **Jamais exposée.** | — |
 | `VAPID_SUBJECT` | Contact `mailto:` exigé par le protocole VAPID. | — |

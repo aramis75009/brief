@@ -23,15 +23,25 @@ avant mise en ligne.
 - Règle : la landing est un **modèle de travail**, pas une page finie. Voir
   `docs/landing/README.md` pour la checklist complète.
 
-### Pivot multi-utilisateur Brief
+### Pivot multi-utilisateur Brief — lot 1 fait, lots 2 et 3 à faire
 
 **Quoi :** chaque utilisateur crée son compte et a **son** Brief (dictées,
 tâches, idées propres, sans partage par défaut).
 
-- Auth Supabase **déployée** (26/08) sur la prod actuelle.
-- Les modèles de données (`store.ts`, `data/items.json`) sont mono-user :
-  migration à prévoir (table `user_id` ou schéma par utilisateur).
-- Voir `DECISIONS.md` (2026-08-26) pour le design complet.
+Design complet et six décisions arbitrées :
+[`docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md`](docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md).
+
+- ✅ **Lot 1 — cloisonnement** (31/08, branche `feat/multi-user-store`) :
+  fichiers par compte sous `users/<userId>/`, fabrique `storeForUser`,
+  `requireStore()`, crons qui itèrent, migration au démarrage. **Pas encore
+  déployé.**
+- ⬜ **Lot 2 — jetons machine par compte** : table `machine_tokens` (hachés,
+  révocables), écran dans les Réglages. Aujourd'hui `capture` et `digest`
+  écrivent chez `BRIEF_OWNER_USER_ID` — un seul Brief joignable par machine.
+- ⬜ **Lot 3 — CalDAV par compte** : table `caldav_credentials` chiffrée
+  (AES-256-GCM), écran de saisie, mapping projet → calendrier par utilisateur.
+  Aujourd'hui les quatre variables `BRIEF_CALDAV_*` sont globales et
+  mono-compte : **un seul compte iCloud pour toute l'app**.
 
 ---
 

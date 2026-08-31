@@ -43,7 +43,7 @@ projets.
 
 | | |
 |---|---|
-| **Stockage** | fichiers JSON, écriture atomique (`temp` + `rename`), file d'écritures sérialisée — `src/lib/store.ts`. Chemin par `BRIEF_DATA_DIR`. |
+| **Stockage** | fichiers JSON **par compte**, sous `BRIEF_DATA_DIR/users/<userId>/`. Écriture atomique (`temp` + `rename`), file d'écritures sérialisée **par compte** — `src/lib/store.ts`. |
 | **Rappels** | conteneur `cron` → `/api/cron/reminders` toutes les 60 s → Web Push — `src/lib/reminders.ts`, `src/lib/webpush.ts`. |
 | **Synchro calendrier** | Bidirectionnelle **CalDAV ↔ Apple Calendrier** (source de vérité pour horaires et récurrences) + lecture des éditions faites dans Apple — `src/lib/caldav.ts`, `/api/cron/caldav-sync`. Latence ~15 min. |
 | **Hébergement** | VPS Hostinger, `docker-compose.yml` (app + cron + volume `brief-data`), sauvegarde par `deploy/backup.sh`. |
@@ -73,13 +73,23 @@ qu'ils sont écrits.
 
 ### Sécurité — Supabase Auth (email + mot de passe), pas de PIN
 
-**Toute route sous `/api/` commence par la garde de session Supabase.** Sans
-exception :
+**Toute route sous `/api/` commence par une garde.** Sans exception. Depuis le
+pivot multi-utilisateur du 2026-08-31, laquelle dépend de ce que fait la route :
 
 ```ts
+// Elle touche au store : la garde REND le store du compte connecté.
+const session = await requireStore();
+if (session instanceof Response) return session;
+const { store } = session;
+
+// Elle n'y touche pas (transcribe, audio) : la garde seule suffit.
 const denied = await requireSession();
 if (denied) return denied;
 ```
+
+`requireStore()` fait la garde ET la résolution d'identité en un appel : il
+devient impossible d'avoir l'un sans l'autre, et impossible de se tromper de
+compte à l'intérieur d'une route.
 
 L'URL de déploiement est publique ; `src/lib/guard.ts` est la seule barrière.
 `requireSession()` vérifie le JWT Supabase **localement** (clé publique ES256 ,
@@ -104,6 +114,38 @@ comme source unique de l'accueil, de l'onglet Agenda et du calendrier desktop
 (`fetchAgendaDay`), et les agents (Claude Code, Hermes, Codex) doivent pouvoir
 la lire sans navigateur. **Ne poser cette garde que sur de la LECTURE** : une
 route qui écrit garde `requireSession()` seul, ou un jeton d'écriture dédié.
+
+### Cloisonnement par compte — les données appartiennent à quelqu'un
+
+Depuis le 2026-08-31, chaque compte a **ses** fichiers. Trois invariants, tous
+silencieux quand on les casse :
+
+- **`store.ts` n'exporte AUCUNE fonction globale, et ce n'est pas un oubli.**
+  Il exporte `storeForUser(userId)` et le type `Store`. Rétablir un export
+  global rouvrirait un chemin où une route lit un jeu de fichiers qui
+  n'appartient à personne : pas d'erreur, pas de test rouge — juste un fichier
+  absent et une liste vide rendue à l'utilisateur.
+- **Aucune route n'appelle `storeForUser` elle-même.** Elle choisirait alors le
+  compte qu'elle lit. Seuls les deux crons y ont droit (ils n'ont pas de
+  session et parcourent tous les comptes) ; `src/lib/no-direct-store-access.test.ts`
+  fige la règle et la liste d'exceptions.
+- **Le `userId` entre dans un chemin de fichier.** C'est le seul endroit du
+  projet où c'est le cas. `storeForUser` le valide contre `USER_ID_PATTERN`
+  (UUID) et lève sinon ; `readUserJson` / `writeUserJson` valident de même le
+  nom de fichier. Sans ces gardes, un identifiant malformé donne une traversée
+  de répertoire.
+
+**Les crons n'ont pas de session** : ils listent les comptes via
+`listAuthorizedUserIds()` (clé service-role `SUPABASE_SECRET_KEY`, la seule qui
+contourne RLS — surface volontairement réduite à `src/lib/supabase/admin.ts`)
+et les parcourent avec `sweepUsers` (`src/lib/cron-sweep.ts`). Un compte en
+échec n'interrompt jamais les suivants, et l'ordre tourne d'un passage à
+l'autre — sans quoi les derniers comptes ne seraient jamais servis et leurs
+rappels deviendraient `stale`, c'est-à-dire abandonnés en silence.
+
+**Encore mono-compte, et à traiter comme tel** : les identifiants CalDAV
+(`BRIEF_CALDAV_*`, lot 3) et les jetons machine `capture` / `digest`, qui
+écrivent chez `BRIEF_OWNER_USER_ID` (lot 2).
 
 ### Données et dates
 
@@ -220,7 +262,7 @@ route qui écrit garde `requireSession()` seul, ou un jeton d'écriture dédié.
 ```bash
 npm run dev       # développement local (Next dev server, http://localhost:3000)
 npm run build     # build de production (sortie standalone pour Docker)
-npm test          # la suite Vitest complète (374 tests au 2026-08-29)
+npm test          # la suite Vitest complète (575 tests au 2026-08-31)
 npx vitest run    # même chose, sans le script npm
 npx tsc --noEmit  # typecheck strict
 npx eslint .      # lint
