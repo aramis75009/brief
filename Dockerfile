@@ -47,6 +47,11 @@ RUN addgroup -g 1001 -S nodejs && adduser -S brief -u 1001 \
 COPY --from=build --chown=brief:nodejs /app/.next/standalone ./
 COPY --from=build --chown=brief:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=brief:nodejs /app/public ./public
+# La version, pour que `docker exec brief-app-1 cat /app/VERSION` dise ce qui
+# tourne vraiment. La sortie `standalone` ne copie que ce que le serveur Next
+# exécute : sans cette ligne, le fichier existe dans le dépôt et le conteneur
+# rend une chaîne vide — c'est-à-dire la même réponse qu'un déploiement raté.
+COPY --from=build --chown=brief:nodejs /app/VERSION ./VERSION
 
 USER brief
 EXPOSE 3000
