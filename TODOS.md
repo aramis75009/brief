@@ -75,6 +75,24 @@ d'une colonne **supprimait la colonne**, et l'action `reorder` de
 `PATCH /api/board` n'avait aucun appelant — puis, une fois branchée, ne
 réordonnait rien.
 
+### ⚠️ « Reporter » perd l'heure et ne retire pas l'occurrence du jour (Aramis, 31/08)
+
+**Signalé à l'oral, non reproduit, non investigué** — noté ici pour ne pas le
+perdre. Deux symptômes dans le même geste :
+
+1. La tâche part bien au **lendemain**, mais **pas à la même heure** que la date
+   d'origine.
+2. L'occurrence **d'aujourd'hui ne disparaît pas** — elle apparaît donc deux
+   fois.
+
+Constaté sur un **RDV**. Aramis l'a déplacé à la main dans l'app Calendrier.
+
+Piste à ne PAS traiter comme acquise : `caldavSyncedDue` est déjà signalé comme
+divergeant en silence d'iCloud quand une écriture locale touche `due`
+(`docs/plans/2026-08-31-kanban-trello-calendrier.md`, « Signalé, non traité »
+#1) — et le bouton « Repousser +1j » de `DesktopCalendar.tsx` y est nommément
+cité. Les deux observations peuvent être la même cause, ou pas.
+
 ### Quatre intentions déterrées par le ménage du 31/08 (code mort supprimé, intention conservée)
 
 Ces quatre-là n'étaient pas des oublis de nettoyage : c'est du travail
@@ -97,6 +115,7 @@ commencé et jamais fini. Le code mort est parti, l'intention est ici.
    vit dans `src/lib/desktopDashboard.ts`, elle est testée, et **aucun écran
    ne l'appelle**. Soit un écran l'attend, soit elle doit partir — mais du
    code testé qui ne sert à rien coûte de la confiance mal placée.
+
 
 ### Réglages mobile — les 3 bascules décoratives d'`AccountSheet`
 
