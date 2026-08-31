@@ -16,7 +16,7 @@ que tu remplaces dans `docs/handoffs/`.
 |---|---|
 | **Agent** | **Claude Code (Opus 5)**. Même agent que la passation précédente — session coupée en cours de chantier, reprise le 31/08 vers 10 h 45. |
 | **Branche** | `feat/kanban-trello` · **Base** `main` (`fb39b9c`) |
-| **GitHub** | `origin/main` = `fb39b9c`. **[PR #9](https://github.com/aramis75009/brief/pull/9) ouverte** (`v1.1.0.0`) — 7 commits, +2885 −524 sur 23 fichiers. |
+| **GitHub** | **`origin/main` = `49b4d59`** — [PR #9](https://github.com/aramis75009/brief/pull/9) **mergée** le 31/08 à 17 h 43 UTC (`v1.1.0.0`, 12 commits). |
 | **Prod** | **`fb39b9c`** — déployée et vérifiée par Hermes le 31/08. Conteneur recréé, écran de connexion rendu par un vrai moteur JS, zéro erreur console. |
 
 ## Goal
@@ -142,9 +142,11 @@ d'écrire à Hermes, ce que personne n'avait fait.
 
 ## Next — la prochaine action
 
-1. **Faire relire et merger la [PR #9](https://github.com/aramis75009/brief/pull/9).**
-2. **La déployer** en écrivant à Hermes (le webhook ne passe pas). Elle touche
-   `store.ts`, `/api/board` et `/api/items` — pas seulement de l'UI.
+1. **Déployer `49b4d59`** en écrivant à Hermes (le webhook ne passe pas). Elle
+   touche `store.ts`, `/api/board` et `/api/items` — pas seulement de l'UI.
+   ⚠️ **Premier déploiement avec un fichier `VERSION`** : le Dockerfile le copie
+   désormais dans `/app`, et un repli le crée s'il manque (retour arrière sur un
+   commit d'avant le 31/08). À surveiller au build.
 3. **Vérifier `scripts/coord/status.sh` sur le VPS.** Hermes dit qu'il n'existe
    pas dans `/docker/brief` ; il est pourtant commité et présent dans `fe0c8d8`
    comme dans `fb39b9c` (`git cat-file -e` vérifié le 31/08). Donc soit le
@@ -191,8 +193,10 @@ Les données d'Aramis ont été **remises comme trouvées** après la recette
 (6 cartes en Non placées, colonnes `À faire / En cours / Fait`, aucune limite
 WIP, carte de test supprimée). Vérifié à l'écran.
 
-- **Non lancé** : `npm run build` (règle du repo — un `npm run dev` tourne sur
-  le port 3100).
+- **PASSANT** : `npm run build`, exécuté par Vercel sur `ab33fd7b` avant la
+  suppression du projet. Seul le `Dockerfile` a changé depuis (aucun JS/TS),
+  la preuve tient. ⚠️ **Il n'y a plus aucun moyen de lancer `npm run build`**
+  depuis que Vercel est supprimé et tant qu'un `npm run dev` tourne.
 - **Non lancé** : la PR #9 n'est **pas déployée**. Elle ne tourne que sur le
   dev local. Hermes ne l'a pas touchée, comme demandé.
 - **Passant, en prod** : `fb39b9c` déployé et vérifié par Hermes le 31/08 —
@@ -231,3 +235,41 @@ WIP, carte de test supprimée). Vérifié à l'écran.
 | 2026-08-30 (nuit) | Graphe & Objectifs déployé + recette round 1 | Claude Code | [fiche](docs/handoffs/2026-08-30-nuit-graphe-objectifs-deploye-recette1.md) |
 | 2026-08-30 (soir) | Graphe & Objectifs, le moteur — PR #3 | Claude Code | [fiche](docs/handoffs/2026-08-30-graphe-objectifs-moteur-pr3.md) |
 | 2026-08-30 (session) | Chantier Objectifs & Projets codé, recette à faire | Hermes Agent | [fiche](docs/handoffs/2026-08-30-hermes-objectifs-projets-recette.md) |
+
+
+---
+
+## Post-merge — 2026-08-31 après-midi
+
+**Vercel est supprimé.** Aramis : « Vercel n'a pas lieu d'être, normalement
+c'est tout sur le VPS » — ce que `CLAUDE.md` disait déjà. Deux projets
+existaient (`brief` et un `brief-design-system-ios-…` créé par accident). Ce
+n'était pas que du bruit de CI :
+
+- `https://brief-ten-jet.vercel.app` servait **publiquement** `<title>Brief</title>`.
+  Il ne laissait entrer personne, mais **par accident** : `/api/auth/session`
+  rendait 500 parce que les variables Supabase manquaient. Une panne qui fait
+  office de garde, pas une garde.
+- Le projet stockait quatre secrets, dont deux pour du code disparu :
+  `GROQ_API_KEY` (facturable, vivante), `VAPID_PRIVATE_KEY`,
+  `TODOIST_API_TOKEN` (zéro occurrence dans `src/`) et **`BRIEF_PIN`** — le
+  mécanisme supprimé du code le 26/08.
+
+Supprimés, vérifié : `vercel project inspect brief` ne trouve plus rien.
+`brief-ten-jet.vercel.app` répond encore en **cache CDN périmé**
+(`x-vercel-cache: HIT`, `age` 4 h 36) ; l'origine est morte, ça expirera seul.
+
+**⚠️ À faire par Aramis, hors de portée d'un agent :** révoquer le
+`TODOIST_API_TOKEN` chez Todoist (plus aucun code ne l'utilise, c'est un jeton
+vivant pour rien). Le `GROQ_API_KEY` et la `VAPID_PRIVATE_KEY` servent encore
+sur le VPS — ne les faire tourner que si le compte Vercel est suspect ; faire
+tourner la clé VAPID **casserait tous les abonnements push** (l'iPhone devrait
+se réabonner).
+
+**La revue de la PR #9 n'a eu qu'une passe indépendante.** La seconde
+(`/code-review high 9`) est morte sur un plafond de dépense mensuel (HTTP 429,
+réinitialisation 16 h 40). Relecture faite à la main à la place — elle a trouvé
+un vrai défaut dans le correctif Dockerfile du jour même : `COPY` d'un fichier
+absent fait ÉCHOUER un build, donc redéployer un commit d'avant le 31/08 aurait
+cassé. Corrigé par un repli avant le merge. **Le reste du matériel ajouté après
+la première revue n'a pas été relu par un agent indépendant.**
