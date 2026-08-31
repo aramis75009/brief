@@ -17,7 +17,7 @@ que tu remplaces dans `docs/handoffs/`.
 | **Agent** | **Claude Code (Opus 5)**. Même agent que la passation précédente — session coupée en cours de chantier, reprise le 31/08 vers 10 h 45. |
 | **Branche** | `feat/kanban-trello` · **Base** `main` (`fb39b9c`) |
 | **GitHub** | `origin/main` = `fb39b9c`. **[PR #9](https://github.com/aramis75009/brief/pull/9) ouverte** (`v1.1.0.0`) — 7 commits, +2885 −524 sur 23 fichiers. |
-| **Prod** | inchangée depuis la passation précédente. PR #7 **toujours pas déployée** (voir Blockers). |
+| **Prod** | **`fb39b9c`** — déployée et vérifiée par Hermes le 31/08. Conteneur recréé, écran de connexion rendu par un vrai moteur JS, zéro erreur console. |
 
 ## Goal
 
@@ -119,17 +119,39 @@ Une décision de méthode, prise pendant la reprise et assumée :
 
 ## Blockers
 
-1. **PR #7 non déployée** — inchangé depuis la passation précédente. Le 202 du
-   webhook ne prouve rien : garde-fou d'approbation Telegram, Hermes doit être
-   en session.
-2. **Pas de SSH vers le VPS depuis le Mac.**
+1. **Pas de SSH vers le VPS depuis le Mac** — inchangé. Déployer et lire les
+   logs passe par Hermes.
+2. **Le webhook `deploy.sh` ne passe toujours pas** (202 sans effet,
+   approbation Telegram). Contourné le 31/08 en envoyant un message à Hermes à
+   la main, ce qui a marché du premier coup. Aramis : « on corrigera ce
+   problème de webhook et d'approve plus tard. »
+
+### ⚠️ Le blocker « PR #7 non déployée » était FAUX depuis deux passations
+
+Hermes l'a établi le 31/08 : la prod tournait **déjà sur `fe0c8d8`**, conteneur
+rebuildé le **30/08 à 21 h 12 UTC**. La PR #7 était en production depuis le
+soir même. Les trois `deploy.sh` restés en 202 n'avaient rien déclenché, mais
+un déploiement ANTÉRIEUR l'avait emportée.
+
+La leçon n'est pas celle qu'on avait écrite. On savait déjà qu'« un 202 ne
+prouve pas un déploiement » ; l'erreur inverse a coûté plus cher : **avoir
+conclu de l'absence de confirmation que rien n'était déployé**, et avoir
+traîné un faux blocker sur deux passations sans jamais demander l'état réel.
+Le VPS est injoignable depuis le Mac — la seule source de vérité était
+d'écrire à Hermes, ce que personne n'avait fait.
 
 ## Next — la prochaine action
 
 1. **Faire relire et merger la [PR #9](https://github.com/aramis75009/brief/pull/9).**
-2. **La déployer** — elle ne l'est pas, et PR #7 ne l'est toujours pas non
-   plus. Voir Blockers.
-3. Reste des chantiers : **B (calendrier)**, suspendu à un arbitrage humain
+2. **La déployer** en écrivant à Hermes (le webhook ne passe pas). Elle touche
+   `store.ts`, `/api/board` et `/api/items` — pas seulement de l'UI.
+3. **Vérifier `scripts/coord/status.sh` sur le VPS.** Hermes dit qu'il n'existe
+   pas dans `/docker/brief` ; il est pourtant commité et présent dans `fe0c8d8`
+   comme dans `fb39b9c` (`git cat-file -e` vérifié le 31/08). Donc soit le
+   clone de prod est partiel, soit il a regardé ailleurs. `docs/coordination.md`
+   demande aux agents de lancer ce script : si le fichier manque vraiment
+   là-bas, la consigne est inapplicable côté VPS.
+4. Reste des chantiers : **B (calendrier)**, suspendu à un arbitrage humain
    (`DECISIONS.md` 2026-08-26, le livrable Claude Design n'est jamais venu) —
    voir chantier B du plan, et les six points « Signalé, non traité » à porter
    dans `TODOS.md`, dont **`caldavSyncedDue`** (divergence silencieuse avec
@@ -172,7 +194,11 @@ WIP, carte de test supprimée). Vérifié à l'écran.
 - **Non lancé** : `npm run build` (règle du repo — un `npm run dev` tourne sur
   le port 3100).
 - **Non lancé** : la PR #9 n'est **pas déployée**. Elle ne tourne que sur le
-  dev local.
+  dev local. Hermes ne l'a pas touchée, comme demandé.
+- **Passant, en prod** : `fb39b9c` déployé et vérifié par Hermes le 31/08 —
+  conteneur `Up (healthy)`, `<title>Brief</title>`, React hydraté, écran de
+  connexion rendu, aucune exception console. Vérifié avec un vrai moteur JS
+  (Chromium headless de Playwright, `--dump-dom`), pas avec `curl`.
 
 ## Changed — livré dans la PR #9 (5 commits bisectables)
 
