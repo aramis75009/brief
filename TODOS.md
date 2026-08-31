@@ -75,6 +75,24 @@ d'une colonne **supprimait la colonne**, et l'action `reorder` de
 `PATCH /api/board` n'avait aucun appelant — puis, une fois branchée, ne
 réordonnait rien.
 
+### ⚠️ Les étiquettes ne se voient pas dans la fiche tâche (Aramis, 31/08)
+
+**Signalé après la recette de la PR #9. Non reproduit, non investigué** —
+Aramis a demandé explicitement de garder ça pour un lot ultérieur.
+
+Deux choses distinctes dans le même signalement :
+
+1. **Bug.** On configure des étiquettes dans **Réglages**, et elles
+   **n'apparaissent pas** quand on ouvre le détail d'une tâche. Le lien entre
+   les deux écrans ne se fait pas.
+2. **Design.** Le bouton d'ajout d'une étiquette **n'est pas assez visible**
+   dans la fiche.
+
+À ne pas traiter comme acquis : le Kanban affiche bien les étiquettes en haut
+des cartes (`KanbanCard.tsx`), donc la donnée existe et le rendu marche
+ailleurs. Le problème est probablement entre `DesktopSettings` (création) et
+la fiche tâche (lecture) — mais c'est une hypothèse, pas un diagnostic.
+
 ### ⚠️ « Reporter » perd l'heure et ne retire pas l'occurrence du jour (Aramis, 31/08)
 
 **Signalé à l'oral, non reproduit, non investigué** — noté ici pour ne pas le
