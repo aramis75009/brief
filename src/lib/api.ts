@@ -370,6 +370,39 @@ export async function reorderColumns(ids: string[]): Promise<KanbanBoard> {
   );
 }
 
+/** Pose (ou efface, avec `null`) la limite WIP d'une colonne. */
+export async function setColumnWip(id: string, limit: number | null): Promise<KanbanBoard> {
+  return jsonFetch<KanbanBoard>(
+    "/api/board",
+    { method: "PATCH", body: JSON.stringify({ action: "wip", id, limit }) },
+    TIMEOUTS.projects,
+  );
+}
+
+/** L'état frais d'une colonne, rendu par un déplacement de carte. */
+export type MovedCard = { id: string; columnId: string | null; columnOrder?: number };
+
+/**
+ * Déplace une carte du Kanban. On envoie une INTENTION — la carte qui doit se
+ * retrouver juste avant (`beforeId`) et juste après (`afterId`) — et jamais des
+ * rangs : l'écran ne voit qu'une partie de chaque colonne (filtre projet,
+ * cartes faites masquées), et des rangs calculés ici écraseraient l'ordre des
+ * cartes qu'il ne montre pas. C'est le serveur qui numérote.
+ */
+export async function moveCard(input: {
+  itemId: string;
+  toColumnId: string | null;
+  beforeId?: string;
+  afterId?: string;
+}): Promise<Record<string, MovedCard[]>> {
+  const res = await jsonFetch<{ ok: boolean; columns: Record<string, MovedCard[]> }>(
+    "/api/board/cards",
+    { method: "PATCH", body: JSON.stringify(input) },
+    TIMEOUTS.projects,
+  );
+  return res.columns;
+}
+
 /* --- Tags ---------------------------------------------------------------- */
 
 export async function fetchTags(): Promise<Tag[]> {

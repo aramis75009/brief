@@ -138,6 +138,14 @@ export function sanitizePatch(
   } else if (typeof v.columnId === "string" && v.columnId.trim()) {
     out.columnId = v.columnId.trim();
   }
+  // Rang dans la colonne. `null` = effacement explicite (la carte redevient
+  // « jamais rangée à la main ») ; ABSENT = on ne touche pas, sinon un PATCH
+  // de titre depuis la fiche tâche déclasserait la carte en bas de sa colonne.
+  if (v.columnOrder === null) {
+    out.columnOrder = undefined;
+  } else if (typeof v.columnOrder === "number" && Number.isInteger(v.columnOrder) && v.columnOrder >= 0) {
+    out.columnOrder = v.columnOrder;
+  }
   // Lien objectif : string (ID d'objectif) ou null (détaché). Absent = on ne touche pas.
   if (v.objectiveId === null) {
     out.objectiveId = null;

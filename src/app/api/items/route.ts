@@ -54,6 +54,14 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     audioOrigin: isAudioOrigin(v.audioOrigin) ? v.audioOrigin : undefined,
     audioId: typeof v.audioId === "string" && v.audioId.trim() ? v.audioId.trim() : undefined,
     status: v.status === "idea" || v.status === "archived" ? v.status : undefined,
+    // Placement Kanban à la création. Sans ces deux lignes, le composeur « + »
+    // d'une colonne crée une carte qui atterrit dans « non placées » : le
+    // sanitizer les laissait tomber sans rien signaler.
+    columnId: typeof v.columnId === "string" && v.columnId.trim() ? v.columnId.trim() : null,
+    columnOrder:
+      typeof v.columnOrder === "number" && Number.isInteger(v.columnOrder) && v.columnOrder >= 0
+        ? v.columnOrder
+        : undefined,
   };
 }
 
