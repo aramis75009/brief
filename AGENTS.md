@@ -82,7 +82,7 @@ const session = await requireStore();
 if (session instanceof Response) return session;
 const { store } = session;
 
-// Elle n'y touche pas (transcribe, audio) : la garde seule suffit.
+// Elle n'y touche pas (`transcribe` seule) : la garde suffit.
 const denied = await requireSession();
 if (denied) return denied;
 ```
@@ -90,6 +90,15 @@ if (denied) return denied;
 `requireStore()` fait la garde ET la résolution d'identité en un appel : il
 devient impossible d'avoir l'un sans l'autre, et impossible de se tromper de
 compte à l'intérieur d'une route.
+
+**« Toucher au store » ne veut pas dire « appeler une méthode du store ».**
+Les deux routes `/api/audio` écrivaient et servaient des fichiers sous
+`BRIEF_DATA_DIR/audio/` sans jamais passer par lui : elles satisfaisaient donc
+l'invariant tout en laissant n'importe quel compte autorisé lire les dictées
+d'un autre (les ids `audio_<timestamp base36>` sont énumérables). Une route qui
+lit ou écrit **quoi que ce soit sur le disque** prend `requireStore()` et
+demande son chemin au store — `store.audioDir()`. Aucune route ne lit
+`process.env.BRIEF_DATA_DIR` ; `no-direct-store-access.test.ts` le vérifie.
 
 L'URL de déploiement est publique ; `src/lib/guard.ts` est la seule barrière.
 `requireSession()` vérifie le JWT Supabase **localement** (clé publique ES256 ,
@@ -135,17 +144,37 @@ silencieux quand on les casse :
   nom de fichier. Sans ces gardes, un identifiant malformé donne une traversée
   de répertoire.
 
-**Les crons n'ont pas de session** : ils listent les comptes via
-`listAuthorizedUserIds()` (clé service-role `SUPABASE_SECRET_KEY`, la seule qui
-contourne RLS — surface volontairement réduite à `src/lib/supabase/admin.ts`)
-et les parcourent avec `sweepUsers` (`src/lib/cron-sweep.ts`). Un compte en
-échec n'interrompt jamais les suivants, et l'ordre tourne d'un passage à
-l'autre — sans quoi les derniers comptes ne seraient jamais servis et leurs
-rappels deviendraient `stale`, c'est-à-dire abandonnés en silence.
+**Les crons n'ont pas de session**, et les deux ne balaient PAS la même liste.
+
+- **`/api/cron/reminders` parcourt tous les comptes**, listés par
+  `listAuthorizedUserIds()` (clé service-role `SUPABASE_SECRET_KEY`, la seule
+  qui contourne RLS — surface volontairement réduite à
+  `src/lib/supabase/admin.ts`). ⚠️ Cet appel LÈVE si Supabase est injoignable :
+  la route se replie alors sur le seul `BRIEF_OWNER_USER_ID` et le journalise
+  comme dégradé. Sans ce repli, une panne Supabase de trois minutes n'atténue
+  pas le service, elle l'éteint pour tout le monde — et le cron n'imprime qu'un
+  `curl` en échec.
+- **`/api/cron/caldav-sync` ne traite QUE `BRIEF_OWNER_USER_ID`**, et répond
+  503 s'il manque. Ce n'est pas une simplification à lever à la légère :
+  `BRIEF_CALDAV_*` est global jusqu'au lot 3, et la phase d'adoption de
+  `runCalDavSync` crée un item pour chaque événement distant sans item
+  correspondant. Le lancer sur un second compte lui écrirait **l'agenda entier
+  du propriétaire**, sans erreur, et `settings.caldavSync` ne l'empêcherait pas
+  (un compte neuf n'a pas de `settings.json`, et le défaut est ON).
+
+Les deux parcourent leur liste avec `sweepUsers` (`src/lib/cron-sweep.ts`) : un
+compte en échec n'interrompt jamais les suivants, et l'ordre tourne d'un
+passage à l'autre — sans quoi les derniers comptes ne seraient jamais servis et
+leurs rappels deviendraient `stale`, c'est-à-dire abandonnés en silence.
 
 **Encore mono-compte, et à traiter comme tel** : les identifiants CalDAV
 (`BRIEF_CALDAV_*`, lot 3) et les jetons machine `capture` / `digest`, qui
 écrivent chez `BRIEF_OWNER_USER_ID` (lot 2).
+
+**`BRIEF_OWNER_USER_ID` n'est donc plus seulement la variable de la migration**
+— elle commande aussi la synchro CalDAV, le repli des rappels et les deux
+jetons machine. Absente en production, Brief démarre et paraît sain : c'est la
+synchro calendrier qui s'arrête, en silence.
 
 ### Données et dates
 
