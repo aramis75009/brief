@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
+import { fakeStore } from "@/lib/testing/fake-store";
+import type { Settings } from "@/lib/settings";
 
 vi.mock("@/lib/cron-auth");
-vi.mock("@/lib/store");
+vi.mock("@/lib/guard");
 
 /**
  * La bascule « Digest Telegram ».
@@ -13,20 +15,29 @@ vi.mock("@/lib/store");
  * l'utilisateur n'est pas une erreur, et un 4xx ferait sonner l'automate).
  */
 describe("GET /api/digest", () => {
+  let settings: Settings;
+  let store: ReturnType<typeof fakeStore>;
+
   beforeEach(async () => {
     vi.clearAllMocks();
     const auth = await import("@/lib/cron-auth");
-    const store = await import("@/lib/store");
+    const guard = await import("@/lib/guard");
     vi.mocked(auth.requireMachineToken).mockReturnValue(null);
-    vi.mocked(store.readItems).mockResolvedValue([]);
-    vi.mocked(store.readProjects).mockResolvedValue([]);
+    settings = { caldavSync: true, digest: true };
+    store = fakeStore({
+      readItems: vi.fn(async () => []),
+      readProjects: vi.fn(async () => []),
+      readSettings: vi.fn(async () => settings),
+    });
+    // Le jeton `digest` ne porte pas encore d'identité (lot 1) : la route lit
+    // le Brief du propriétaire via `ownerStore()`.
+    vi.mocked(guard.ownerStore).mockReturnValue(store);
   });
 
   const req = () => new Request("https://brief.example/api/digest");
 
   it("rend enabled:false et des listes vides quand le récap est coupé", async () => {
-    const store = await import("@/lib/store");
-    vi.mocked(store.readSettings).mockResolvedValue({ caldavSync: true, digest: false });
+    settings = { caldavSync: true, digest: false };
 
     const res = await GET(req());
     expect(res.status).toBe(200);
@@ -40,8 +51,7 @@ describe("GET /api/digest", () => {
   });
 
   it("rend enabled:true et le vrai récap quand il est actif", async () => {
-    const store = await import("@/lib/store");
-    vi.mocked(store.readSettings).mockResolvedValue({ caldavSync: true, digest: true });
+    settings = { caldavSync: true, digest: true };
 
     const body = await (await GET(req())).json();
     expect(body.enabled).toBe(true);

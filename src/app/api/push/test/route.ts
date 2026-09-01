@@ -1,5 +1,5 @@
-import { requireSession } from "@/lib/guard";
-import { parseSubscription, readSubscriptions } from "@/lib/push-store";
+import { requireStore } from "@/lib/guard";
+import { parseSubscription } from "@/lib/push-subscription";
 import { sendPushToAll } from "@/lib/webpush";
 
 /**
@@ -14,8 +14,9 @@ import { sendPushToAll } from "@/lib/webpush";
  */
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: Record<string, unknown> = {};
   try {
@@ -32,7 +33,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     targets = [parsed.sub];
   } else {
-    targets = await readSubscriptions();
+    targets = await store.readSubscriptions();
   }
 
   if (targets.length === 0) {
@@ -53,7 +54,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let outcomes;
   try {
-    outcomes = await sendPushToAll(targets, { title, body: bodyText, tag: "brief-test", url: "/" });
+    outcomes = await sendPushToAll(store, targets, { title, body: bodyText, tag: "brief-test", url: "/" });
   } catch (e) {
     // Clés VAPID absentes : configuration serveur, pas erreur d'abonnement.
     return Response.json(

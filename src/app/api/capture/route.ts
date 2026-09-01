@@ -1,7 +1,7 @@
 import { requireMachineToken } from "@/lib/cron-auth";
+import { ownerStore } from "@/lib/guard";
 import { structureText } from "@/lib/parse";
 import { fallbackProjectId } from "@/lib/projects";
-import { readProjects, saveItems } from "@/lib/store";
 import type { Item } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -32,6 +32,12 @@ export async function POST(req: Request): Promise<Response> {
   const denied = requireMachineToken(req, "BRIEF_CAPTURE_TOKEN");
   if (denied) return denied;
 
+  // ⚠️ MONO-COMPTE JUSQU'AU LOT 2. Ce jeton ne porte aucune identité : la
+  // capture écrit donc dans le Brief du PROPRIÉTAIRE. Le lot 2 le remplace par
+  // un jeton par compte (table `machine_tokens`), et cette ligne disparaît.
+  const store = ownerStore();
+  if (store instanceof Response) return store;
+
   let body: { text?: unknown; structure?: unknown };
   try {
     body = (await req.json()) as typeof body;
@@ -44,7 +50,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "`text` est requis." }, { status: 400 });
   }
 
-  const projects = await readProjects();
+  const projects = await store.readProjects();
   const fallback = fallbackProjectId(projects);
   const now = new Date().toISOString();
 
@@ -63,7 +69,7 @@ export async function POST(req: Request): Promise<Response> {
       remindedAt: null,
       doneAt: null,
     };
-    await saveItems([item]);
+    await store.saveItems([item]);
     return Response.json({ saved: 1, items: [item] });
   }
 
@@ -96,7 +102,7 @@ export async function POST(req: Request): Promise<Response> {
     doneAt: null,
   }));
 
-  await saveItems(items);
+  await store.saveItems(items);
 
   // Réponse volontairement courte : le raccourci l'affiche en notification.
   return Response.json({

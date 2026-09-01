@@ -1,6 +1,7 @@
 import "server-only";
 import webpush from "web-push";
-import { removeSubscription, type PushSubscriptionRecord } from "./push-store";
+import type { PushSubscriptionRecord } from "./push-subscription";
+import type { Store } from "./store";
 
 /**
  * Envoi Web Push — le chemin critique de la notification.
@@ -48,11 +49,17 @@ function configure(): void {
 
 /**
  * Envoie à un abonnement. Ne lève pas : renvoie l'issue pour que l'appelant
- * décide. Un abonnement périmé (404/410) est purgé du stockage — iOS révoque
+ * décide.
+ *
+ * ⚠️ Le store est celui du DESTINATAIRE : purger un abonnement expiré doit
+ * retirer la ligne du compte qui l'a enregistrée, jamais d'un autre.
+ *
+ * Un abonnement périmé (404/410) est purgé du stockage — iOS révoque
  * les abonnements, notamment après réinstallation de la PWA, et un abonnement
  * mort qu'on garde fait échouer tous les envois suivants en silence.
  */
 export async function sendPush(
+  store: Store,
   sub: PushSubscriptionRecord,
   payload: PushPayload,
 ): Promise<SendOutcome> {
@@ -75,7 +82,7 @@ export async function sendPush(
     const gone = status === 404 || status === 410;
 
     if (gone) {
-      await removeSubscription(sub.endpoint).catch(() => {
+      await store.removeSubscription(sub.endpoint).catch(() => {
         /* purge best-effort : ne doit pas masquer l'erreur d'envoi */
       });
     }
@@ -92,8 +99,9 @@ export async function sendPush(
 
 /** Envoie à plusieurs abonnements. Un échec n'interrompt pas les autres. */
 export async function sendPushToAll(
+  store: Store,
   subs: PushSubscriptionRecord[],
   payload: PushPayload,
 ): Promise<SendOutcome[]> {
-  return Promise.all(subs.map((s) => sendPush(s, payload)));
+  return Promise.all(subs.map((s) => sendPush(store, s, payload)));
 }

@@ -1,7 +1,6 @@
 import { buildDayAgenda } from "@/lib/agenda";
 import { readAgendaSnapshot } from "@/lib/caldav";
-import { requireSessionOrMachineToken } from "@/lib/guard";
-import { readItems } from "@/lib/store";
+import { requireStoreOrMachineToken } from "@/lib/guard";
 import { shiftDays, zonedParts, zonedTime, type CalendarDate } from "@/lib/zoned";
 
 export const runtime = "nodejs";
@@ -37,10 +36,11 @@ function parseDateParam(raw: string | null): CalendarDate | null {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = await requireSessionOrMachineToken(req, "BRIEF_DIGEST_TOKEN", {
+  const session = await requireStoreOrMachineToken(req, "BRIEF_DIGEST_TOKEN", {
     allowQueryToken: true,
   });
-  if (denied) return denied;
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   const url = new URL(req.url);
   const parts = parseDateParam(url.searchParams.get("date"));
@@ -52,7 +52,7 @@ export async function GET(req: Request): Promise<Response> {
   const next = shiftDays(parts, 1);
   const dayEnd = zonedTime(next.y, next.m, next.d, 0, 0);
 
-  const [items, snapshot] = await Promise.all([readItems(), readAgendaSnapshot()]);
+  const [items, snapshot] = await Promise.all([store.readItems(), readAgendaSnapshot(store)]);
   const events = buildDayAgenda(items, snapshot?.events ?? [], dayStart, dayEnd);
 
   const pad = (n: number) => String(n).padStart(2, "0");

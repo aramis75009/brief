@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PATCH } from "./route";
 import { DEFAULT_SETTINGS, type Settings } from "@/lib/settings";
+import { fakeStore, TEST_USER_ID } from "@/lib/testing/fake-store";
 
 vi.mock("@/lib/guard");
-vi.mock("@/lib/store");
 
 /**
  * La route des réglages. Deux points valent un test :
@@ -18,13 +18,14 @@ describe("/api/settings", () => {
   beforeEach(async () => {
     stored = { ...DEFAULT_SETTINGS };
     const guard = await import("@/lib/guard");
-    const store = await import("@/lib/store");
-    vi.mocked(guard.requireSession).mockResolvedValue(null);
-    vi.mocked(store.readSettings).mockImplementation(async () => stored);
-    vi.mocked(store.updateSettingsAtomically).mockImplementation(async (fn) => {
-      stored = fn(stored);
-      return stored;
+    const store = fakeStore({
+      readSettings: vi.fn(async () => stored),
+      updateSettingsAtomically: vi.fn(async (fn) => {
+        stored = fn(stored);
+        return stored;
+      }),
     });
+    vi.mocked(guard.requireStore).mockResolvedValue({ userId: TEST_USER_ID, store });
   });
 
   const patch = (body: string) =>
@@ -61,7 +62,7 @@ describe("/api/settings", () => {
 
   it("propage le 401 de la garde de session", async () => {
     const guard = await import("@/lib/guard");
-    vi.mocked(guard.requireSession).mockResolvedValueOnce(
+    vi.mocked(guard.requireStore).mockResolvedValueOnce(
       Response.json({ error: "x" }, { status: 401 }),
     );
     expect((await GET()).status).toBe(401);

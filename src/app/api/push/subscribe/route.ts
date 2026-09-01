@@ -1,5 +1,5 @@
-import { requireSession } from "@/lib/guard";
-import { parseSubscription, removeSubscription, saveSubscription } from "@/lib/push-store";
+import { requireStore } from "@/lib/guard";
+import { parseSubscription } from "@/lib/push-subscription";
 
 /**
  * Enregistrement et retrait de l'abonnement Web Push du navigateur.
@@ -9,8 +9,9 @@ import { parseSubscription, removeSubscription, saveSubscription } from "@/lib/p
  */
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: unknown;
   try {
@@ -27,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
   const userAgent = req.headers.get("user-agent") ?? undefined;
 
   try {
-    await saveSubscription({ endpoint: sub.endpoint, keys: sub.keys, userAgent });
+    await store.saveSubscription({ endpoint: sub.endpoint, keys: sub.keys, userAgent });
   } catch (e) {
     // Le disque peut être en lecture seule. On le dit au lieu de prétendre que
     // l'abonnement est enregistré : un rappel qui ne partira jamais doit se voir.
@@ -45,8 +46,9 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 export async function DELETE(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: unknown;
   try {
@@ -60,6 +62,6 @@ export async function DELETE(req: Request): Promise<Response> {
     return Response.json({ error: "`endpoint` est requis." }, { status: 400 });
   }
 
-  await removeSubscription(endpoint);
+  await store.removeSubscription(endpoint);
   return Response.json({ removed: true });
 }

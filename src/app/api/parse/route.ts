@@ -1,6 +1,5 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { structureText } from "@/lib/parse";
-import { readProjects } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,8 +12,9 @@ export const maxDuration = 60;
  * `Response`.
  */
 export async function POST(req: Request) {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { text?: unknown };
   try {
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   // Les projets viennent du serveur et non du client : c'est lui qui les possède.
-  const projects = await readProjects();
+  const projects = await store.readProjects();
 
   const result = await structureText(text, projects);
   if ("error" in result) {

@@ -1,7 +1,6 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { detachColumn } from "@/lib/kanban";
 import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
-import { readBoard, updateBoardAtomically, updateItemsAtomically } from "@/lib/store";
 import type { KanbanBoard, KanbanColumn } from "@/lib/types";
 
 /**
@@ -9,7 +8,7 @@ import type { KanbanBoard, KanbanColumn } from "@/lib/types";
  * Les colonnes sont libres (comme Trello) : l'utilisateur crée, nomme,
  * réordonne et supprime ses colonnes.
  *
- * ⚠️ Chaque action passe par `updateBoardAtomically` : `readBoard()` suivi de
+ * ⚠️ Chaque action passe par `updateBoardAtomically` : `store.readBoard()` suivi de
  * `writeBoard()` laissait une fenêtre entre la lecture et l'écriture, et le
  * glisser-déposer des colonnes transforme `reorder` en geste rapide et répété.
  *
@@ -20,9 +19,10 @@ import type { KanbanBoard, KanbanColumn } from "@/lib/types";
  */
 
 export async function GET(_req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
-  const board = await readBoard();
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
+  const board = await store.readBoard();
 
   /*
    * Passe de récupération — les orphelines des suppressions PASSÉES.
@@ -40,7 +40,7 @@ export async function GET(_req: Request): Promise<Response> {
    * écrit une fois, jamais plus.
    */
   const liveIds = board.columns.map((c) => c.id);
-  const recovered = await updateItemsAtomically((items) => detachColumn(items, null, liveIds));
+  const recovered = await store.updateItemsAtomically((items) => detachColumn(items, null, liveIds));
   void recovered;
 
   return Response.json(board);
@@ -69,8 +69,9 @@ function touched(columns: KanbanColumn[]): KanbanBoard {
 }
 
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { action?: unknown; column?: unknown; id?: unknown; name?: unknown; order?: unknown; limit?: unknown };
   try {
@@ -85,7 +86,7 @@ export async function PATCH(req: Request): Promise<Response> {
     const name = String(body.name ?? "").trim().slice(0, 40);
     if (!name) return Response.json({ error: "Nom requis" }, { status: 400 });
     const id = `col-${Date.now().toString(36)}`;
-    const board = await updateBoardAtomically((current) =>
+    const board = await store.updateBoardAtomically((current) =>
       touched([...current.columns, { id, name, order: current.columns.length }]),
     );
     return Response.json(board);
@@ -96,7 +97,7 @@ export async function PATCH(req: Request): Promise<Response> {
     const name = String(body.name ?? "").trim().slice(0, 40);
     if (!name) return Response.json({ error: "Nom requis" }, { status: 400 });
     let found = true;
-    const board = await updateBoardAtomically((current) => {
+    const board = await store.updateBoardAtomically((current) => {
       if (!current.columns.some((c) => c.id === id)) {
         found = false;
         return current;
@@ -116,13 +117,13 @@ export async function PATCH(req: Request): Promise<Response> {
     // `columnId` qui ne pointe plus nulle part, donc des cartes affichées ni
     // dans une colonne ni dans « non placées », perdues sans un mot.
     let detached = 0;
-    await updateItemsAtomically((items) => {
+    await store.updateItemsAtomically((items) => {
       const patches = detachColumn(items, id);
       detached = patches.length;
       return patches;
     });
 
-    const board = await updateBoardAtomically((current) =>
+    const board = await store.updateBoardAtomically((current) =>
       touched(renumber(byStoredOrder(current.columns.filter((c) => c.id !== id)))),
     );
 
@@ -130,7 +131,7 @@ export async function PATCH(req: Request): Promise<Response> {
     // d'item, **sans liste blanche de champs**. `columnId` ne peut pas changer
     // l'état d'un objectif aujourd'hui — mais raisonner « ce champ-là ne
     // compte pas » est exactement ce que l'invariant interdit.
-    if (detached > 0) await reconcileObjectivesInStore();
+    if (detached > 0) await reconcileObjectivesInStore(store);
 
     return Response.json({ ...board, detached });
   }
@@ -141,7 +142,7 @@ export async function PATCH(req: Request): Promise<Response> {
       return Response.json({ error: "order doit être un tableau d'IDs" }, { status: 400 });
     }
     const idList = ids.map(String);
-    const board = await updateBoardAtomically((current) => {
+    const board = await store.updateBoardAtomically((current) => {
       const ranked = new Map(idList.map((id, index) => [id, index]));
       // Une colonne absente de la liste (créée par un autre onglet entre-temps)
       // passe en fin plutôt que de sauter en tête avec un rang -1.
@@ -168,7 +169,7 @@ export async function PATCH(req: Request): Promise<Response> {
     else return Response.json({ error: "limit doit être un entier de 1 à 999, ou null" }, { status: 400 });
 
     let found = true;
-    const board = await updateBoardAtomically((current) => {
+    const board = await store.updateBoardAtomically((current) => {
       if (!current.columns.some((c) => c.id === id)) {
         found = false;
         return current;

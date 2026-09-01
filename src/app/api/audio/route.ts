@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -17,8 +17,9 @@ function extFor(mimeType: string): string {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let form: FormData;
   try {
@@ -38,8 +39,11 @@ export async function POST(req: Request): Promise<Response> {
   const mimeType = String(form.get("mimeType") || file.type || "audio/webm");
   const ext = extFor(mimeType);
 
-  const dataDir = process.env.BRIEF_DATA_DIR || join(process.cwd(), ".data");
-  const audioDir = join(dataDir, "audio");
+  // ⚠️ Le répertoire vient du STORE, jamais de `BRIEF_DATA_DIR` recomposé ici.
+  // Jusqu'au 2026-08-31 il était global : n'importe quel compte autorisé
+  // pouvait servir la dictée d'un autre par `GET /api/audio/<id>`, et les ids
+  // (`audio_<timestamp base36>`) sont énumérables.
+  const audioDir = store.audioDir();
 
   const id = `audio_${Date.now().toString(36)}`;
   const filename = `${id}.${ext}`;

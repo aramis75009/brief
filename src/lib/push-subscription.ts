@@ -1,21 +1,10 @@
-import "server-only";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-
 /**
- * Stockage des abonnements push.
+ * Abonnements Web Push — la partie PURE : forme, validation, rien d'autre.
  *
- * ⚠️ ÉTAT TRANSITOIRE. Un fichier JSON, pas une base. Ça tient parce que Brief
- * a exactement un utilisateur et que la cible est un VPS avec un disque
- * persistant. Ce module disparaît quand Postgres arrive (tâche T3) : garder
- * l'API `readSubscriptions` / `saveSubscription` / `removeSubscription`
- * inchangée pour que la bascule ne touche que ce fichier.
- *
- * ⚠️ SUR VERCEL, CE STOCKAGE NE SURVIT PAS. Le système de fichiers d'une
- * fonction est éphémère et en lecture seule hors /tmp. Un abonnement enregistré
- * peut avoir disparu à l'appel suivant. C'est pourquoi /api/push/test accepte
- * un abonnement explicite dans le corps : le pic S1 doit pouvoir tourner avant
- * que le VPS existe.
+ * Séparée du stockage le 2026-08-31 (pivot multi-utilisateur) : le stockage
+ * est passé dans `store.ts`, qui écrit sous le répertoire d'UN compte. Ce
+ * module ne touche ni au disque ni au réseau, donc il se teste sans fixture et
+ * s'importe depuis n'importe où.
  */
 
 export type PushSubscriptionRecord = {
@@ -26,10 +15,8 @@ export type PushSubscriptionRecord = {
   userAgent?: string;
 };
 
-const DATA_DIR = process.env.BRIEF_DATA_DIR || join(process.cwd(), ".data");
-const FILE = join(DATA_DIR, "push-subscriptions.json");
-
-function isRecord(value: unknown): value is PushSubscriptionRecord {
+/** Garde de forme d'une ligne lue sur le disque. */
+export function isRecord(value: unknown): value is PushSubscriptionRecord {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   const keys = v.keys as Record<string, unknown> | undefined;
@@ -41,39 +28,6 @@ function isRecord(value: unknown): value is PushSubscriptionRecord {
     typeof keys.p256dh === "string" &&
     typeof keys.auth === "string"
   );
-}
-
-export async function readSubscriptions(): Promise<PushSubscriptionRecord[]> {
-  try {
-    const raw = await readFile(FILE, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isRecord);
-  } catch {
-    // Fichier absent, illisible ou JSON cassé : aucun abonnement connu. Pas
-    // d'exception — l'absence d'abonnement est un état normal, pas une panne.
-    return [];
-  }
-}
-
-async function writeAll(list: PushSubscriptionRecord[]): Promise<void> {
-  await mkdir(dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(list, null, 2), "utf8");
-}
-
-/** Enregistre ou remplace l'abonnement identifié par son endpoint. */
-export async function saveSubscription(
-  sub: Omit<PushSubscriptionRecord, "createdAt">,
-): Promise<void> {
-  const list = await readSubscriptions();
-  const next = list.filter((s) => s.endpoint !== sub.endpoint);
-  next.push({ ...sub, createdAt: new Date().toISOString() });
-  await writeAll(next);
-}
-
-export async function removeSubscription(endpoint: string): Promise<void> {
-  const list = await readSubscriptions();
-  await writeAll(list.filter((s) => s.endpoint !== endpoint));
 }
 
 /** Longueur en octets d'une chaîne base64url, sans la décoder réellement. */

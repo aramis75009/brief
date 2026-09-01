@@ -1,7 +1,6 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { columnItems, moveCardPlan } from "@/lib/kanban";
 import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
-import { readBoard, updateItemsAtomically } from "@/lib/store";
 import type { Item } from "@/lib/types";
 
 /**
@@ -24,10 +23,11 @@ import type { Item } from "@/lib/types";
  * victime.
  */
 
-/** Route d'ÉCRITURE : `requireSession()` seul, jamais le jeton machine. */
+/** Route d'ÉCRITURE : la session seule (`requireStore()`), jamais le jeton machine. */
 export async function PATCH(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: {
     itemId?: unknown;
@@ -54,7 +54,7 @@ export async function PATCH(req: Request): Promise<Response> {
   let toColumnId: string | null = null;
   if (typeof body.toColumnId === "string" && body.toColumnId.trim()) {
     const wanted = body.toColumnId.trim();
-    const board = await readBoard();
+    const board = await store.readBoard();
     toColumnId = board.columns.some((column) => column.id === wanted) ? wanted : null;
   } else if (body.toColumnId !== null && body.toColumnId !== undefined) {
     return Response.json({ error: "toColumnId doit être une chaîne ou null" }, { status: 400 });
@@ -62,7 +62,7 @@ export async function PATCH(req: Request): Promise<Response> {
 
   let found = false;
   let fromColumnId: string | null = null;
-  const items = await updateItemsAtomically((current) => {
+  const items = await store.updateItemsAtomically((current) => {
     const moved = current.find((item) => item.id === itemId);
     if (!moved) return [];
     found = true;
@@ -75,7 +75,7 @@ export async function PATCH(req: Request): Promise<Response> {
   // Invariant `AGENTS.md` : la réconciliation tourne après toute écriture
   // d'item, sans liste blanche de champs. Elle rend la même référence quand
   // rien ne change, donc l'écriture disque est sautée.
-  await reconcileObjectivesInStore();
+  await reconcileObjectivesInStore(store);
 
   // L'état frais des colonnes touchées : sans lui, l'UI optimiste ne peut pas
   // se réconcilier et prendrait un déplacement vers un item supprimé pour un

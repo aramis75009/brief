@@ -1,9 +1,8 @@
 import "server-only";
 import { applyOverride } from "./caldav";
 import { formatDue } from "./due";
-import { readSubscriptions } from "./push-store";
 import { nextOccurrence } from "./rrule";
-import { patchItems, readItems } from "./store";
+import type { Store } from "./store";
 import { sendPushToAll } from "./webpush";
 import type { Item } from "./types";
 
@@ -119,11 +118,15 @@ function payloadFor(item: Item) {
 }
 
 /**
- * Un passage du planificateur. Ne lève jamais : renvoie un compte-rendu.
- * Un cron qui plante en silence est pire qu'un cron qui ne fait rien.
+ * Un passage du planificateur POUR UN COMPTE. Ne lève jamais : renvoie un
+ * compte-rendu. Un cron qui plante en silence est pire qu'un cron qui ne fait
+ * rien.
+ *
+ * L'itération sur les comptes appartient à la route (`sweepUsers`), pas ici :
+ * ce module doit rester testable sur un seul store.
  */
-export async function runReminders(now: Date = new Date()): Promise<ReminderRun> {
-  const items = await readItems();
+export async function runReminders(store: Store, now: Date = new Date()): Promise<ReminderRun> {
+  const items = await store.readItems();
   const { ready, stale, beforeAnchor } = pendingReminders(items, now);
 
   const run: ReminderRun = {
@@ -146,7 +149,7 @@ export async function runReminders(now: Date = new Date()): Promise<ReminderRun>
   ];
 
   if (ready.length) {
-    const subs = await readSubscriptions();
+    const subs = await store.readSubscriptions();
 
     if (!subs.length) {
       // Aucun appareil abonné : on ne marque RIEN comme envoyé. Le rappel
@@ -155,7 +158,7 @@ export async function runReminders(now: Date = new Date()): Promise<ReminderRun>
     } else {
       for (const item of ready) {
         try {
-          const outcomes = await sendPushToAll(subs, payloadFor(item));
+          const outcomes = await sendPushToAll(store, subs, payloadFor(item));
           const delivered = outcomes.some((o) => o.ok);
 
           if (!delivered) {
@@ -204,7 +207,7 @@ export async function runReminders(now: Date = new Date()): Promise<ReminderRun>
 
   // Une seule écriture pour tout le passage : si le processus s'arrête ici,
   // soit tous les marquages sont posés, soit aucun — jamais la moitié.
-  await patchItems(patches);
+  await store.patchItems(patches);
 
   return run;
 }

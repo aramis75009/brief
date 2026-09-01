@@ -1,6 +1,5 @@
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 import { nextSkin, uniqueProjectId } from "@/lib/projects";
-import { readItems, readProjects, writeProjects } from "@/lib/store";
 import type { Project } from "@/lib/types";
 
 /**
@@ -14,15 +13,17 @@ import type { Project } from "@/lib/types";
 const MAX_NAME = 40;
 
 export async function GET(_req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
-  return Response.json(await readProjects());
+  return Response.json(await store.readProjects());
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { name?: unknown };
   try {
@@ -36,7 +37,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Le nom du projet est vide." }, { status: 400 });
   }
 
-  const projects = await readProjects();
+  const projects = await store.readProjects();
 
   // Comparaison insensible à la casse et aux espaces : deux projets nommés
   // « Sport » et « sport » seraient indiscernables à l'écran, donc c'est un
@@ -53,7 +54,7 @@ export async function POST(req: Request): Promise<Response> {
   };
 
   try {
-    await writeProjects([...projects, created]);
+    await store.writeProjects([...projects, created]);
   } catch (e) {
     // Disque en lecture seule (Vercel) : on le dit plutôt que de laisser croire
     // que le projet est créé alors qu'il disparaîtra au rechargement.
@@ -67,8 +68,9 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 export async function DELETE(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { id?: unknown };
   try {
@@ -80,7 +82,7 @@ export async function DELETE(req: Request): Promise<Response> {
   const id = String(body.id ?? "").trim();
   if (!id) return Response.json({ error: "Identifiant manquant." }, { status: 400 });
 
-  const projects = await readProjects();
+  const projects = await store.readProjects();
   if (!projects.some((p) => p.id === id)) {
     return Response.json({ error: "Projet introuvable." }, { status: 404 });
   }
@@ -89,10 +91,10 @@ export async function DELETE(req: Request): Promise<Response> {
   // qu'on range une étiquette serait une perte de données sans rapport avec
   // l'intention. Ils deviennent orphelins et s'affichent sous « Autre » dans
   // l'écran Tâches, donc rien ne disparaît en silence.
-  const orphaned = (await readItems()).filter((i) => i.projectId === id && !i.doneAt).length;
+  const orphaned = (await store.readItems()).filter((i) => i.projectId === id && !i.doneAt).length;
 
   try {
-    await writeProjects(projects.filter((p) => p.id !== id));
+    await store.writeProjects(projects.filter((p) => p.id !== id));
   } catch (e) {
     return Response.json(
       { error: "Projet non supprimé côté serveur.", detail: e instanceof Error ? e.message : String(e) },

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PATCH } from "./route";
 import type { Item, KanbanBoard } from "@/lib/types";
+import { fakeStore, TEST_USER_ID } from "@/lib/testing/fake-store";
 
 vi.mock("@/lib/guard");
-vi.mock("@/lib/store");
 vi.mock("@/lib/objective-reconcile");
 
 /**
@@ -21,6 +21,7 @@ describe("PATCH /api/board", () => {
   let board: KanbanBoard;
   let items: Item[];
   let writeOrder: string[];
+  let store: ReturnType<typeof fakeStore>;
 
   function item(id: string, columnId: string | null, columnOrder?: number): Item {
     return {
@@ -44,22 +45,26 @@ describe("PATCH /api/board", () => {
     items = [item("a", "doing", 0), item("b", "doing", 1), item("c", "todo", 0)];
 
     const guard = await import("@/lib/guard");
-    const store = await import("@/lib/store");
     const reconcile = await import("@/lib/objective-reconcile");
-    vi.mocked(guard.requireSession).mockResolvedValue(null);
     vi.mocked(reconcile.reconcileObjectivesInStore).mockResolvedValue(undefined as never);
-    vi.mocked(store.readBoard).mockImplementation(async () => board);
-    vi.mocked(store.updateBoardAtomically).mockImplementation(async (fn) => {
-      writeOrder.push("board");
-      board = fn(board);
-      return board;
+
+    store = fakeStore({
+      readBoard: vi.fn(async () => board),
+      updateBoardAtomically: vi.fn(async (fn) => {
+        writeOrder.push("board");
+        board = fn(board);
+        return board;
+      }),
+      updateItemsAtomically: vi.fn(async (fn: (items: Item[]) => { id: string; patch: Partial<Item> }[]) => {
+        writeOrder.push("items");
+        const byId = new Map(fn(items).map((p) => [p.id, p.patch]));
+        items = items.map((it) =>
+          byId.has(it.id) ? { ...it, ...byId.get(it.id), id: it.id } : it,
+        );
+        return items;
+      }),
     });
-    vi.mocked(store.updateItemsAtomically).mockImplementation(async (fn) => {
-      writeOrder.push("items");
-      const byId = new Map(fn(items).map((p) => [p.id, p.patch]));
-      items = items.map((it) => (byId.has(it.id) ? { ...it, ...byId.get(it.id), id: it.id } : it));
-      return items;
-    });
+    vi.mocked(guard.requireStore).mockResolvedValue({ userId: TEST_USER_ID, store });
   });
 
   const patch = (body: unknown) =>
@@ -70,8 +75,7 @@ describe("PATCH /api/board", () => {
 
   it("refuse sans session — la garde est la première ligne", async () => {
     const guard = await import("@/lib/guard");
-    vi.mocked(guard.requireSession).mockResolvedValue(new Response(null, { status: 401 }));
-    const store = await import("@/lib/store");
+    vi.mocked(guard.requireStore).mockResolvedValue(new Response(null, { status: 401 }));
     expect((await patch({ action: "add", name: "X" })).status).toBe(401);
     expect(store.updateBoardAtomically).not.toHaveBeenCalled();
   });
@@ -93,8 +97,7 @@ describe("PATCH /api/board", () => {
     });
 
     it("n'écrit rien quand le board est sain", async () => {
-      const store = await import("@/lib/store");
-      await GET(new Request("https://brief.example/api/board"));
+        await GET(new Request("https://brief.example/api/board"));
       // `updateItemsAtomically` est appelée, mais son plan est vide — c'est elle
       // qui décide de ne pas écrire. Ce qui compte : aucun item n'a bougé.
       expect(items.every((it) => it.columnId !== null)).toBe(true);
@@ -103,7 +106,7 @@ describe("PATCH /api/board", () => {
 
     it("refuse sans session", async () => {
       const guard = await import("@/lib/guard");
-      vi.mocked(guard.requireSession).mockResolvedValue(new Response(null, { status: 401 }));
+      vi.mocked(guard.requireStore).mockResolvedValue(new Response(null, { status: 401 }));
       expect((await GET(new Request("https://brief.example/api/board"))).status).toBe(401);
     });
   });

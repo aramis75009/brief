@@ -1,7 +1,5 @@
 import "server-only";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { patchItem, readItems, saveItems } from "./store";
+import type { Store } from "./store";
 import { shiftDays, zonedParts } from "./zoned";
 import type { Item } from "./types";
 // Conversions de dates et application des overrides : pures, partagées avec
@@ -50,6 +48,12 @@ import { icalUtc, remoteDueToItem } from "./overrides";
  *      Un projet sans calendrier connu retombe sur « Personnel » (home/).
  */
 
+// ⚠️ GLOBALES ET MONO-COMPTE — un seul compte iCloud pour toute l'app. Les
+// données, elles, sont cloisonnées depuis le 2026-08-31 : c'est le store passé
+// à `runCalDavSync` qui décide de QUI est synchronisé, et le lot 1 ne le nourrit
+// qu'avec le compte propriétaire. Ces quatre variables deviennent des
+// identifiants PAR UTILISATEUR au lot 3 du pivot, chiffrés au repos — voir
+// `docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md`.
 const CALDAV_ROOT = process.env.BRIEF_CALDAV_ROOT || "https://caldav.icloud.com/";
 const CALDAV_USER = process.env.BRIEF_CALDAV_USER;
 const CALDAV_PASSWORD = process.env.BRIEF_CALDAV_PASSWORD;
@@ -57,7 +61,6 @@ const CALENDAR_PATH = process.env.BRIEF_CALDAV_CALENDAR_PATH;
 const UID_PREFIX = "brief-";
 const SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20 * 1000;
-const DATA_DIR = process.env.BRIEF_DATA_DIR || join(process.cwd(), ".data");
 const LAST_SYNC_FILE = "caldav-last-sync.json";
 
 /**
@@ -689,13 +692,9 @@ const AGENDA_SNAPSHOT_FILE = "caldav-agenda-snapshot.json";
 
 export type AgendaSnapshot = { generatedAt: string; events: CalendarEvent[] };
 
-async function writeAgendaSnapshot(events: CalendarEvent[]): Promise<void> {
-  const path = join(DATA_DIR, AGENDA_SNAPSHOT_FILE);
-  const tmp = `${path}.${process.pid}.tmp`;
+async function writeAgendaSnapshot(store: Store, events: CalendarEvent[]): Promise<void> {
   const snapshot: AgendaSnapshot = { generatedAt: new Date().toISOString(), events };
-  await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(tmp, JSON.stringify(snapshot), "utf8");
-  await rename(tmp, path);
+  await store.writeUserJson(AGENDA_SNAPSHOT_FILE, snapshot);
 }
 
 /**
@@ -703,13 +702,8 @@ async function writeAgendaSnapshot(events: CalendarEvent[]): Promise<void> {
  * passage n'a encore réussi (juste après un déploiement, par exemple) — la
  * route agenda retombe alors sur les items Brief seuls, jamais une erreur.
  */
-export async function readAgendaSnapshot(): Promise<AgendaSnapshot | null> {
-  try {
-    const raw = await readFile(join(DATA_DIR, AGENDA_SNAPSHOT_FILE), "utf8");
-    return JSON.parse(raw) as AgendaSnapshot;
-  } catch {
-    return null;
-  }
+export async function readAgendaSnapshot(store: Store): Promise<AgendaSnapshot | null> {
+  return store.readUserJson<AgendaSnapshot | null>(AGENDA_SNAPSHOT_FILE, null);
 }
 
 /**
@@ -920,27 +914,22 @@ type SyncState = { lastSyncAt: number; deletedExternalUids: string[] };
  * recrée à l'identique (même `id` déterministe `caldav-<uid>`) au passage
  * suivant. Un item supprimé dans Brief ne doit jamais revenir tout seul.
  */
-export async function readSyncState(): Promise<SyncState> {
-  try {
-    const raw = await readFile(join(DATA_DIR, LAST_SYNC_FILE), "utf8");
-    const parsed = JSON.parse(raw) as { lastSyncAt?: unknown; deletedExternalUids?: unknown };
-    return {
-      lastSyncAt: Number(parsed.lastSyncAt ?? 0),
-      deletedExternalUids: Array.isArray(parsed.deletedExternalUids)
-        ? parsed.deletedExternalUids.filter((u): u is string => typeof u === "string")
-        : [],
-    };
-  } catch {
-    return { lastSyncAt: 0, deletedExternalUids: [] };
-  }
+export async function readSyncState(store: Store): Promise<SyncState> {
+  const parsed = await store.readUserJson<{
+    lastSyncAt?: unknown;
+    deletedExternalUids?: unknown;
+  } | null>(LAST_SYNC_FILE, null);
+  if (!parsed) return { lastSyncAt: 0, deletedExternalUids: [] };
+  return {
+    lastSyncAt: Number(parsed.lastSyncAt ?? 0),
+    deletedExternalUids: Array.isArray(parsed.deletedExternalUids)
+      ? parsed.deletedExternalUids.filter((u): u is string => typeof u === "string")
+      : [],
+  };
 }
 
-async function writeSyncState(state: SyncState): Promise<void> {
-  const path = join(DATA_DIR, LAST_SYNC_FILE);
-  const tmp = `${path}.${process.pid}.tmp`;
-  await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(tmp, JSON.stringify(state), "utf8");
-  await rename(tmp, path);
+async function writeSyncState(store: Store, state: SyncState): Promise<void> {
+  await store.writeUserJson(LAST_SYNC_FILE, state);
 }
 
 /**
@@ -949,10 +938,13 @@ async function writeSyncState(state: SyncState): Promise<void> {
  * Appelé synchroneusement par `DELETE /api/items/[id]` — avant même le
  * prochain passage de sync, pas seulement pendant.
  */
-export async function recordDeletedExternalUid(uid: string): Promise<void> {
-  const state = await readSyncState();
+export async function recordDeletedExternalUid(store: Store, uid: string): Promise<void> {
+  const state = await readSyncState(store);
   if (state.deletedExternalUids.includes(uid)) return;
-  await writeSyncState({ ...state, deletedExternalUids: [...state.deletedExternalUids, uid] });
+  await writeSyncState(store, {
+    ...state,
+    deletedExternalUids: [...state.deletedExternalUids, uid],
+  });
 }
 
 /**
@@ -996,8 +988,8 @@ async function putEvent(calendarUrl: string, item: Item): Promise<void> {
  * chiffré, comme le cron des rappels : une sortie vide ne permettrait pas de
  * distinguer « rien à faire » de « cassé depuis trois jours ».
  */
-export async function runCalDavSync(): Promise<CalDavSyncRun> {
-  const lastSync = (await readSyncState()).lastSyncAt;
+export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
+  const lastSync = (await readSyncState(store)).lastSyncAt;
   const elapsedMs = Date.now() - lastSync;
 
   if (lastSync > 0 && elapsedMs < SYNC_INTERVAL_MS) {
@@ -1019,7 +1011,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     };
   }
 
-  const items = await readItems();
+  const items = await store.readItems();
   // Tous les items datés et non terminés, avec leur calendrier cible.
   const desired = items
     .map((i) => ({ item: i, ics: buildEventIcs(i) }))
@@ -1164,7 +1156,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
         // Supprimé par Aramis dans l'app Calendrier : on l'adopte comme
         // terminé plutôt que de le recréer au prochain passage.
         try {
-          const updated = await patchItem(it.id, decision.patch);
+          const updated = await store.patchItem(it.id, decision.patch);
           if (updated) completedFromCalendar += 1;
         } catch (e) {
           failures.push({
@@ -1177,7 +1169,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
 
       if (decision.action === "adopt") {
         try {
-          const updated = await patchItem(it.id, decision.patch);
+          const updated = await store.patchItem(it.id, decision.patch);
           if (updated) {
             adopted += 1;
             continue; // le calendrier est déjà la vérité : rien à réécrire
@@ -1195,7 +1187,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
         await putEvent(calUrl, it);
         put += 1;
         const patch = postPutPatch(it);
-        if (patch) await patchItem(it.id, patch);
+        if (patch) await store.patchItem(it.id, patch);
       } catch (e) {
         failures.push({ uid: `${UID_PREFIX}${it.id}`, error: e instanceof Error ? e.message : "PUT échoué" });
       }
@@ -1217,7 +1209,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // qu'il reste dans cette liste, `decideExternalSync` ne doit PAS ré-adopter
   // l'événement comme un nouvel item — sans plus jamais le supprimer côté
   // calendrier. Prunée naturellement si Aramis supprime lui-même l'événement.
-  const syncState = await readSyncState();
+  const syncState = await readSyncState(store);
   const deletedExternalUids = new Set(syncState.deletedExternalUids);
 
   for (const [uid, { remote, calendarName }] of externalByUid) {
@@ -1228,10 +1220,10 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     try {
       if (decision.action === "create") {
         const now = new Date().toISOString();
-        await saveItems([{ ...decision.item, id: `caldav-${uid}`, createdAt: now, remindedAt: null, doneAt: null }]);
+        await store.saveItems([{ ...decision.item, id: `caldav-${uid}`, createdAt: now, remindedAt: null, doneAt: null }]);
         externalAdopted += 1;
       } else if (decision.action === "update") {
-        await patchItem(existingItem!.id, decision.patch);
+        await store.patchItem(existingItem!.id, decision.patch);
         externalUpdated += 1;
       }
       // "noop" (item terminé/supprimé, ou UID tombstoné) : le calendrier
@@ -1254,7 +1246,7 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
     if (externalByUid.has(it.externalUid)) continue; // déjà traité ci-dessus
     if (it.externalCalendar && agendaReadFailed.has(it.externalCalendar)) continue;
     try {
-      await patchItem(it.id, { doneAt: new Date().toISOString() });
+      await store.patchItem(it.id, { doneAt: new Date().toISOString() });
       externalCompleted += 1;
     } catch (e) {
       failures.push({ uid: it.externalUid, error: e instanceof Error ? e.message : "complétion externe échouée" });
@@ -1265,13 +1257,16 @@ export async function runCalDavSync(): Promise<CalDavSyncRun> {
   // événements déjà lus restent plus utiles à la vue Rendez-vous qu'un
   // instantané vide ou périmé. Chaque événement porte son calendrier
   // d'origine, une lecture partielle ne mélange donc jamais deux passages.
-  await writeAgendaSnapshot(snapshotEvents);
+  await writeAgendaSnapshot(store, snapshotEvents);
 
   // On ne marque le passage réussi qu'une fois TOUT terminé : un échec réseau
   // laisse le timestamp ancien et le passage suivant réessaie — et laisse
   // aussi les tombstones intacts, pour la même raison.
   if (failures.length === 0) {
-    await writeSyncState({ lastSyncAt: Date.now(), deletedExternalUids: stillPresentDeletedUids });
+    await writeSyncState(store, {
+      lastSyncAt: Date.now(),
+      deletedExternalUids: stillPresentDeletedUids,
+    });
   }
 
   return {

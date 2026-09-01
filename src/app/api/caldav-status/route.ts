@@ -1,5 +1,5 @@
 import { readSyncState } from "@/lib/caldav";
-import { requireSession } from "@/lib/guard";
+import { requireStore } from "@/lib/guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,9 +10,10 @@ export const dynamic = "force-dynamic";
  * texte figé (« Synchronisé il y a 4 min », en dur jusqu'ici).
  */
 export async function GET(_req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
-  const { lastSyncAt } = await readSyncState();
+  const { lastSyncAt } = await readSyncState(store);
   return Response.json({ lastSyncAt: lastSyncAt > 0 ? lastSyncAt : null });
 }

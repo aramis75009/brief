@@ -81,6 +81,12 @@ services:
       - -c
       - |
         apk add --no-cache curl >/dev/null
+        # ⚠️ Le `-m 30` est un CONTRAT avec les deux routes : leur
+        # `SWEEP_BUDGET_MS` (25 s) est calé dessous. Le baisser ferait
+        # abandonner curl sur des passages qui réussissent côté serveur, et
+        # `[cron] passage échoué` — le seul signal d'échec de ce déploiement —
+        # tomberait chaque minute sans rien vouloir dire. Le remonter demande
+        # de remonter les budgets avec.
         while true; do
           curl -fsS -m 30 -H "Authorization: Bearer $$BRIEF_CRON_TOKEN" http://app:3000/api/cron/reminders || echo '[cron] passage échoué'
           curl -fsS -m 30 -H "Authorization: Bearer $$BRIEF_CALDAV_TOKEN" http://app:3000/api/cron/caldav-sync || echo '[cron] caldav échoué'

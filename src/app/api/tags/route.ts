@@ -1,5 +1,4 @@
-import { requireSession } from "@/lib/guard";
-import { readTags, writeTags } from "@/lib/store";
+import { requireStore } from "@/lib/guard";
 import { TAG_COLORS } from "@/lib/types";
 import type { Tag, TagColor } from "@/lib/types";
 
@@ -13,14 +12,16 @@ function isTagColor(v: unknown): v is TagColor {
 }
 
 export async function GET(_req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
-  return Response.json(await readTags());
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
+  return Response.json(await store.readTags());
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireStore();
+  if (session instanceof Response) return session;
+  const { store } = session;
 
   let body: { name?: unknown; color?: unknown };
   try {
@@ -34,10 +35,10 @@ export async function POST(req: Request): Promise<Response> {
 
   const color = isTagColor(body.color) ? body.color : "blue";
 
-  const tags = await readTags();
+  const tags = await store.readTags();
   const id = `tag-${Date.now().toString(36)}`;
   const tag: Tag = { id, name, color };
   tags.push(tag);
-  await writeTags(tags);
+  await store.writeTags(tags);
   return Response.json(tag);
 }

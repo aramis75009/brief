@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PATCH } from "./route";
 import type { Item, KanbanBoard } from "@/lib/types";
+import { fakeStore, TEST_USER_ID } from "@/lib/testing/fake-store";
 
 vi.mock("@/lib/guard");
-vi.mock("@/lib/store");
 vi.mock("@/lib/objective-reconcile");
 
 /**
@@ -18,6 +18,7 @@ vi.mock("@/lib/objective-reconcile");
  */
 describe("/api/board/cards", () => {
   let stored: Item[];
+  let store: ReturnType<typeof fakeStore>;
 
   function item(id: string, columnId: string | null, columnOrder?: number, extra: Partial<Item> = {}): Item {
     return {
@@ -39,17 +40,20 @@ describe("/api/board/cards", () => {
     vi.clearAllMocks();
     stored = [item("a", "todo", 0), item("b", "todo", 1), item("c", "todo", 2)];
     const guard = await import("@/lib/guard");
-    const store = await import("@/lib/store");
     const reconcile = await import("@/lib/objective-reconcile");
-    vi.mocked(guard.requireSession).mockResolvedValue(null);
-    vi.mocked(store.readBoard).mockResolvedValue(board);
     vi.mocked(reconcile.reconcileObjectivesInStore).mockResolvedValue(undefined as never);
-    vi.mocked(store.updateItemsAtomically).mockImplementation(async (fn) => {
-      const patches = fn(stored);
-      const byId = new Map(patches.map((p) => [p.id, p.patch]));
-      stored = stored.map((it) => (byId.has(it.id) ? { ...it, ...byId.get(it.id), id: it.id } : it));
-      return stored;
+    store = fakeStore({
+      readBoard: vi.fn(async () => board),
+      updateItemsAtomically: vi.fn(async (fn: (items: Item[]) => { id: string; patch: Partial<Item> }[]) => {
+        const patches = fn(stored);
+        const byId = new Map(patches.map((p) => [p.id, p.patch]));
+        stored = stored.map((it) =>
+          byId.has(it.id) ? { ...it, ...byId.get(it.id), id: it.id } : it,
+        );
+        return stored;
+      }),
     });
+    vi.mocked(guard.requireStore).mockResolvedValue({ userId: TEST_USER_ID, store });
   });
 
   const move = (body: unknown) =>
@@ -66,8 +70,7 @@ describe("/api/board/cards", () => {
 
   it("refuse sans session, avant toute lecture", async () => {
     const guard = await import("@/lib/guard");
-    const store = await import("@/lib/store");
-    vi.mocked(guard.requireSession).mockResolvedValue(new Response(null, { status: 401 }));
+    vi.mocked(guard.requireStore).mockResolvedValue(new Response(null, { status: 401 }));
     expect((await move({ itemId: "a", toColumnId: "todo" })).status).toBe(401);
     expect(store.updateItemsAtomically).not.toHaveBeenCalled();
   });
@@ -120,7 +123,6 @@ describe("/api/board/cards", () => {
   });
 
   it("400 sur un corps illisible, sans rien écrire", async () => {
-    const store = await import("@/lib/store");
     expect((await move("{pas du json")).status).toBe(400);
     expect(store.updateItemsAtomically).not.toHaveBeenCalled();
   });
