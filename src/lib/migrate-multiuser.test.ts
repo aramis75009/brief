@@ -74,16 +74,52 @@ describe("migrateToMultiUser", () => {
     expect(await migrate()).toEqual({ status: "already-migrated" });
   });
 
-  it("ne réécrase pas un compte déjà peuplé si des fichiers globaux réapparaissent", async () => {
-    // Une restauration partielle, ou un volume monté de travers : le compte a
-    // déjà des données. Les écraser avec un vieux jeu global perdrait tout ce
-    // qui a été fait depuis.
+  it("n'écrase pas un fichier déjà présent chez le compte, mais archive quand même l'original", async () => {
+    // Le scénario réel : un démarrage sans BRIEF_OWNER_USER_ID a laissé le
+    // serveur monter, le cron CalDAV ou une connexion a créé `users/<owner>/`,
+    // puis la variable est posée. Le fichier du compte est alors plus récent
+    // que celui de la racine — l'écraser perdrait ce qui s'est fait entre-temps.
     await mkdir(join(dir, "users", OWNER), { recursive: true });
     await writeFile(join(dir, "users", OWNER, "items.json"), '[{"id":"recent"}]', "utf8");
     await writeFile(join(dir, "items.json"), '[{"id":"vieux"}]', "utf8");
+    await writeFile(join(dir, "projects.json"), '[{"id":"p1"}]', "utf8");
 
-    expect(await migrate()).toEqual({ status: "already-migrated" });
+    const report = await migrate();
+
+    expect(report.status).toBe("migrated");
+    if (report.status !== "migrated") throw new Error("statut inattendu");
+    // `items.json` est conservé tel quel, `projects.json` est bien migré.
+    expect(report.files).toEqual(["projects.json"]);
     expect(await readFile(join(dir, "users", OWNER, "items.json"), "utf8")).toContain("recent");
+    expect(await readFile(join(dir, "users", OWNER, "projects.json"), "utf8")).toContain("p1");
+    // L'original part quand même à l'archive : rien n'est jamais perdu.
+    expect(await readFile(join(dir, "_pre-multiuser", "items.json"), "utf8")).toContain("vieux");
+  });
+
+  it("un démarrage bloqué ne condamne PAS la migration une fois la variable posée", async () => {
+    // Le bug trouvé en revue : `already-migrated` se fiait à l'existence de
+    // `users/<owner>/`, que n'importe quelle écriture crée. Un premier
+    // démarrage sans la variable rendait donc la migration impossible POUR
+    // TOUJOURS — avec un rassurant « rien à faire » dans le journal, et les
+    // vraies données abandonnées à la racine.
+    await writeFile(join(dir, "items.json"), '[{"id":"les-vraies-donnees"}]', "utf8");
+
+    // 1er démarrage : pas de propriétaire désigné.
+    delete process.env.BRIEF_OWNER_USER_ID;
+    expect((await migrate()).status).toBe("blocked");
+
+    // Le serveur a démarré quand même : le cron crée le répertoire du compte.
+    await mkdir(join(dir, "users", OWNER), { recursive: true });
+    await writeFile(join(dir, "users", OWNER, "caldav-last-sync.json"), "{}", "utf8");
+
+    // 2e démarrage, variable posée : la migration DOIT avoir lieu.
+    process.env.BRIEF_OWNER_USER_ID = OWNER;
+    const report = await migrate();
+
+    expect(report.status).toBe("migrated");
+    expect(await readFile(join(dir, "users", OWNER, "items.json"), "utf8")).toContain(
+      "les-vraies-donnees",
+    );
   });
 
   it("ne devine JAMAIS le propriétaire : sans la variable, elle ne touche à rien", async () => {
@@ -104,8 +140,8 @@ describe("migrateToMultiUser", () => {
     expect(await readdir(dir)).toEqual(["items.json"]);
   });
 
-  it("migre les huit fichiers, et seulement ceux qui existent", async () => {
-    const present = ["items.json", "projects.json", "push-subscriptions.json"];
+  it("migre les neuf fichiers de compte, et seulement ceux qui existent", async () => {
+    const present = ["items.json", "projects.json", "caldav-agenda-snapshot.json"];
     for (const f of present) await writeFile(join(dir, f), "[]", "utf8");
     // Un fichier étranger ne doit pas être emporté.
     await writeFile(join(dir, "autre-chose.json"), "[]", "utf8");
@@ -119,5 +155,56 @@ describe("migrateToMultiUser", () => {
     expect(await readdir(join(dir, "users", OWNER))).toEqual(expect.arrayContaining(present));
     // Resté à la racine, intact.
     expect(await readFile(join(dir, "autre-chose.json"), "utf8")).toBe("[]");
+  });
+
+  it("emporte les enregistrements vocaux, qui ne sont pas du JSON", async () => {
+    // Les dictées sont référencées par `item.audioId` ; laissées à la racine,
+    // la fiche tâche affiche un lecteur qui rend 404. Rien ne le signale.
+    await writeFile(join(dir, "items.json"), '[{"id":"i1","audioId":"audio_abc"}]', "utf8");
+    await mkdir(join(dir, "audio"), { recursive: true });
+    await writeFile(join(dir, "audio", "audio_abc.webm"), "son", "utf8");
+
+    const report = await migrate();
+
+    if (report.status !== "migrated") throw new Error("statut inattendu");
+    expect(report.audioFiles).toBe(1);
+    expect(await readFile(join(dir, "users", OWNER, "audio", "audio_abc.webm"), "utf8")).toBe(
+      "son",
+    );
+  });
+
+  it("ne prend PAS pour neuf un répertoire qui n'a plus que des dictées", async () => {
+    // Depuis le pivot, plus rien n'écrit dans `<dataDir>/audio/` : son existence
+    // prouve à elle seule des données d'avant. Sans ce test, `fresh-install`
+    // abandonnait les enregistrements à la racine, définitivement.
+    await mkdir(join(dir, "audio"), { recursive: true });
+    await writeFile(join(dir, "audio", "audio_abc.webm"), "son", "utf8");
+
+    const report = await migrate();
+
+    expect(report.status).toBe("migrated");
+    if (report.status !== "migrated") throw new Error("statut inattendu");
+    expect(report.files).toEqual([]);
+    expect(report.audioFiles).toBe(1);
+    expect(await readFile(join(dir, "users", OWNER, "audio", "audio_abc.webm"), "utf8")).toBe(
+      "son",
+    );
+  });
+
+  it("ne remplace pas une dictée déjà présente chez le compte", async () => {
+    await mkdir(join(dir, "audio"), { recursive: true });
+    await mkdir(join(dir, "users", OWNER, "audio"), { recursive: true });
+    await writeFile(join(dir, "audio", "audio_abc.webm"), "ancien", "utf8");
+    await writeFile(join(dir, "users", OWNER, "audio", "audio_abc.webm"), "récent", "utf8");
+
+    const report = await migrate();
+
+    if (report.status !== "migrated") throw new Error("statut inattendu");
+    expect(report.audioFiles).toBe(0);
+    expect(await readFile(join(dir, "users", OWNER, "audio", "audio_abc.webm"), "utf8")).toBe(
+      "récent",
+    );
+    // L'ancien n'est pas supprimé pour autant : il reste là où il était.
+    expect(await readFile(join(dir, "audio", "audio_abc.webm"), "utf8")).toBe("ancien");
   });
 });

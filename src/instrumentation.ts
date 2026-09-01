@@ -19,7 +19,9 @@ export async function register() {
       case "migrated":
         console.log(
           `[migration] ${report.files.length} fichier(s) attribué(s) au compte ${report.userId} : ` +
-            `${report.files.join(", ")}. Les originaux sont dans _pre-multiuser/.`,
+            `${report.files.join(", ") || "aucun"} ` +
+            `(+ ${report.audioFiles} enregistrement(s) vocal(aux)). ` +
+            `Les originaux sont dans _pre-multiuser/.`,
         );
         break;
       case "blocked":
