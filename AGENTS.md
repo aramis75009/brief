@@ -124,6 +124,16 @@ comme source unique de l'accueil, de l'onglet Agenda et du calendrier desktop
 la lire sans navigateur. **Ne poser cette garde que sur de la LECTURE** : une
 route qui écrit garde `requireSession()` seul, ou un jeton d'écriture dédié.
 
+### Recette authentifiée — le compte agent
+
+Depuis le 2026-09-01, les agents ont un **compte de recette** pour se connecter
+à la prod comme un utilisateur (vérifier un écran, tester un drag & drop,
+valider un fix visuel) : `agent.brief@aramis.local`, credentials dans
+`.env.local` (local, jamais commité). Ce compte a **son propre store
+cloisonné** — il ne touche jamais aux données d'Aramis. Guide complet,
+pièges (session par cookies, PAS Bearer ; Kanban = dnd-kit, PAS le drag
+HTML5) et scripts prêts : [`docs/agent-recette-account.md`](docs/agent-recette-account.md).
+
 ### Cloisonnement par compte — les données appartiennent à quelqu'un
 
 Depuis le 2026-08-31, chaque compte a **ses** fichiers. Trois invariants, tous
