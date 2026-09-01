@@ -17,7 +17,7 @@ re-débat — c'est le premier réflexe à tuer.
 ## 2026-09-07 (après-midi) · Collaborateurs — assigner une tâche à un autre compte
 
 **Contexte.** Aramis veut assigner des tâches au compte agent d'Hermes
-(`agent.brief@aramis.local`) : « comme ça tu as les tâches dans ton Brief et
+(adresse dans `.env.local`) : « comme ça tu as les tâches dans ton Brief et
 tu sais ce que tu dois faire. »
 
 **Décision 1 — l'item VIT chez son propriétaire, il n'est jamais copié.**
