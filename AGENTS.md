@@ -153,7 +153,11 @@ silencieux quand on les casse :
   la route se replie alors sur le seul `BRIEF_OWNER_USER_ID` et le journalise
   comme dégradé. Sans ce repli, une panne Supabase de trois minutes n'atténue
   pas le service, elle l'éteint pour tout le monde — et le cron n'imprime qu'un
-  `curl` en échec.
+  `curl` en échec. **Et quand le repli lui-même n'a personne à servir** (pas de
+  `BRIEF_OWNER_USER_ID` non plus), la route répond **503, pas 200** : le
+  `console.error` part dans le journal du conteneur, que le cron ne lit pas ;
+  seul un `curl -fsS` qui tombe fait sortir `[cron] passage échoué`. Rendre 200
+  ici est la panne muette que tout le reste de ce paragraphe sert à éviter.
 - **`/api/cron/caldav-sync` ne traite QUE `BRIEF_OWNER_USER_ID`**, et répond
   503 s'il manque. Ce n'est pas une simplification à lever à la légère :
   `BRIEF_CALDAV_*` est global jusqu'au lot 3, et la phase d'adoption de
