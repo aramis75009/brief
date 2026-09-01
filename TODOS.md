@@ -215,6 +215,20 @@ sujet proche) :
   Aramis).
 - **Traefik `exposedbydefault=false`** : vérifier les labels si le site
   ne répond pas.
+- **⚠️ Course sur `caldav-last-sync.json`** (trouvée en revue le 01/09,
+  **pré-existante**, non corrigée — hors du périmètre du lot 1, qui allait
+  être déployé). `recordDeletedExternalUid` (`src/lib/caldav.ts:941`) fait une
+  lecture NON sérialisée suivie d'une écriture sérialisée, pendant que
+  `runCalDavSync` relit le même état puis le réécrit à la fin d'un passage qui
+  dure des dizaines de secondes de réseau. Supprimer dans l'app un item adopté
+  depuis le calendrier pendant qu'un passage est en vol : l'écriture finale du
+  passage écrase la pierre tombale, et le passage suivant **ré-adopte
+  l'événement** et recrée l'item sous le même id `caldav-<uid>`. Symptôme
+  visible : une tâche supprimée qui revient. Le store offre désormais de quoi
+  le corriger — une lecture-modification-écriture dans `serialize`, sur le
+  modèle de `updateObjectivesAtomically`. ⚠️ `readSyncState` et
+  `recordDeletedExternalUid` n'ont **aucun test unitaire** : en écrire avant de
+  toucher à ça.
 
 ### « Retiré — ne pas réintroduire »
 
