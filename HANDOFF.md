@@ -10,112 +10,137 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-08-31 (nuit) · Lot 1 du pivot multi-utilisateur : les données sont cloisonnées
+# Passation — 2026-09-01 · Lot 1 multi-utilisateur relu : neuf pannes silencieuses fermées
 
 | | |
 |---|---|
-| **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 31/08 soir). |
-| **Branche** | **`feat/multi-user-store`**, 7 commits, **non poussée, pas de PR**. |
+| **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 31/08 nuit). |
+| **Branche** | **`feat/multi-user-store`**, 16 commits, **non poussée, pas de PR**. |
 | **Base** | `main` @ `bf58eb2`. |
-| **GitHub** | `origin/main` = `bf58eb2`. |
-| **Prod** | **`72a7d1db`** — v1.1.0.0. Ne contient RIEN de ce chantier. |
+| **GitHub** | `origin/main` = `bf58eb2` — personne n'a avancé depuis hier. |
+| **Prod** | injoignable depuis le Mac (normal). Dernier état connu : `72a7d1db`, v1.1.0.0, qui ne contient **rien** de ce chantier. |
 
 ## Goal
 
-Cloisonner les données de Brief par compte. L'auth Supabase existait depuis le
-26/08, mais aucune donnée ne portait d'identifiant : les 18 exports de
-`store.ts` étaient globaux et **tous les comptes ouvraient le même Brief**.
+Finir le lot 1 du pivot multi-utilisateur : relire, corriger, préparer le
+déploiement. Le code du lot était écrit et vert au 31/08 ; cette session l'a
+**relu** et a fermé ce que la relecture a trouvé.
 
-## Current state — le lot 1 est écrit et vert, pas déployé
+## Current state — le lot 1 est relu, corrigé et vert. Toujours pas déployé.
 
-Le chantier est découpé en **trois lots**. Design et six décisions arbitrées
-avec Aramis :
+Design et six décisions arbitrées :
 [`docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md`](docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md).
-Plan d'exécution :
+Plan :
 [`docs/superpowers/plans/2026-08-31-multi-user-lot1-cloisonnement.md`](docs/superpowers/plans/2026-08-31-multi-user-lot1-cloisonnement.md).
+Le lot 1 lui-même est décrit dans la passation d'hier,
+[`docs/handoffs/2026-08-31-nuit-lot1-multi-utilisateur.md`](docs/handoffs/2026-08-31-nuit-lot1-multi-utilisateur.md) —
+**inchangé dans ses principes**.
 
-### Ce qui est fait (lot 1)
+### Les neuf défauts fermés cette session
 
-- **`store.ts` réécrit** : `storeForUser(userId)` rend un `Store` dont les
-  fichiers vivent sous `BRIEF_DATA_DIR/users/<userId>/`. File d'écriture **par
-  compte**. `push-store.ts` absorbé et supprimé ; sa partie pure est dans
-  `push-subscription.ts`.
-- **`requireStore()`** (`guard.ts`) fait la garde ET rend le store — les 17
-  routes l'utilisent.
-- **Les deux crons itèrent** sur `authorized_users` via `sweepUsers`
-  (`cron-sweep.ts`) : un compte en échec n'interrompt pas les suivants, et
-  l'ordre tourne d'un passage à l'autre.
-- **Migration automatique au démarrage** (`instrumentation.ts` +
-  `migrate-multiuser.ts`), idempotente et non destructive.
-- **Les exports globaux de `store.ts` sont supprimés** — c'est le typecheck qui
-  a prouvé qu'aucun appelant n'était oublié.
-- **`no-direct-store-access.test.ts`** interdit à une route de fabriquer son
-  propre store.
+Aucun ne levait d'erreur. Aucun n'aurait fait rougir un test. Les cinq
+premiers venaient d'une relecture faite avant la coupure et étaient restés
+**non commités** ; les quatre derniers viennent de `/code-review high` lancé
+aujourd'hui sur la branche entière.
 
-### Ce qui reste mono-compte, volontairement
+| # | Défaut | Ce qu'il aurait produit | Commit |
+|---|---|---|---|
+| 1 | Les deux routes `/api/audio` recomposaient `join(BRIEF_DATA_DIR, "audio")` sans passer par le store | N'importe quel compte autorisé servait la dictée d'un autre par `GET /api/audio/<id>` — les ids `audio_<timestamp base36>` sont énumérables | `6c1468c` |
+| 2 | Le cron CalDAV itérait sur **tous** les comptes, alors que `BRIEF_CALDAV_*` est global | La phase d'adoption de `runCalDavSync` aurait écrit **l'agenda entier du propriétaire** dans les tâches de chaque autre compte. `settings.caldavSync` ne l'aurait pas empêché : un compte neuf n'a pas de `settings.json` et le défaut est ON | `0960fe7` |
+| 3 | `listAuthorizedUserIds()` **lève** si Supabase est injoignable | Une panne Supabase de trois minutes n'aurait pas dégradé les rappels : elle les aurait **éteints pour tout le monde** | `0960fe7` |
+| 4 | `already-migrated` se fiait à l'existence de `users/<owner>/`, que la première écriture venue crée | Un démarrage sans `BRIEF_OWNER_USER_ID` (cas **prévu**, le serveur monte quand même) condamnait la migration **pour toujours**, avec un rassurant « rien à faire » au journal et les vraies données abandonnées à la racine | `a2d7c53` |
+| 5 | Les dictées n'étaient pas migrées du tout ; `caldav-agenda-snapshot.json` manquait à la liste | Chaque fiche tâche affichait un lecteur audio rendant 404 | `a2d7c53` |
+| 6 | `USER_ID_PATTERN` accepte les majuscules, et l'identifiant devient un **chemin** | `BRIEF_OWNER_USER_ID` est saisi à la main sur le VPS. En majuscules : migration vers `users/A1B2…/` annoncée en succès, pendant que les routes lisent `users/a1b2…/`. **Deux répertoires sur l'ext4 du VPS, un seul sur le macOS de dev** — le bug n'existe qu'en production. Second étage : le cache de stores et la file d'écritures sont indexés par cet identifiant, donc deux files pour un même répertoire et la sérialisation tombe | `afeb0e6` |
+| 7 | `SWEEP_BUDGET_MS = 40_000`, calé sur `maxDuration` — mais le vrai client est `curl -fsS -m 30` | Dès qu'assez de comptes existent, curl abandonne et journalise `[cron] passage échoué` **chaque minute sur des passages qui réussissent**. Le seul signal d'échec du déploiement devenait du bruit permanent | `afeb0e6` |
+| 8 | Le repli des rappels ne couvrait que le cas où Supabase **lève** | Une liste vide rendue **sans erreur** (clé service-role sur le mauvais projet, table renommée) donnait `200 {users: 0}`, `curl -fsS` vert, et aucun rappel pour personne | `afeb0e6` |
+| 9 | Une dictée sautée par la migration restait à la racine **définitivement** — l'archive créée juste après est la sentinelle d'idempotence | Fichier plus jamais servi, plus jamais repris, et **rien au journal** | `afeb0e6` |
 
-| Quoi | Conséquence aujourd'hui | Lot |
-|---|---|---|
-| `BRIEF_CALDAV_*` (4 variables) | un seul compte iCloud pour toute l'app | 3 |
-| Jetons `capture` et `digest` | écrivent chez `BRIEF_OWNER_USER_ID` | 2 |
+### Ce qui est aussi sorti de cette session
+
+- **Deux nouveaux invariants outillés** : aucune route ne lit
+  `process.env.BRIEF_DATA_DIR` (`no-direct-store-access.test.ts`) — c'est la
+  classe d'oubli que le premier invariant ne voyait pas ; et
+  `normalizeUserId` est le seul point où un identifiant devient un chemin.
+- **Premiers tests de `/api/cron/reminders`** (6 cas). Cette route n'en avait
+  aucun.
+- **`SUPABASE_SECRET_KEY` et `BRIEF_OWNER_USER_ID` posés dans `.env.example` et
+  `.env.production.example`** — le déploiement les exige et ils n'étaient dans
+  aucun fichier d'exemple.
+- **Le contrat `-m 30` ↔ `SWEEP_BUDGET_MS` est écrit des deux côtés**
+  (`docker-compose.yml` et les deux routes), pour qu'on ne puisse plus bouger
+  l'un sans voir l'autre.
 
 ## Decisions
 
-Six arbitrages d'Aramis, inscrits dans `DECISIONS.md` (entrée du 31/08 soir)
-avec leur pourquoi. Les deux qui commandent le reste :
+Les six arbitrages d'Aramis du 31/08 (`DECISIONS.md`) tiennent, inchangés.
+Trois décisions de cette session, toutes miennes et toutes réversibles :
 
-1. **Fichiers JSON par compte, pas Postgres.** Le cloisonnement repose donc sur
-   du code discipliné, pas sur RLS.
-2. **Fabrique de store, et suppression des exports globaux.** C'est ce qui rend
-   la discipline vérifiable : un appelant oublié ne compile plus.
-
-⚠️ Aramis a choisi **CalDAV par utilisateur** (lot 3) contre ma recommandation
-de garder un seul compte iCloud. C'est acté ; je l'ai simplement mis en dernier
-lot, parce qu'un compte agent n'a pas de calendrier Apple.
+1. **Le cron CalDAV ne traite que `BRIEF_OWNER_USER_ID`, et rend 503 s'il
+   manque** — porte fermée plutôt qu'ouverte par défaut. Ce n'est **pas** une
+   simplification à lever à la légère : le raccourci évident (« faire itérer le
+   cron ») est exactement le défaut n° 2. Écrit dans `AGENTS.md` et `TODOS.md`
+   là où quelqu'un le lira avant de le refaire.
+2. **L'identifiant est normalisé en minuscules plutôt que refusé en
+   majuscules.** Refuser aurait été loyal aussi (échec bruyant au déploiement),
+   mais tolérer coûte une ligne et supprime la divergence, qui est le vrai bug.
+3. **La course sur `caldav-last-sync.json` n'est PAS corrigée ici** — voir
+   Blockers.
 
 ## Validations
+
+Lancées sur l'arbre final, sortie vue :
 
 ```
 $ npx eslint .       → 0 erreur, 0 warning
 $ npx tsc --noEmit   → 0 erreur
-$ npx vitest run     → 575 passants, 1 skipped (46 fichiers)   [531 avant]
+$ npx vitest run     → 589 passants, 1 skipped (46 fichiers)   [575 avant]
 ```
 
-**Passant, vérifié sur un serveur réel** (worktree isolé sur le port 3199, avec
-une copie de `.data`) — les trois cas de la migration :
+**Passant, vérifié** : `GET http://localhost:3100/` → 200 (le `next dev` en
+cours). `bash scripts/coord/status.sh` → `origin/main` = `bf58eb2`, inchangé.
 
-- `[migration] 2 fichier(s) attribué(s) au compte … Les originaux sont dans _pre-multiuser/.`
-- au redémarrage : `[migration] rien à faire (already-migrated)`
-- sans `BRIEF_OWNER_USER_ID` : `[migration] BLOQUÉE — …` et **le répertoire
-  n'est pas touché**, le serveur démarre quand même.
+**NON LANCÉ — à ne pas croire fait :**
 
-**Passant** : `GET /` → 200 et `GET /api/settings` → 401 sur le dev local.
-
-**NON LANCÉ :**
-
-- **`npm run build`** — un `next dev` tourne sur le port 3100 (règle du repo).
-- **Aucune recette d'écran authentifié.** Le blocage est intact tant que ce lot
-  n'est pas déployé : c'est précisément ce qu'il vient débloquer.
+- **`npm run build`.** Un `next dev` tourne sur le port 3100 : la règle du repo
+  l'interdit (corruption de `.next`).
+- **Les validations n'ont pas été relancées à chaque commit**, seulement sur
+  l'arbre final. Le découpage est thématique, pas bissectable garanti.
+- **Aucune recette d'écran authentifié.** Inchangé depuis quatre sessions :
+  c'est précisément ce que ce lot vient débloquer une fois déployé.
+- **La migration n'a PAS été rejouée sur un serveur réel après les correctifs
+  d'aujourd'hui.** Elle l'avait été le 31/08 (worktree isolé, port 3199, copie
+  de `.data`, trois cas vérifiés), mais `a2d7c53` et `afeb0e6` ont changé sa
+  logique de sentinelle, ajouté les dictées et normalisé la casse. **Les tests
+  unitaires couvrent les trois, pas le serveur réel.** À refaire avant le
+  déploiement si le temps le permet.
 - **`readSyncState`, `recordDeletedExternalUid`, `readAgendaSnapshot`,
-  `runCalDavSync`, `runReminders`, `sendPush` n'ont AUCUN test unitaire direct**
-  — ni avant ni après ce chantier. Le typecheck est leur seul filet ici. À
-  surveiller à la recette.
+  `runCalDavSync`, `runReminders`, `sendPush` n'ont toujours AUCUN test
+  unitaire direct.** Le typecheck est leur seul filet.
 
 ## Next — la prochaine action
 
-1. **Relire le diff** (`/code-review`), puis PR sur `main`.
+1. **Pousser la branche et ouvrir la PR sur `main`.** ⚠️ **Pas fait :** la
+   règle permanente d'Aramis est « ne pas pousser sans demande explicite », et
+   je n'ai pas eu cette demande pour ce geste précis. Tout le reste est prêt ;
+   il ne manque qu'un `git push -u origin feat/multi-user-store` + `gh pr
+   create`.
 2. **Déployer, dans cet ordre** — c'est le seul lot qui touche aux données
    existantes :
    1. Hermes lance **`deploy/backup.sh` AVANT tout**.
    2. Poser dans `.env.production` : **`SUPABASE_SECRET_KEY`** (clé
-      service-role Supabase) et **`BRIEF_OWNER_USER_ID`** (l'UUID d'Aramis, à
-      lire dans `authorized_users`). Aucune migration SQL pour ce lot.
+      service-role Supabase) et **`BRIEF_OWNER_USER_ID`** (UUID d'Aramis, à
+      lire dans `authorized_users`). **En minuscules de préférence** — c'est
+      désormais toléré, mais autant ne pas dépendre du correctif. Aucune
+      migration SQL.
    3. Build + `up`. **Lire le journal `[migration]` en premier** : il dit
-      exactement ce qui a été déplacé.
-   4. Vérifier qu'Aramis retrouve ses tâches.
+      exactement ce qui a été déplacé, et **avertit en `warn`** si des dictées
+      ont été laissées à la racine.
+   4. Vérifier qu'Aramis retrouve ses tâches **et** que ses dictées se jouent.
 3. **Puis seulement** : créer le compte agent, et recetter les écrans
-   authentifiés — le blocage de trois sessions tombe là.
-4. Lots 2 et 3 : voir le spec.
+   authentifiés — le blocage de quatre sessions tombe là.
+4. Lots 2 et 3 : voir le spec. Le lot 3 est plus urgent qu'il n'y paraît —
+   d'ici là, **tout compte qui n'est pas le propriétaire n'a aucune synchro
+   calendrier**.
 
 ### ⚠️ Ce qui revient à Aramis, hors de portée d'un agent
 
@@ -124,17 +149,25 @@ une copie de `.data`) — les trois cas de la migration :
 - **Ne pas créer le compte agent avant que le lot 1 soit déployé et vérifié.**
   Aujourd'hui en prod, il donnerait un accès complet aux vraies données.
 - Révoquer le `TODOIST_API_TOKEN` chez Todoist (jeton vivant pour du code
-  supprimé) — reste de la passation précédente.
+  supprimé) — reste des passations précédentes.
 
 ## Blockers
 
-1. **Pas de SSH vers le VPS depuis le Mac.** Déployer passe par un message à
+1. **Push et PR en attente d'un feu vert explicite** (voir Next, point 1).
+2. **Pas de SSH vers le VPS depuis le Mac.** Déployer passe par un message à
    Hermes. ⚠️ Le webhook `deploy.sh` rend 202 sans rien déclencher, et
    **l'absence de confirmation ne prouve pas qu'un déploiement n'a pas eu
    lieu** — demander le SHA à Hermes.
-2. **Aucun agent ne peut recetter un écran authentifié.** Inchangé, et c'est ce
-   que ce lot vient résoudre une fois déployé.
-3. **Plafond de dépense mensuel atteint le 31/08** (HTTP 429 sur un sous-agent).
+3. **Aucun agent ne peut recetter un écran authentifié.** Inchangé.
+4. **Course sur `caldav-last-sync.json`, trouvée en revue, NON corrigée** —
+   pré-existante, détaillée dans `TODOS.md` § « Dette connue ».
+   `recordDeletedExternalUid` lit sans sérialiser puis écrit en sérialisant,
+   pendant que `runCalDavSync` relit et réécrit le même état sur un passage de
+   plusieurs dizaines de secondes. **Symptôme à reconnaître : une tâche
+   supprimée qui revient.** Non corrigée parce que ni `readSyncState` ni
+   `recordDeletedExternalUid` n'ont de test unitaire — élargir le périmètre à
+   du code non couvert juste avant un déploiement qui touche aux vraies données
+   était le mauvais échange.
 
 ### Différé, à ne pas perdre (dans `TODOS.md`)
 
@@ -152,7 +185,8 @@ une copie de `.data`) — les trois cas de la migration :
 
 | Date | Sujet | Agent | Lien |
 |---|---|---|---|
-| 2026-08-31 (nuit) | Lot 1 du pivot multi-utilisateur : données cloisonnées | Claude Code (Opus 5) | (cette passation) |
+| 2026-09-01 | Lot 1 relu : neuf pannes silencieuses fermées | Claude Code (Opus 5) | (cette passation) |
+| 2026-08-31 (nuit) | Lot 1 du pivot multi-utilisateur : données cloisonnées | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-nuit-lot1-multi-utilisateur.md) |
 | 2026-08-31 (soir) | Le pivot multi-utilisateur n'est pas fait — prochain chantier | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-soir-pivot-multi-utilisateur-pas-fait.md) |
 | 2026-08-31 (journée) | Kanban Trello livré, ménage du code mort, Vercel supprimé | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-kanban-trello-menage-vercel.md) |
 | 2026-08-31 (nuit) | Réglages desktop déployés + première recette navigateur | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-nuit-reglages-desktop-recette-navigateur.md) |
