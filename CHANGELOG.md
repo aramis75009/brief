@@ -12,6 +12,94 @@ quatrième.
 
 ---
 
+## 1.2.0.0 — 2026-09-01
+
+### Chaque compte possède ses données — lot 1 du pivot multi-utilisateur (PR #14)
+
+Brief n'écrivait qu'un seul jeu de fichiers, pour tout le monde. Un second
+compte Supabase autorisé y voyait donc les tâches, les rendez-vous et les
+dictées du premier. Ce lot donne à chaque compte ses propres fichiers, sous
+`BRIEF_DATA_DIR/users/<userId>/`, et rend impossible pour une route d'aller
+lire ceux d'un autre.
+
+> ⚠️ **Ce déploiement déplace des données.** Lancer `deploy/backup.sh` AVANT,
+> puis poser `SUPABASE_SECRET_KEY` et `BRIEF_OWNER_USER_ID` dans
+> `.env.production`. Sans la seconde, le serveur démarre et paraît sain : la
+> migration refuse de deviner, et la synchro calendrier ne tourne plus.
+
+**Ajouté**
+
+- `storeForUser(userId)` — seul constructeur d'un `Store`, dont les fichiers
+  vivent sous `users/<userId>/`. La file d'écritures sérialisée est désormais
+  **par compte** : un passage de cron lent chez l'un ne bloque plus la requête
+  interactive d'un autre.
+- `requireStore()` (`src/lib/guard.ts`) — la garde de session ET la résolution
+  d'identité en un appel, ce qui rend impossible d'avoir l'une sans l'autre.
+- `listAuthorizedUserIds()` (`src/lib/supabase/admin.ts`) — l'inventaire des
+  comptes pour les crons, qui n'ont pas de session. C'est le seul fichier du
+  projet à porter la clé service-role.
+- `sweepUsers` (`src/lib/cron-sweep.ts`) — un compte en échec n'interrompt
+  jamais les suivants, et l'ordre tourne d'un passage à l'autre pour qu'aucun
+  compte ne soit systématiquement le dernier servi.
+- **Migration automatique au démarrage** (`src/instrumentation.ts`) : les
+  fichiers d'avant deviennent le Brief du compte propriétaire. Idempotente,
+  non destructive (les originaux partent dans `_pre-multiuser/`), et elle ne
+  devine jamais — sans `BRIEF_OWNER_USER_ID` elle s'arrête et l'écrit.
+- Deux invariants outillés : aucune route ne lit `process.env.BRIEF_DATA_DIR`
+  et aucune n'appelle `storeForUser` elle-même
+  (`src/lib/no-direct-store-access.test.ts`).
+
+**Corrigé**
+
+- **N'importe quel compte autorisé pouvait écouter les dictées d'un autre.**
+  Les deux routes `/api/audio` recomposaient un répertoire global depuis
+  `BRIEF_DATA_DIR` sans passer par le store, et les identifiants
+  (`audio_<timestamp base36>`) sont énumérables. Elles demandent maintenant
+  leur chemin au store du compte connecté.
+- **Le cron CalDAV aurait écrit l'agenda entier du propriétaire chez chaque
+  autre compte.** Les identifiants iCloud sont globaux jusqu'au lot 3 ; le
+  passage ne traite donc que `BRIEF_OWNER_USER_ID` et répond 503 s'il manque.
+- **Une panne Supabase n'éteint plus les rappels de tout le monde.** La liste
+  des comptes lève quand Supabase est injoignable, et rendait la route
+  inopérante ; elle se replie sur le propriétaire et le journalise comme
+  dégradé. Une liste vide rendue *sans* erreur (clé sur le mauvais projet,
+  table renommée) déclenche le même repli.
+- **Un passage de rappels qui ne sert aucun compte répond 503, plus 200.** Le
+  `curl -fsS` du conteneur cron doit tomber : c'est le seul signal d'échec qui
+  sorte du serveur quand plus aucun rappel ne peut partir.
+- **La migration ne pouvait plus se rattraper après un démarrage sans
+  `BRIEF_OWNER_USER_ID`.** Elle se fiait à l'existence de `users/<owner>/`,
+  que la première écriture venue crée ; c'est désormais le répertoire
+  d'archive qui fait foi, et lui seul.
+- **Les dictées n'étaient pas migrées du tout**, et chaque fiche tâche
+  affichait un lecteur audio rendant 404. Un fichier que la migration doit
+  sauter reste à la racine et le journal l'avertit — il ne sera jamais repris.
+- **Un `BRIEF_OWNER_USER_ID` saisi en majuscules cassait tout, en production
+  seulement.** L'identifiant devient un chemin : sur l'ext4 du VPS, migration
+  vers `users/A1B2…/` annoncée en succès pendant que les routes lisaient
+  `users/a1b2…/`. Le macOS de développement, insensible à la casse, ne montre
+  rien. Une seule graphie normalisée désormais.
+- **Le budget des crons était calé sur `maxDuration` (40 s) et non sur le vrai
+  client**, `curl -fsS -m 30`. Assez de comptes et curl abandonnait, imprimant
+  `[cron] passage échoué` chaque minute sur des passages réussis — le seul
+  signal d'échec du déploiement devenait du bruit permanent.
+
+**Interne**
+
+- `src/lib/store.ts` n'exporte plus aucune fonction globale : c'est leur
+  suppression qui a **prouvé** que tous les appelants étaient portés, le
+  typecheck les ayant tous nommés.
+- `src/lib/push-store.ts` → `src/lib/push-subscription.ts` (la partie pure).
+- Premiers tests de `/api/cron/reminders`, qui n'en avait aucun. 575 → 589
+  tests.
+- `SUPABASE_SECRET_KEY` et `BRIEF_OWNER_USER_ID` ajoutés à `.env.example` et
+  `.env.production.example` ; le contrat `-m 30` ↔ `SWEEP_BUDGET_MS` est écrit
+  des deux côtés (`docker-compose.yml` et les deux routes).
+- Design et plan du pivot : `docs/superpowers/specs/` et
+  `docs/superpowers/plans/`.
+
+---
+
 ## 1.1.0.0 — 2026-08-31
 
 ### Kanban « copie Trello » (PR #9)
