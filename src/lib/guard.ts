@@ -101,8 +101,11 @@ export async function sessionUserId(): Promise<string | null> {
  *   if (session instanceof Response) return session;
  *   const { store } = session;
  *
- * Les routes qui ne touchent pas au store (`transcribe`, `audio`) gardent
- * `requireSession()`.
+ * Seule `transcribe` garde `requireSession()` seul : elle ne fait que relayer
+ * un flux vers Groq sans rien écrire. `audio`, elle, TOUCHE au disque du
+ * compte — elle est passée à `requireStore()` le 2026-08-31, parce qu'un
+ * répertoire audio global laissait n'importe quel compte autorisé servir la
+ * dictée d'un autre.
  *
  * ⚠️ Une route ne doit JAMAIS appeler `storeForUser` elle-même — elle
  * choisirait alors le compte qu'elle lit. `no-direct-store-access.test.ts`

@@ -43,6 +43,7 @@ export function fakeStore(overrides: Partial<Store> = {}): Store {
     removeSubscription: notStubbed("removeSubscription"),
     readUserJson: notStubbed("readUserJson"),
     writeUserJson: notStubbed("writeUserJson"),
+    audioDir: notStubbed("audioDir"),
   };
 
   return { ...base, ...overrides };

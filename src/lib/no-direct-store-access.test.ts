@@ -42,6 +42,28 @@ describe("cloisonnement des routes", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("aucune route ne LIT `process.env.BRIEF_DATA_DIR`", async () => {
+    // La classe d'oubli que le premier test ne voit PAS, trouvée en revue le
+    // 2026-08-31 : les deux routes `/api/audio` ne touchaient pas au store du
+    // tout — elles lisaient `join(BRIEF_DATA_DIR, "audio")` directement. Elles
+    // passaient donc l'invariant ci-dessus tout en laissant n'importe quel
+    // compte autorisé servir la dictée d'un autre.
+    //
+    // Une route ne doit jamais savoir où vit `BRIEF_DATA_DIR` : c'est le rôle
+    // du store, et lui seul sait à quel compte le chemin appartient.
+    const offenders: string[] = [];
+
+    for (const file of await routeFiles(join("src", "app", "api"))) {
+      // On cherche la LECTURE de la variable, pas son nom : un commentaire qui
+      // explique pourquoi il ne faut pas la lire n'est pas une infraction.
+      if ((await readFile(file, "utf8")).includes("process.env.BRIEF_DATA_DIR")) {
+        offenders.push(file);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("la liste d'exceptions ne contient que des crons, et ils existent", async () => {
     // Une exception qui pointe vers un fichier disparu ne protège plus rien —
     // et masquerait une route renommée qui, elle, aurait le droit de tricher.

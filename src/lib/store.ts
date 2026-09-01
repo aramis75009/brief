@@ -103,6 +103,16 @@ export type Store = {
    */
   readUserJson<T>(name: string, fallback: T): Promise<T>;
   writeUserJson(name: string, value: unknown): Promise<void>;
+  /**
+   * Le répertoire des enregistrements vocaux du compte.
+   *
+   * Les fichiers audio ne sont pas du JSON : les routes `/api/audio` les
+   * écrivent et les servent directement. Le store ne fait que dire OÙ — mais
+   * il le dit, plutôt que de laisser chaque route recomposer un chemin depuis
+   * `BRIEF_DATA_DIR`. C'est ce qu'elles faisaient jusqu'au 2026-08-31, et
+   * n'importe quel compte pouvait alors lire les dictées d'un autre.
+   */
+  audioDir(): string;
 };
 
 /** Un nom de fichier de données, sans chemin. Interdit toute remontée (`..`). */
@@ -520,6 +530,12 @@ function makeStore(dir: string, key: string): Store {
     async writeUserJson(name, value) {
       assertDataFileName(name);
       return serialize(() => writeJson(name, value));
+    },
+
+    /* --- Enregistrements vocaux ------------------------------------------ */
+
+    audioDir() {
+      return join(dir, "audio");
     },
   };
 }
