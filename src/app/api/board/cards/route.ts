@@ -23,7 +23,7 @@ import type { Item } from "@/lib/types";
  * victime.
  */
 
-/** Route d'ÉCRITURE : `requireSession()` seul, jamais le jeton machine. */
+/** Route d'ÉCRITURE : la session seule (`requireStore()`), jamais le jeton machine. */
 export async function PATCH(req: Request): Promise<Response> {
   const session = await requireStore();
   if (session instanceof Response) return session;

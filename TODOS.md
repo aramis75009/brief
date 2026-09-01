@@ -31,17 +31,23 @@ tâches, idées propres, sans partage par défaut).
 Design complet et six décisions arbitrées :
 [`docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md`](docs/superpowers/specs/2026-08-31-pivot-multi-utilisateur-design.md).
 
-- ✅ **Lot 1 — cloisonnement** (31/08, branche `feat/multi-user-store`) :
+- ✅ **Lot 1 — cloisonnement** (31/08 → 01/09, branche `feat/multi-user-store`) :
   fichiers par compte sous `users/<userId>/`, fabrique `storeForUser`,
-  `requireStore()`, crons qui itèrent, migration au démarrage. **Pas encore
-  déployé.**
+  `requireStore()`, dictées cloisonnées, migration au démarrage. **Pas encore
+  déployé.** Le cron des rappels itère sur tous les comptes ; celui de la
+  synchro CalDAV ne traite **que** `BRIEF_OWNER_USER_ID`, tant que le lot 3
+  n'est pas fait (voir ci-dessous).
 - ⬜ **Lot 2 — jetons machine par compte** : table `machine_tokens` (hachés,
   révocables), écran dans les Réglages. Aujourd'hui `capture` et `digest`
   écrivent chez `BRIEF_OWNER_USER_ID` — un seul Brief joignable par machine.
 - ⬜ **Lot 3 — CalDAV par compte** : table `caldav_credentials` chiffrée
   (AES-256-GCM), écran de saisie, mapping projet → calendrier par utilisateur.
   Aujourd'hui les quatre variables `BRIEF_CALDAV_*` sont globales et
-  mono-compte : **un seul compte iCloud pour toute l'app**.
+  mono-compte : **un seul compte iCloud pour toute l'app**. ⚠️ C'est ce lot qui
+  débloque la synchro pour les autres comptes : d'ici là, tout compte qui n'est
+  pas le propriétaire n'a **aucune** synchro calendrier — et il ne faut pas
+  « corriger » cela en faisant itérer `/api/cron/caldav-sync`, qui lui écrirait
+  l'agenda entier du propriétaire (voir `AGENTS.md`).
 
 ---
 
