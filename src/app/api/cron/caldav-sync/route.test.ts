@@ -6,45 +6,46 @@ import type { Settings } from "@/lib/settings";
 vi.mock("@/lib/cron-auth");
 vi.mock("@/lib/caldav");
 vi.mock("@/lib/store");
-vi.mock("@/lib/supabase/admin");
 
 /**
- * La bascule « Calendrier Apple » des Réglages doit vraiment **cesser de
- * parler à iCloud**, pas seulement jeter le résultat : c'est la seule façon
- * qu'une pause serve à quelque chose (identifiants révoqués, quota, débogage).
- * D'où le test sur `runCalDavSync` : il ne doit pas être appelé du tout.
+ * Le passage CalDAV. Deux choses valent un test, et elles sont indépendantes :
  *
- * Depuis le pivot multi-utilisateur, la bascule est PAR COMPTE : le passage
- * doit pouvoir sauter un compte et traiter le suivant. Un test le vérifie —
- * sans lui, une bascule éteinte chez l'un couperait la synchro de tous.
+ *   1. **La bascule « Calendrier Apple » doit vraiment cesser de parler à
+ *      iCloud**, pas seulement jeter le résultat — c'est la seule façon qu'une
+ *      pause serve à quelque chose (identifiants révoqués, quota, débogage).
+ *      D'où le test sur `runCalDavSync` : il ne doit pas être appelé du tout.
+ *
+ *   2. **Le passage ne doit traiter QUE le compte propriétaire.** Les
+ *      identifiants iCloud sont globaux jusqu'au lot 3, et `runCalDavSync`
+ *      adopte tout événement distant sans item correspondant : le lancer sur un
+ *      second compte lui écrirait l'agenda entier du propriétaire. Trouvé en
+ *      revue le 2026-08-31, avant tout déploiement.
  */
 describe("GET /api/cron/caldav-sync", () => {
-  const OTHER_USER_ID = "22222222-2222-4222-8222-222222222222";
-
-  let settingsByUser: Record<string, Settings>;
+  let settings: Settings;
+  let storesBuilt: string[];
 
   beforeEach(async () => {
     vi.clearAllMocks();
     const auth = await import("@/lib/cron-auth");
-    const admin = await import("@/lib/supabase/admin");
     const store = await import("@/lib/store");
 
     vi.mocked(auth.requireMachineToken).mockReturnValue(null);
-    vi.mocked(admin.listAuthorizedUserIds).mockResolvedValue([TEST_USER_ID]);
+    process.env.BRIEF_OWNER_USER_ID = TEST_USER_ID;
 
-    settingsByUser = { [TEST_USER_ID]: { caldavSync: true, digest: true } };
-    vi.mocked(store.storeForUser).mockImplementation((userId: string) =>
-      fakeStore({
-        readSettings: vi.fn(async () => settingsByUser[userId]),
-      }),
-    );
+    settings = { caldavSync: true, digest: true };
+    storesBuilt = [];
+    vi.mocked(store.storeForUser).mockImplementation((userId: string) => {
+      storesBuilt.push(userId);
+      return fakeStore({ readSettings: vi.fn(async () => settings) });
+    });
   });
 
   const req = () => new Request("https://brief.example/api/cron/caldav-sync");
 
   it("ne touche PAS au réseau quand la synchro est désactivée", async () => {
     const caldav = await import("@/lib/caldav");
-    settingsByUser[TEST_USER_ID] = { caldavSync: false, digest: true };
+    settings = { caldavSync: false, digest: true };
 
     const res = await GET(req());
     const body = (await res.json()) as { runs: { userId: string; result: unknown }[] };
@@ -66,63 +67,51 @@ describe("GET /api/cron/caldav-sync", () => {
     expect(caldav.runCalDavSync).toHaveBeenCalledOnce();
   });
 
-  it("une bascule éteinte chez un compte n'empêche pas la synchro de l'autre", async () => {
-    const admin = await import("@/lib/supabase/admin");
+  it("ne traite QUE le propriétaire, jamais les autres comptes", async () => {
+    // Le correctif du 2026-08-31. Un second compte synchronisé contre l'unique
+    // compte iCloud configuré se verrait attribuer TOUS les rendez-vous du
+    // propriétaire, par la phase d'adoption de `runCalDavSync` — sans erreur, et
+    // sans que `settings.caldavSync` puisse l'empêcher (un compte neuf n'a pas
+    // de `settings.json`, et le défaut est ON).
     const caldav = await import("@/lib/caldav");
-    vi.mocked(admin.listAuthorizedUserIds).mockResolvedValue([TEST_USER_ID, OTHER_USER_ID]);
-    settingsByUser = {
-      [TEST_USER_ID]: { caldavSync: false, digest: true },
-      [OTHER_USER_ID]: { caldavSync: true, digest: true },
-    };
     vi.mocked(caldav.runCalDavSync).mockResolvedValue({
       skipped: true,
       nextSyncInSec: 42,
     } as Awaited<ReturnType<typeof caldav.runCalDavSync>>);
 
     const res = await GET(req());
-    const body = (await res.json()) as { runs: { userId: string }[]; users: number };
+    const body = (await res.json()) as { users: number; runs: { userId: string }[] };
 
-    expect(body.users).toBe(2);
-    expect(body.runs).toHaveLength(2);
-    expect(caldav.runCalDavSync).toHaveBeenCalledOnce();
+    expect(body.users).toBe(1);
+    expect(body.runs.map((r) => r.userId)).toEqual([TEST_USER_ID]);
+    // Aucun store d'un autre compte n'a même été construit.
+    expect(storesBuilt).toEqual([TEST_USER_ID]);
   });
 
-  it("un compte en échec n'empêche pas le suivant", async () => {
-    // Sans l'isolation de `sweepUsers`, un compte cassé éteindrait la synchro
-    // de tous les autres — et la route répondrait quand même 200.
-    const admin = await import("@/lib/supabase/admin");
+  it("répond 503 sans propriétaire désigné, plutôt que de synchroniser au hasard", async () => {
     const caldav = await import("@/lib/caldav");
-    vi.mocked(admin.listAuthorizedUserIds).mockResolvedValue([TEST_USER_ID, OTHER_USER_ID]);
-    settingsByUser = {
-      [TEST_USER_ID]: { caldavSync: true, digest: true },
-      [OTHER_USER_ID]: { caldavSync: true, digest: true },
-    };
-    vi.mocked(caldav.runCalDavSync)
-      .mockRejectedValueOnce(new Error("iCloud injoignable"))
-      .mockResolvedValueOnce({ skipped: true, nextSyncInSec: 42 } as Awaited<
-        ReturnType<typeof caldav.runCalDavSync>
-      >);
+    delete process.env.BRIEF_OWNER_USER_ID;
 
     const res = await GET(req());
-    const body = (await res.json()) as {
-      runs: unknown[];
-      failures: { error: string }[];
-    };
 
-    expect(body.failures).toHaveLength(1);
-    expect(body.failures[0].error).toBe("iCloud injoignable");
-    expect(body.runs).toHaveLength(1);
+    expect(res.status).toBe(503);
+    expect(caldav.runCalDavSync).not.toHaveBeenCalled();
   });
 
-  it("s'arrête au jeton avant même de lister les comptes", async () => {
+  it("refuse un BRIEF_OWNER_USER_ID qui n'est pas un UUID", async () => {
+    process.env.BRIEF_OWNER_USER_ID = "../../etc";
+    expect((await GET(req())).status).toBe(503);
+  });
+
+  it("s'arrête au jeton avant même de lire les réglages", async () => {
     const auth = await import("@/lib/cron-auth");
-    const admin = await import("@/lib/supabase/admin");
+    const store = await import("@/lib/store");
     vi.mocked(auth.requireMachineToken).mockReturnValueOnce(
       Response.json({ error: "Jeton invalide." }, { status: 401 }),
     );
 
     const res = await GET(req());
     expect(res.status).toBe(401);
-    expect(admin.listAuthorizedUserIds).not.toHaveBeenCalled();
+    expect(store.storeForUser).not.toHaveBeenCalled();
   });
 });

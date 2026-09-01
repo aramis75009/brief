@@ -1,13 +1,43 @@
 import { requireMachineToken } from "@/lib/cron-auth";
 import { sweepUsers } from "@/lib/cron-sweep";
 import { runReminders } from "@/lib/reminders";
-import { storeForUser } from "@/lib/store";
+import { storeForUser, USER_ID_PATTERN } from "@/lib/store";
 import { listAuthorizedUserIds } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 /** Un passage doit tenir largement dans la minute qui sépare deux appels. */
 export const maxDuration = 50;
 export const dynamic = "force-dynamic";
+
+/**
+ * Les comptes à traiter, avec un repli sur le seul propriétaire.
+ *
+ * ⚠️ POURQUOI CE REPLI. Avant le pivot, le chemin des rappels ne touchait que
+ * le disque local. Il dépend maintenant de Supabase pour savoir quels comptes
+ * existent — et `listAuthorizedUserIds()` LÈVE si la clé manque ou si l'API est
+ * injoignable. Sans repli, une panne Supabase de trois minutes ne dégrade pas
+ * le service : elle l'ÉTEINT, et aucun rappel ne part pour personne. Or le cron
+ * n'imprime qu'un `curl` en échec — c'est précisément la panne muette contre
+ * laquelle `AGENTS.md` met en garde : les notifications cessent d'arriver et
+ * rien ne se voit.
+ *
+ * Le repli garde donc le propriétaire servi, ce qui couvre l'essentiel des
+ * rappels réels, et le journal dit clairement qu'il est dégradé.
+ */
+async function userIdsToSweep(): Promise<string[]> {
+  try {
+    return await listAuthorizedUserIds();
+  } catch (e) {
+    const owner = process.env.BRIEF_OWNER_USER_ID;
+    console.error(
+      `[cron] liste des comptes indisponible (${e instanceof Error ? e.message : e}) — ` +
+        (owner && USER_ID_PATTERN.test(owner)
+          ? "repli DÉGRADÉ sur le seul compte propriétaire"
+          : "et pas de BRIEF_OWNER_USER_ID pour se replier : AUCUN rappel ne partira"),
+    );
+    return owner && USER_ID_PATTERN.test(owner) ? [owner] : [];
+  }
+}
 
 /**
  * Le budget laissé au balayage. Sous `maxDuration`, avec de la marge : dépasser
@@ -36,7 +66,7 @@ async function handle(req: Request): Promise<Response> {
 
   const startedAt = Date.now();
   try {
-    const userIds = await listAuthorizedUserIds();
+    const userIds = await userIdsToSweep();
     const sweep = await sweepUsers({
       userIds,
       budgetMs: SWEEP_BUDGET_MS,

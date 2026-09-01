@@ -1,8 +1,7 @@
 import { requireMachineToken } from "@/lib/cron-auth";
 import { sweepUsers } from "@/lib/cron-sweep";
 import { runCalDavSync } from "@/lib/caldav";
-import { storeForUser } from "@/lib/store";
-import { listAuthorizedUserIds } from "@/lib/supabase/admin";
+import { storeForUser, USER_ID_PATTERN } from "@/lib/store";
 
 export const runtime = "nodejs";
 /** Un passage doit tenir largement dans la fenêtre entre deux appels. */
@@ -27,10 +26,24 @@ type SkippedRun = { skipped: true; reason: "disabled" };
  * 2026-08-31 : partagé, la synchro d'un utilisateur ferait sauter celle de tous
  * les autres.
  *
- * ⚠️ Les IDENTIFIANTS iCloud, eux, restent globaux et mono-compte jusqu'au lot
- * 3 du pivot (`src/lib/caldav.ts`). En pratique, seul le compte propriétaire a
- * donc quelque chose à synchroniser aujourd'hui — mais l'itération est déjà en
- * place, et un compte sans données ne fait qu'un passage à vide.
+ * ⚠️ CE PASSAGE NE TRAITE QUE LE COMPTE PROPRIÉTAIRE, et ce n'est pas une
+ * simplification temporaire qu'on peut lever à la légère.
+ *
+ * `BRIEF_CALDAV_USER` / `_PASSWORD` sont GLOBAUX jusqu'au lot 3
+ * (`src/lib/caldav.ts`) : il n'existe qu'un seul compte iCloud pour toute
+ * l'app. Or `runCalDavSync` balaie TOUS les calendriers découverts, pas
+ * seulement ceux qui ont des items à écrire (`caldav.ts`, `toSweep`), et sa
+ * phase d'adoption crée un item Brief pour chaque événement distant sans item
+ * correspondant. Lancer ce passage sur un second compte lui écrirait donc
+ * L'AGENDA ENTIER DU PROPRIÉTAIRE dans ses propres tâches, et son instantané
+ * agenda avec — sans qu'aucune erreur ne soit levée, et sans que
+ * `settings.caldavSync` puisse l'empêcher (un compte neuf n'a pas de
+ * `settings.json`, et le défaut est ON).
+ *
+ * Itérer sur tous les comptes n'aura de sens qu'au lot 3, quand chaque compte
+ * portera SES identifiants. D'ici là, la liste est volontairement d'un seul
+ * élément — `sweepUsers` est conservé pour que le lot 3 n'ait qu'à changer la
+ * source de cette liste.
  */
 async function handle(req: Request): Promise<Response> {
   const denied = requireMachineToken(req, "BRIEF_CALDAV_TOKEN");
@@ -38,7 +51,18 @@ async function handle(req: Request): Promise<Response> {
 
   const startedAt = Date.now();
   try {
-    const userIds = await listAuthorizedUserIds();
+    const owner = process.env.BRIEF_OWNER_USER_ID;
+    if (!owner || !USER_ID_PATTERN.test(owner)) {
+      // Porte fermée plutôt qu'ouverte par défaut : sans propriétaire désigné,
+      // on ne sait pas à qui appartient l'unique compte iCloud configuré.
+      console.error("[caldav] BRIEF_OWNER_USER_ID absent ou invalide — passage sauté");
+      return Response.json(
+        { error: "BRIEF_OWNER_USER_ID n'est pas configuré côté serveur." },
+        { status: 503 },
+      );
+    }
+    const userIds = [owner];
+
     const sweep = await sweepUsers<Awaited<ReturnType<typeof runCalDavSync>> | SkippedRun>({
       userIds,
       budgetMs: SWEEP_BUDGET_MS,
