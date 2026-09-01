@@ -110,9 +110,10 @@ describe("GET /api/cron/reminders", () => {
     delete process.env.BRIEF_OWNER_USER_ID;
 
     const res = await GET(req());
-    const body = (await res.json()) as { users: number };
 
-    expect(body.users).toBe(0);
+    // 503 et non 200 : le `curl -fsS` du conteneur cron doit TOMBER. C'est le
+    // seul signal qui sorte du serveur quand plus aucun rappel ne peut partir.
+    expect(res.status).toBe(503);
     expect(reminders.runReminders).not.toHaveBeenCalled();
   });
 

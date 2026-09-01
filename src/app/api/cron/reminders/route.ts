@@ -91,6 +91,25 @@ async function handle(req: Request): Promise<Response> {
   const startedAt = Date.now();
   try {
     const userIds = await userIdsToSweep();
+
+    // ⚠️ ZÉRO COMPTE N'EST JAMAIS UN PASSAGE RÉUSSI. `userIdsToSweep` a déjà
+    // journalisé la cause, mais `console.error` part dans le journal du
+    // CONTENEUR ; le cron, lui, ne voit que la sortie de `curl`. Répondre 200
+    // ici laisserait `curl -fsS` vert pendant que plus aucun rappel ne part
+    // pour personne — la panne muette exacte que le repli sur le propriétaire
+    // vient fermer un cran plus haut. Le 503 fait tomber le `curl -fsS` et
+    // imprime `[cron] passage échoué` chaque minute jusqu'à réparation. Le
+    // cron CalDAV rend déjà 503 dans son cas symétrique.
+    if (!userIds.length) {
+      return Response.json(
+        {
+          error:
+            "Aucun compte à traiter : liste Supabase inutilisable et pas de BRIEF_OWNER_USER_ID pour se replier.",
+        },
+        { status: 503 },
+      );
+    }
+
     const sweep = await sweepUsers({
       userIds,
       budgetMs: SWEEP_BUDGET_MS,
