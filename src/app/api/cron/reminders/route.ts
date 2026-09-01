@@ -24,26 +24,50 @@ export const dynamic = "force-dynamic";
  * Le repli garde donc le propriétaire servi, ce qui couvre l'essentiel des
  * rappels réels, et le journal dit clairement qu'il est dégradé.
  */
+function ownerFallback(cause: string): string[] {
+  const owner = process.env.BRIEF_OWNER_USER_ID;
+  const usable = Boolean(owner && USER_ID_PATTERN.test(owner));
+  console.error(
+    `[cron] liste des comptes inutilisable (${cause}) — ` +
+      (usable
+        ? "repli DÉGRADÉ sur le seul compte propriétaire"
+        : "et pas de BRIEF_OWNER_USER_ID pour se replier : AUCUN rappel ne partira"),
+  );
+  return usable ? [owner as string] : [];
+}
+
 async function userIdsToSweep(): Promise<string[]> {
+  let userIds: string[];
   try {
-    return await listAuthorizedUserIds();
+    userIds = await listAuthorizedUserIds();
   } catch (e) {
-    const owner = process.env.BRIEF_OWNER_USER_ID;
-    console.error(
-      `[cron] liste des comptes indisponible (${e instanceof Error ? e.message : e}) — ` +
-        (owner && USER_ID_PATTERN.test(owner)
-          ? "repli DÉGRADÉ sur le seul compte propriétaire"
-          : "et pas de BRIEF_OWNER_USER_ID pour se replier : AUCUN rappel ne partira"),
-    );
-    return owner && USER_ID_PATTERN.test(owner) ? [owner] : [];
+    return ownerFallback(e instanceof Error ? e.message : String(e));
   }
+
+  // ⚠️ UNE LISTE VIDE N'EST PAS UNE RÉPONSE VALIDE, et c'est le mode de panne
+  // le plus traître des deux : il ne lève pas. Une clé service-role pointée sur
+  // le mauvais projet Supabase, une table renommée, une politique RLS qui
+  // change — et l'appel réussit en rendant `[]`. Le balayage sort aussitôt, la
+  // route répond `200 {users: 0}`, `curl -fsS` reste vert, et plus AUCUN rappel
+  // ne part pour personne. Brief a au moins un compte par construction : celui
+  // qui a déployé. Une liste vide est donc toujours une anomalie.
+  if (!userIds.length) return ownerFallback("Supabase a rendu une liste vide");
+
+  return userIds;
 }
 
 /**
- * Le budget laissé au balayage. Sous `maxDuration`, avec de la marge : dépasser
- * ferait couper la fonction au milieu d'un compte, sans compte-rendu.
+ * Le budget laissé au balayage.
+ *
+ * ⚠️ CE N'EST PAS `maxDuration` QUI COMMANDE, c'est le client. Le conteneur
+ * `cron` appelle avec `curl -fsS -m 30` (`docker-compose.yml`) : un passage qui
+ * dépasse 30 s fait abandonner curl, qui journalise
+ * `[cron] passage échoué` — alors que le serveur, lui, va au bout. Ce message
+ * est le SEUL signal d'échec du déploiement ; le laisser tomber une fois par
+ * minute sur un passage réussi le rendrait inutile pour toujours. Le budget
+ * reste donc sous le `-m` du client, pas seulement sous `maxDuration`.
  */
-const SWEEP_BUDGET_MS = 40_000;
+const SWEEP_BUDGET_MS = 25_000;
 
 /**
  * Passage du planificateur, appelé chaque minute par le cron du VPS :

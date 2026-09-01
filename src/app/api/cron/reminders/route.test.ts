@@ -86,6 +86,23 @@ describe("GET /api/cron/reminders", () => {
     expect(reminders.runReminders).toHaveBeenCalledOnce();
   });
 
+  it("se replie aussi quand Supabase rend une liste VIDE sans lever", async () => {
+    // Le mode de panne le plus traître des deux : il ne lève pas. Clé
+    // service-role pointée sur le mauvais projet, table renommée, RLS modifiée
+    // — l'appel réussit en rendant `[]`, la route répond 200, `curl -fsS` reste
+    // vert, et plus aucun rappel ne part pour personne.
+    const admin = await import("@/lib/supabase/admin");
+    const reminders = await import("@/lib/reminders");
+    vi.mocked(admin.listAuthorizedUserIds).mockResolvedValue([]);
+
+    const res = await GET(req());
+    const body = (await res.json()) as { users: number; runs: { userId: string }[] };
+
+    expect(body.users).toBe(1);
+    expect(body.runs[0].userId).toBe(TEST_USER_ID);
+    expect(reminders.runReminders).toHaveBeenCalledOnce();
+  });
+
   it("ne devine aucun compte si Supabase tombe ET que le propriétaire est absent", async () => {
     const admin = await import("@/lib/supabase/admin");
     const reminders = await import("@/lib/reminders");

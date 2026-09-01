@@ -59,9 +59,43 @@ const DATA_DIR = process.env.BRIEF_DATA_DIR || join(process.cwd(), ".data");
  * donnerait une traversée de répertoire (`../../etc`). Le JWT est signé par
  * Supabase, donc le risque est faible ; la garde coûte trois lignes et son
  * absence ne lève aucune erreur.
+ *
+ * Le motif est INSENSIBLE À LA CASSE, mais `normalizeUserId` ci-dessous
+ * ramène toujours en minuscules — voir pourquoi là-bas.
  */
 export const USER_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Valide un identifiant de compte et le ramène en minuscules.
+ *
+ * ⚠️ LA CASSE EST UN PIÈGE À DEUX ÉTAGES, et les deux sont silencieux.
+ *
+ * Supabase rend toujours des UUID en minuscules, mais `BRIEF_OWNER_USER_ID`
+ * est saisi À LA MAIN sur le VPS. Posé en majuscules, il passait la
+ * validation : la migration écrivait dans `users/A1B2…/`, archivait les
+ * originaux, et annonçait un succès — pendant que `requireStore()` résolvait
+ * le `sub` minuscule de la session vers `users/a1b2…/`. Sur l'ext4 du VPS ce
+ * sont DEUX répertoires ; Aramis rouvrait un Brief vide et ses données étaient
+ * déjà rangées ailleurs. Sur le macOS de développement (système de fichiers
+ * insensible à la casse) tout fonctionne : le bug n'existe qu'en production.
+ *
+ * Second étage : le cache `stores` et la file d'écritures sont indexés par cet
+ * identifiant. Deux graphies donneraient deux files pour un MÊME répertoire —
+ * et la sérialisation des écritures, qui est la raison d'être de la file,
+ * tomberait sans que rien ne le signale.
+ *
+ * D'où une seule forme normalisée, au seul endroit où un identifiant devient
+ * un chemin.
+ */
+export function normalizeUserId(userId: string): string {
+  if (!USER_ID_PATTERN.test(userId)) {
+    throw new Error(
+      `Identifiant de compte invalide : ${JSON.stringify(userId)} n'est pas un UUID.`,
+    );
+  }
+  return userId.toLowerCase();
+}
 
 /** Tout ce qu'un compte possède. Obtenu par `storeForUser`, jamais construit à la main. */
 export type Store = {
@@ -551,14 +585,10 @@ const stores = new Map<string, Store>();
  * elle-même. `src/lib/no-direct-store-access.test.ts` fige cette règle.
  */
 export function storeForUser(userId: string): Store {
-  if (!USER_ID_PATTERN.test(userId)) {
-    throw new Error(
-      `Identifiant de compte invalide : ${JSON.stringify(userId)} n'est pas un UUID.`,
-    );
-  }
-  const existing = stores.get(userId);
+  const id = normalizeUserId(userId);
+  const existing = stores.get(id);
   if (existing) return existing;
-  const store = makeStore(join(DATA_DIR, "users", userId), userId);
-  stores.set(userId, store);
+  const store = makeStore(join(DATA_DIR, "users", id), id);
+  stores.set(id, store);
   return store;
 }

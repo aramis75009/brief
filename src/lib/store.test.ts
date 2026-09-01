@@ -119,6 +119,20 @@ describe("storeForUser", () => {
     expect(() => storeForUser("users/../../etc/passwd")).toThrow();
   });
 
+  it("rend UN SEUL store pour un identifiant écrit en majuscules ou en minuscules", async () => {
+    // Le motif accepte les deux graphies, mais l'identifiant devient un CHEMIN
+    // et une clé de file d'écritures. Deux stores pour un même compte, ce sont
+    // deux répertoires distincts sur l'ext4 du VPS (`BRIEF_OWNER_USER_ID` est
+    // saisi à la main) — et, même sur un système insensible à la casse, deux
+    // files d'écriture pour un même répertoire : la sérialisation tombe.
+    const { storeForUser } = await import("./store");
+    expect(storeForUser(A.toUpperCase())).toBe(storeForUser(A));
+
+    const a = storeForUser(A.toUpperCase());
+    await a.saveItems([task("i1")]);
+    expect(await storeForUser(A).readItems()).toHaveLength(1);
+  });
+
   it("sérialise les écritures d'un même compte", async () => {
     const { storeForUser } = await import("./store");
     const a = storeForUser(A);

@@ -1,7 +1,7 @@
 import "server-only";
 import { access, copyFile, mkdir, readdir, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { USER_ID_PATTERN } from "./store";
+import { normalizeUserId, USER_ID_PATTERN } from "./store";
 
 /**
  * Migration unique : les fichiers globaux d'avant le 2026-08-31 deviennent le
@@ -46,7 +46,14 @@ export type MigrationReport =
   | { status: "already-migrated" }
   | { status: "fresh-install" }
   | { status: "blocked"; reason: string }
-  | { status: "migrated"; userId: string; files: string[]; audioFiles: number };
+  | {
+      status: "migrated";
+      userId: string;
+      files: string[];
+      audioFiles: number;
+      /** Les dictées laissées à la racine faute de place libre. Voir `migrateAudio`. */
+      audioSkipped: string[];
+    };
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -61,22 +68,35 @@ async function exists(path: string): Promise<boolean> {
  * Déplace `<dataDir>/audio/` vers le répertoire audio du compte.
  *
  * Fichier par fichier, et jamais par-dessus un existant : si le compte a déjà
- * un enregistrement du même nom, c'est le sien qui gagne. Rend le nombre de
- * fichiers effectivement déplacés.
+ * un enregistrement du même nom, c'est le sien qui gagne.
+ *
+ * ⚠️ Un fichier ainsi sauté reste à la racine — et il y RESTERA : l'archive
+ * créée juste après est la sentinelle d'idempotence, donc aucun démarrage
+ * ultérieur ne repassera. Plus rien ne peut alors le servir, `/api/audio/<id>`
+ * ne lisant que `store.audioDir()`. C'est acceptable (le fichier du compte est
+ * le plus récent, et l'original n'est pas détruit) mais ça ne doit pas être
+ * MUET : le compte est rendu à part et le journal le dit.
  */
-async function migrateAudio(dataDir: string, targetDir: string): Promise<number> {
+async function migrateAudio(
+  dataDir: string,
+  targetDir: string,
+): Promise<{ moved: number; skipped: string[] }> {
   const sourceDir = join(dataDir, "audio");
-  if (!(await exists(sourceDir))) return 0;
+  if (!(await exists(sourceDir))) return { moved: 0, skipped: [] };
 
   await mkdir(targetDir, { recursive: true });
   let moved = 0;
+  const skipped: string[] = [];
   for (const name of await readdir(sourceDir)) {
     const target = join(targetDir, name);
-    if (await exists(target)) continue;
+    if (await exists(target)) {
+      skipped.push(name);
+      continue;
+    }
     await rename(join(sourceDir, name), target);
     moved += 1;
   }
-  return moved;
+  return { moved, skipped };
 }
 
 export async function migrateToMultiUser(): Promise<MigrationReport> {
@@ -137,13 +157,17 @@ export async function migrateToMultiUser(): Promise<MigrationReport> {
   // alors plus récent que celui de la racine, et le remplacer perdrait ce qui
   // a été fait entre-temps. L'original part quand même à l'archive, où il
   // reste consultable.
-  const userDir = join(dataDir, "users", owner);
+  // La MÊME normalisation que `storeForUser`, sans quoi un `BRIEF_OWNER_USER_ID`
+  // saisi en majuscules ferait migrer vers `users/A1B2…/` pendant que les
+  // routes liraient `users/a1b2…/`. Voir `normalizeUserId`.
+  const ownerId = normalizeUserId(owner);
+  const userDir = join(dataDir, "users", ownerId);
   await mkdir(userDir, { recursive: true });
   const copied: string[] = [];
   for (const name of present) {
     if (await exists(join(userDir, name))) {
       console.warn(
-        `[migration] ${name} existe déjà pour le compte ${owner} — conservé tel quel, ` +
+        `[migration] ${name} existe déjà pour le compte ${ownerId} — conservé tel quel, ` +
           `la version d'avant le multi-utilisateur part dans ${ARCHIVE_DIR}/.`,
       );
       continue;
@@ -165,5 +189,11 @@ export async function migrateToMultiUser(): Promise<MigrationReport> {
     await rename(join(dataDir, name), join(archiveDir, name));
   }
 
-  return { status: "migrated", userId: owner, files: copied, audioFiles: movedAudio };
+  return {
+    status: "migrated",
+    userId: ownerId,
+    files: copied,
+    audioFiles: movedAudio.moved,
+    audioSkipped: movedAudio.skipped,
+  };
 }

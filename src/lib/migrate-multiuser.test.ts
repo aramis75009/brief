@@ -206,5 +206,25 @@ describe("migrateToMultiUser", () => {
     );
     // L'ancien n'est pas supprimé pour autant : il reste là où il était.
     expect(await readFile(join(dir, "audio", "audio_abc.webm"), "utf8")).toBe("ancien");
+    // ...mais il est RENDU, parce que plus aucun démarrage ne le reprendra :
+    // l'archive créée juste après est la sentinelle d'idempotence.
+    expect(report.audioSkipped).toEqual(["audio_abc.webm"]);
+  });
+
+  it("range sous l'identifiant EN MINUSCULES, quelle que soit la graphie de la variable", async () => {
+    // Le piège de la casse. `BRIEF_OWNER_USER_ID` est saisi à la main sur le
+    // VPS ; en majuscules, il passait la validation et la migration écrivait
+    // dans `users/A1B2…/` pendant que les routes lisaient `users/a1b2…/` — deux
+    // répertoires sur l'ext4 du VPS, un seul sur le macOS de développement.
+    // Brief vide, données déjà archivées, aucune erreur.
+    process.env.BRIEF_OWNER_USER_ID = OWNER.toUpperCase();
+    await writeFile(join(dir, "items.json"), '[{"id":"i1"}]', "utf8");
+
+    const report = await migrate();
+
+    if (report.status !== "migrated") throw new Error("statut inattendu");
+    expect(report.userId).toBe(OWNER);
+    expect(await readFile(join(dir, "users", OWNER, "items.json"), "utf8")).toContain("i1");
+    expect(await readdir(join(dir, "users"))).toEqual([OWNER]);
   });
 });

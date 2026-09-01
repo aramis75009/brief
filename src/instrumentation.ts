@@ -23,6 +23,16 @@ export async function register() {
             `(+ ${report.audioFiles} enregistrement(s) vocal(aux)). ` +
             `Les originaux sont dans _pre-multiuser/.`,
         );
+        // Ces dictées-là ne seront JAMAIS reprises : la migration ne repasse
+        // pas. Le dire fort, c'est la seule chance qu'on les remarque.
+        if (report.audioSkipped.length) {
+          console.warn(
+            `[migration] ⚠️ ${report.audioSkipped.length} enregistrement(s) laissé(s) à la ` +
+              `racine, le compte en avait déjà du même nom : ${report.audioSkipped.join(", ")}. ` +
+              `Ils ne sont plus servis par /api/audio et aucun démarrage ultérieur ne les ` +
+              `reprendra — les déplacer à la main si besoin.`,
+          );
+        }
         break;
       case "blocked":
         console.error(`[migration] BLOQUÉE — ${report.reason}`);

@@ -8,8 +8,9 @@ export const runtime = "nodejs";
 export const maxDuration = 50;
 export const dynamic = "force-dynamic";
 
-/** Sous `maxDuration`, avec de la marge — voir le cron des rappels. */
-const SWEEP_BUDGET_MS = 40_000;
+/** Sous le `curl -m 30` du conteneur cron, pas seulement sous `maxDuration` —
+ *  le raisonnement complet est dans le cron des rappels. */
+const SWEEP_BUDGET_MS = 25_000;
 
 /** Ce qu'un compte rend quand sa bascule « Calendrier Apple » est éteinte. */
 type SkippedRun = { skipped: true; reason: "disabled" };
