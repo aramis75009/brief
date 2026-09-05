@@ -1,4 +1,5 @@
 import { makeBucketOf } from "./buckets";
+import { applyOverride } from "./overrides";
 import type { Item, ItemKind, Priority, Project } from "./types";
 
 /**
@@ -56,6 +57,21 @@ export function buildDigest(items: Item[], projects: Project[], now: Date): Dige
   const bucketOf = makeBucketOf(now);
   const names = new Map(projects.map((p) => [p.id, p.name]));
 
+  // L'échéance RÉELLE de l'occurrence courante : celle du calendrier quand
+  // Aramis l'y a décalée (RECURRENCE-ID), `null` quand il l'y a supprimée
+  // (EXDATE) — le calendrier gagne (décision 18/08), y compris par occurrence.
+  // Sans ça le récap classait sur `due` brut et réclamait le matin une séance
+  // déjà déplacée à demain (constaté en prod le 2026-09-05, même défaut de
+  // fond que celui corrigé dans `agenda.ts`). `null` retombe dans le seau
+  // « none », que le récap n'annonce pas.
+  const effectiveDue = (i: Item): string | null => {
+    if (!i.due) return null;
+    const raw = new Date(i.due);
+    if (Number.isNaN(raw.getTime())) return null;
+    return applyOverride(raw, i.overrides, i.exdates)?.toISOString() ?? null;
+  };
+  const dueOf = new Map(items.map((i) => [i.id, effectiveDue(i)]));
+
   const entry = (i: Item): DigestEntry => ({
     id: i.id,
     title: i.title,
@@ -66,7 +82,7 @@ export function buildDigest(items: Item[], projects: Project[], now: Date): Dige
     project: names.get(i.projectId) ?? "Autre",
     projectId: i.projectId,
     kind: i.kind,
-    due: i.due,
+    due: dueOf.get(i.id) ?? null,
     allDay: i.allDay,
     priority: i.priority,
   });
@@ -74,7 +90,7 @@ export function buildDigest(items: Item[], projects: Project[], now: Date): Dige
   const open = items.filter((i) => !i.doneAt);
   const pick = (want: "overdue" | "today") =>
     open
-      .filter((i) => bucketOf(i.due) === want)
+      .filter((i) => bucketOf(dueOf.get(i.id) ?? null) === want)
       .map(entry)
       .sort(byUrgency);
 

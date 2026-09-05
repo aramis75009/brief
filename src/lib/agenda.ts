@@ -1,5 +1,5 @@
 import "server-only";
-import { applyOverride } from "./caldav";
+import { applyOverride, remoteDueToItem } from "./caldav";
 import { occurrencesInRange } from "./rrule";
 import type { CalendarEvent } from "./caldav";
 import type { Item, ItemKind } from "./types";
@@ -65,12 +65,18 @@ export function buildDayAgenda(
   for (const it of items) {
     if (!isActiveBriefItem(it) || !it.due) continue;
     const due = new Date(it.due);
-    if (Number.isNaN(due.getTime()) || due < dayStart || due >= dayEnd) continue;
+    if (Number.isNaN(due.getTime())) continue;
     // Occurrence décalée (RECURRENCE-ID) ou supprimée (EXDATE) dans l'app
     // Calendrier : l'heure affichée est celle du calendrier, jamais celle de
     // `due` — le calendrier gagne (décision 18/08), y compris par occurrence.
     const effective = applyOverride(due, it.overrides, it.exdates);
     if (!effective) continue;
+    // ⚠️ La fenêtre se teste sur l'heure EFFECTIVE, jamais sur `due` brut :
+    // un item décalé au lendemain dans l'app Calendrier appartient au jour
+    // d'ARRIVÉE. Filtrer sur `due` l'affichait au jour d'origine avec
+    // l'horodatage du lendemain, et le rendait introuvable le bon jour
+    // (constaté en prod le 2026-09-05).
+    if (effective < dayStart || effective >= dayEnd) continue;
     out.push({
       id: `brief:${it.id}`,
       source: "brief",
@@ -97,9 +103,16 @@ export function buildDayAgenda(
     // encore rattrapé (fenêtre ~15 min) — ne pas le montrer comme actif.
     if (linkedItem && !isActiveBriefItem(linkedItem)) continue;
 
-    const occurrences = ev.rrule
-      ? occurrencesInRange(new Date(ev.start), ev.rrule, dayStart, dayEnd)
-      : inWindow(new Date(ev.start), dayStart, dayEnd);
+    // Occurrences que la grille place ce jour-là, PLUS celles qu'un override
+    // y amène depuis un autre jour — voir `candidateOccurrences`.
+    const occurrences = candidateOccurrences(
+      ev.rrule
+        ? occurrencesInRange(new Date(ev.start), ev.rrule, dayStart, dayEnd)
+        : inWindow(new Date(ev.start), dayStart, dayEnd),
+      ev.overrides,
+      dayStart,
+      dayEnd,
+    );
 
     // Une occurrence qu'une coche utilisateur a terminée ne doit pas
     // réapparaître : `completionPatch` avance `due` sans jamais poser
@@ -129,6 +142,10 @@ export function buildDayAgenda(
       // occurrence. `null` = occurrence supprimée, on ne l'affiche pas.
       const effective = applyOverride(occ, ev.overrides, ev.exdates);
       if (!effective) continue;
+      // Même règle que pour les items ci-dessus : c'est l'heure EFFECTIVE qui
+      // décide du jour. Une occurrence que l'override sort de la fenêtre
+      // appartient à un autre jour — elle y sera reprise comme candidate.
+      if (effective < dayStart || effective >= dayEnd) continue;
       // `lastCompletedOccurrenceAt` est posé à partir de `due`, qui reflète
       // déjà l'heure EFFECTIVE d'une occurrence décalée (la synchro CalDAV
       // adopte l'override dans `due` avant que la coche n'avance la série) —
@@ -162,4 +179,38 @@ export function buildDayAgenda(
 
 function inWindow(d: Date, start: Date, end: Date): Date[] {
   return d >= start && d < end ? [d] : [];
+}
+
+/**
+ * Les occurrences D'ORIGINE à examiner pour ce jour : celles que la grille
+ * (RRULE, ou date unique) y place, PLUS celles qu'un override déplace VERS ce
+ * jour depuis un autre.
+ *
+ * Sans cette seconde moitié, une séance décalée dans l'app Calendrier n'est
+ * candidate AUCUN jour : ni le jour d'origine — l'override l'en sort — ni le
+ * jour d'arrivée, où la grille RRULE ne la met pas. C'est le défaut constaté
+ * en prod le 2026-09-05 : « Séance push » décalée du jeudi au vendredi
+ * s'affichait le jeudi, horodatée au vendredi, et manquait le vendredi.
+ *
+ * Dédoublonné par horodatage : une occurrence seulement décalée d'une heure
+ * DANS la même journée arrive par les deux chemins et ne doit compter qu'une
+ * fois. Les clés illisibles sont ignorées plutôt que devinées — même principe
+ * qu'ailleurs dans Brief : pas d'occurrence à une date approchée.
+ */
+function candidateOccurrences(
+  grid: Date[],
+  overrides: Record<string, string> | undefined,
+  dayStart: Date,
+  dayEnd: Date,
+): Date[] {
+  if (!overrides) return grid;
+  const byTime = new Map(grid.map((d) => [d.getTime(), d]));
+  for (const [from, to] of Object.entries(overrides)) {
+    const moved = new Date(remoteDueToItem(to));
+    if (Number.isNaN(moved.getTime()) || moved < dayStart || moved >= dayEnd) continue;
+    const origin = new Date(remoteDueToItem(from));
+    if (Number.isNaN(origin.getTime())) continue;
+    byTime.set(origin.getTime(), origin);
+  }
+  return [...byTime.values()];
 }

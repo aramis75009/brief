@@ -117,4 +117,59 @@ describe("buildDigest", () => {
   it("horodate le récap avec l'instant fourni, pas l'heure de la machine", () => {
     expect(buildDigest([], PROJECTS, NOW).generatedAt).toBe(NOW.toISOString());
   });
+
+  /**
+   * Même défaut de fond que celui trouvé dans l'agenda le 2026-09-05 : le
+   * récap classait sur `due` BRUT, en ignorant les occurrences qu'Aramis
+   * décale dans l'app Calendrier. Le calendrier gagne (décision 18/08), le
+   * récap doit donc annoncer la journée que le calendrier montre — sinon il
+   * réclame le matin une séance déjà déplacée à demain.
+   */
+  describe("occurrence décalée dans l'app Calendrier (override)", () => {
+    it("une échéance du jour repoussée à DEMAIN sort de `today`", () => {
+      const moved = item({
+        id: "courir",
+        title: "Aller courir",
+        due: "2026-08-15T14:00:00.000Z",
+        overrides: { "20260815T140000Z": "20260816T140000Z" },
+      });
+      const out = buildDigest([moved], PROJECTS, NOW);
+      expect(out.today).toHaveLength(0);
+      expect(out.counts.today).toBe(0);
+    });
+
+    it("une échéance de DEMAIN avancée à aujourd'hui entre dans `today`", () => {
+      const moved = item({
+        id: "courir",
+        due: "2026-08-16T14:00:00.000Z",
+        overrides: { "20260816T140000Z": "20260815T140000Z" },
+      });
+      const out = buildDigest([moved], PROJECTS, NOW);
+      expect(out.today).toHaveLength(1);
+      // Le récap annonce l'heure RÉELLE, celle du calendrier.
+      expect(out.today[0].due).toBe("2026-08-15T14:00:00.000Z");
+    });
+
+    it("une occurrence SUPPRIMÉE dans le calendrier (EXDATE) n'est pas annoncée", () => {
+      const dropped = item({
+        id: "courir",
+        due: "2026-08-15T14:00:00.000Z",
+        exdates: ["20260815T140000Z"],
+      });
+      const out = buildDigest([dropped], PROJECTS, NOW);
+      expect(out.today).toHaveLength(0);
+      expect(out.overdue).toHaveLength(0);
+    });
+
+    it("un décalage d'heure DANS la journée garde l'item et publie la vraie heure", () => {
+      const shifted = item({
+        id: "courir",
+        due: "2026-08-15T14:00:00.000Z",
+        overrides: { "20260815T140000Z": "20260815T150000Z" },
+      });
+      const out = buildDigest([shifted], PROJECTS, NOW);
+      expect(out.today).toHaveLength(1);
+      expect(out.today[0].due).toBe("2026-08-15T15:00:00.000Z");
+    });
+  });
 });
