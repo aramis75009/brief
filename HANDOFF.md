@@ -15,10 +15,10 @@ que tu remplaces dans `docs/handoffs/`.
 | | |
 |---|---|
 | **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 01/09 après-midi). |
-| **Branche** | `fix/agenda-occurrences-decalees` — [PR #16](https://github.com/aramis75009/brief/pull/16), **ouverte, non fusionnée**. |
+| **Branche** | `docs/passation-v1210-deployee`. Le chantier, `fix/agenda-occurrences-decalees`, est **fusionné** ([PR #16](https://github.com/aramis75009/brief/pull/16)). |
 | **Base** | `main` @ `7979624`. |
-| **GitHub** | `origin/main` = `7979624`. |
-| **Prod** | **`7979624`, branche `main`** — vérifié en SSH. Le lot 1 multi-utilisateur **A ÉTÉ DÉPLOYÉ** entre le 01/09 et aujourd'hui : les données vivent sous `users/<uuid>/` et deux comptes existent. La passation précédente disait « pas déployé » : c'est périmé. |
+| **GitHub** | `origin/main` = **`3a1ea3e`**, v1.2.1.0. |
+| **Prod** | **`3a1ea3e`, v1.2.1.0, déployée le 05/09** — vérifié en SSH (SHA + `/app/VERSION` + capture d'écran). Le lot 1 multi-utilisateur avait été déployé entre le 01/09 et aujourd'hui : la passation précédente disait « pas déployé », c'était périmé. |
 
 ## Goal
 
@@ -55,7 +55,7 @@ classait sur `due` brut et réclamait le matin une séance déjà déplacée à 
 
 ## Current state
 
-**Correctif écrit, testé, poussé — PAS déployé** (choix d'Aramis aujourd'hui).
+**Correctif livré, déployé et vérifié en production.** v1.2.1.0.
 
 - `src/lib/agenda.ts` : le filtre de fenêtre se fait sur l'heure **effective**,
   aux **deux** endroits de la fonction (items ligne ~68, snapshot ligne ~130).
@@ -95,7 +95,14 @@ quel (2026-08-29) — deviner qu'Aramis a fait les occurrences du 30/08 et du
    changeait pas, elle n'était simplement pas appliquée au *choix du jour*.
    C'est désormais le cas dans les trois copies (agenda items, agenda snapshot,
    digest).
-2. **PR ouverte, pas de déploiement** — arbitrage d'Aramis, projet en pause.
+2. **Déployé après tout** — Aramis a rouvert la question en fin de session.
+   Passé par le webhook Hermes, pas par un SSH direct : `.claude/commands/deploy.md`
+   l'interdit explicitement, et la règle tient même quand on a la clé.
+   ⚠️ **Hermes a d'abord échoué en silence** sur `cd /docker/brief` — ce chemin
+   n'existe pas dans son conteneur, et il n'a pas réessayé. Le `202` du webhook
+   était déjà parti. Corrigé en lui donnant la commande SSH vers l'hôte dans le
+   message de la demande (sa clé y est autorisée) : réussi du premier coup.
+   Détails et commande exacte dans la mémoire projet `hermes-deploie-par-ssh-pas-cd`.
 3. **Réparer la donnée « Reposter 15 »** plutôt que la laisser ou la supprimer
    — arbitrage d'Aramis.
 
@@ -139,31 +146,22 @@ n'a plus d'usage.
 
 ## Next action
 
-**Déployer la PR #16** quand Aramis le voudra. Rien ne l'impose : le correctif
-ne touche ni les données ni la synchro, seulement l'affichage. Sur le VPS
-(`ssh -i ~/.ssh/brief_vps root@186.241.16.37`, `/docker/brief`) :
+Rien d'urgent — le projet reste en pause. Ce qui attend :
 
-```bash
-bash deploy/backup.sh
-git pull
-docker compose --env-file .env.production build
-docker compose --env-file .env.production up -d
-```
+1. **Fusionner `docs/agent-recette-account` dans `main`** (commit `f1cf421`,
+   aucune PR). Tant que ce fichier reste sur sa branche, chaque agent
+   redécouvre à ses frais que la recette authentifiée serait impossible — elle
+   ne l'est pas. C'est la cause racine de six passations qui l'ont affirmé.
+2. **La cause qui a effacé la `rrule` de « Reposter 15 articles »** n'est pas
+   identifiée (`TODOS.md`, section Dette connue).
+3. **Le pont WhatsApp d'Hermes est mort en boucle** (`[Whatsapp] Bridge process
+   died (exit code 1)`, des centaines de lignes). Sans rapport avec Brief, mais
+   son journal en est noyé : filtrer avant de chercher quoi que ce soit dedans.
+4. Lots 2 et 3 du pivot multi-utilisateur.
 
-⚠️ `--env-file .env.production` n'est pas facultatif : sans lui, **toute**
-commande `docker compose` échoue sur l'interpolation (constaté aujourd'hui,
-`docker compose ps` compris — utiliser `docker logs brief-app-1` en attendant).
-
-**Et fusionner `docs/agent-recette-account` dans `main`** (commit `f1cf421`,
-aucune PR ouverte à ce jour). Tant que ce fichier reste sur sa branche, chaque
-agent redécouvre à ses frais que la recette authentifiée est impossible — elle
-ne l'est pas.
-
-Après le déploiement, la vérification tient en une capture : ouvrir le
-calendrier avec le compte agent, semaine du 31/08, et regarder si « Séance
-push » est au vendredi 4 (correct) ou au jeudi 3 (bug).
-
-Ensuite, lots 2 et 3 du pivot multi-utilisateur.
+**Nettoyage en attente** : `it_demo_push` dans le store du compte agent — il
+rejoue le bug en un coup d'œil et a servi à valider le déploiement. À supprimer
+quand il n'a plus d'usage.
 
 ## Validations
 
@@ -175,13 +173,21 @@ $ npx tsc --noEmit   → 0 erreur
 $ npx vitest run     → 597 passants, 1 skipped (47 fichiers)
 ```
 
+**Vérifié EN PRODUCTION** après déploiement, sur les données réelles d'Aramis :
+
+```
+/api/agenda?date=2026-09-03 → (vide)                      ← rendait « Séance push » datée du 4
+/api/agenda?date=2026-09-04 → Séance push 14:00Z, …       ← était absente
+/api/agenda?date=2026-09-06 → Aller courir 14:00Z, …      ← était VIDE
+```
+
+Et à l'écran, connecté avec le compte agent : « Séance push » est passée du
+jeudi 3 au vendredi 4. `docker exec brief-app-1 cat /app/VERSION` → `1.2.1.0`.
+
 **NON LANCÉ — à ne pas croire fait :**
 
-- **`npm run build`** (un `next dev` tourne — règle du repo). `tsc --noEmit`
-  n'en tient pas lieu : il ne prouve pas que la sortie standalone se construit.
-- **Le correctif n'a PAS tourné en production.** Il est vérifié sur les données
-  de prod, rejouées **en local**. Ce n'est pas la même chose que la prod.
-- **Aucune recette d'écran authentifié** (voir Blockers).
+- **`npm run build` en local** (un `next dev` tourne — règle du repo). Le build
+  de production a en revanche bien tourné sur le VPS pendant le déploiement.
 - `readSyncState`, `recordDeletedExternalUid`, `readAgendaSnapshot`,
   `runCalDavSync`, `runReminders`, `sendPush` n'ont toujours **aucun test
   unitaire direct**. Inchangé.
