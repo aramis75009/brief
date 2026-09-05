@@ -10,156 +10,144 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-09-01 (après-midi) · Lot 1 multi-utilisateur livré dans `main` — reste à déployer
+# Passation — 2026-09-05 · Le calendrier Apple et Brief ne racontaient plus la même semaine
 
 | | |
 |---|---|
-| **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 01/09 matin). |
-| **Branche** | `docs/passation-lot1-livre` (cette passation). Le chantier lui-même, `feat/multi-user-store`, est **fusionné**. |
-| **Base** | `main` @ `a21c1f3`. |
-| **GitHub** | **`origin/main` = `a21c1f3`** — PR #14 fusionnée, **v1.2.0.0**. |
-| **Prod** | injoignable depuis le Mac (normal, pas de SSH hôte). Dernier état connu : `72a7d1db`, **v1.1.0.0**, qui ne contient **rien** de ce chantier. |
+| **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 01/09 après-midi). |
+| **Branche** | `fix/agenda-occurrences-decalees` — [PR #16](https://github.com/aramis75009/brief/pull/16), **ouverte, non fusionnée**. |
+| **Base** | `main` @ `7979624`. |
+| **GitHub** | `origin/main` = `7979624`. |
+| **Prod** | **`7979624`, branche `main`** — vérifié en SSH. Le lot 1 multi-utilisateur **A ÉTÉ DÉPLOYÉ** entre le 01/09 et aujourd'hui : les données vivent sous `users/<uuid>/` et deux comptes existent. La passation précédente disait « pas déployé » : c'est périmé. |
 
 ## Goal
 
-Finir le lot 1 du pivot multi-utilisateur : le faire atterrir dans `main`. Fait.
-Le lot était relu et vert ce matin ; cette session l'a passé par `/ship` (revue
-de pré-atterrissage, version, CHANGELOG, PR, fusion).
+Projet en pause. Aramis demande une seule chose : que **ce qui marchait avant
+continue de marcher**, en particulier la synchro du calendrier Apple et le
+récap du jour. Le reste attend.
 
-## Current state — livré dans `main`, PAS déployé
+## Ce qui n'allait pas — et pourquoi c'était invisible
 
-**Le code est dans `main`. La production tourne toujours sans lui.** C'est le
-seul écart qui compte, et il est volontaire : ce lot déplace des données, donc
-le déploiement demande une sauvegarde et deux variables d'environnement qui
-n'existent pas encore sur le VPS.
+Aramis décale ses séances directement dans l'app Calendrier. La synchro CalDAV
+adopte bien le décalage (`Item.overrides`), mais **`buildDayAgenda` choisissait
+ses occurrences sur la grille RRULE brute AVANT de leur appliquer l'override**.
 
-Ce que `/ship` a produit au-delà de la fusion :
+Une occurrence déplacée n'appartenait alors à aucun jour :
 
-| | |
-|---|---|
-| **Version** | `1.1.0.0` → **`1.2.0.0`** (MINEUR, arbitré par Aramis). `CHANGELOG.md` § 1.2.0.0 porte l'entrée complète. |
-| **Revue de pré-atterrissage** | **1 trouvaille, corrigée** — voir ci-dessous. |
-| **PR** | [#14](https://github.com/aramis75009/brief/pull/14), fusionnée le 01/09 à 13:06 UTC. |
+- pas au jour d'**origine** — l'override l'en sort, mais elle y restait
+  affichée, horodatée au jour d'arrivée ;
+- pas au jour d'**arrivée** — la grille RRULE ne l'y met jamais, elle n'était
+  donc jamais candidate.
 
-### La trouvaille de la revue — `ed1293c`
+Mesuré sur la prod avant correctif :
 
-`[P1]` **`/api/cron/reminders` répondait 200 quand il ne servait AUCUN compte.**
-Quand Supabase est injoignable *et* que `BRIEF_OWNER_USER_ID` manque,
-`ownerFallback()` rend `[]` ; le `console.error` part dans le journal du
-conteneur, que le cron ne lit pas. `curl -fsS` restait vert pendant que plus
-aucun rappel ne partait pour personne — la panne muette exacte que le repli
-venait fermer un cran plus haut. Le cron CalDAV rendait déjà 503 dans son cas
-symétrique. Corrigé en 503, test mis à jour, invariant écrit dans `AGENTS.md`
-(`64db640`) parce que c'est typiquement le 503 qu'un agent pressé
-« simplifierait » en 200.
+```
+GET /api/agenda?date=2026-09-03  →  « Séance push », due = 2026-09-04T14:00Z
+GET /api/agenda?date=2026-09-04  →  []          ← Apple l'affiche pourtant le vendredi
+GET /api/agenda?date=2026-09-06  →  []          ← « Aller courir » du dimanche, disparue
+```
 
-Les neuf défauts fermés ce matin sont décrits dans
-[`docs/handoffs/2026-09-01-lot1-relu-neuf-pannes.md`](docs/handoffs/2026-09-01-lot1-relu-neuf-pannes.md).
+Aucune erreur, aucun test rouge, `failures=0` dans le journal du cron CalDAV :
+la synchro faisait son travail, c'est **l'affichage** qui rangeait mal.
+
+`buildDigest` portait le même défaut de fond dans une **troisième copie** : il
+classait sur `due` brut et réclamait le matin une séance déjà déplacée à demain.
+
+## Current state
+
+**Correctif écrit, testé, poussé — PAS déployé** (choix d'Aramis aujourd'hui).
+
+- `src/lib/agenda.ts` : le filtre de fenêtre se fait sur l'heure **effective**,
+  aux **deux** endroits de la fonction (items ligne ~68, snapshot ligne ~130).
+  `candidateOccurrences` ajoute les occurrences qu'un override amène **vers**
+  le jour depuis un autre — sans quoi elles ne sont candidates nulle part.
+  Dédoublonné par horodatage (un décalage d'heure *dans* la même journée arrive
+  par les deux chemins).
+- `src/lib/digest.ts` : applique l'override avant de trier, publie l'heure
+  réelle, et n'annonce plus une occurrence supprimée (EXDATE).
+- 8 tests ajoutés, **tous en échec avant le correctif**.
+
+Vérifié en rejouant les **données réelles de production** hors ligne
+(`items.json` + `caldav-agenda-snapshot.json` du compte d'Aramis) : le dimanche
+6 n'est plus vide, le vendredi 4 retrouve « Séance push », le jeudi 3 ne montre
+plus d'événement mal daté. La semaine rendue par Brief redevient celle d'Apple.
+
+### Une donnée réparée en production (accord d'Aramis)
+
+`it_1787066667909_reposter15` — « Reposter 15 articles » — portait un `doneAt`
+et avait **perdu sa `rrule`**, alors que la série tourne toujours côté Apple
+(`FREQ=WEEKLY;BYDAY=FR,SA,SU`). Un item terminé ne produit plus d'ICS, sort donc
+de `desired`, et n'est plus jamais réconcilié par la synchro : **il était gelé
+pour toujours**. Ce n'est pas le bug ci-dessus, c'est un accident de donnée.
+
+Réparé après sauvegarde fraîche (`/var/backups/brief/brief-20260905-114409.tar.gz`) :
+`rrule` remise, `doneAt` remis à `null`, `due` avancé à la prochaine occurrence
+réelle (`2026-09-05T15:30:00.000Z`, calculé par `nextOccurrence`, pas à la main).
+Écriture atomique, avec une garde qui refusait d'écrire si l'état sur disque
+n'était pas exactement celui analysé. `lastCompletedOccurrenceAt` laissé tel
+quel (2026-08-29) — deviner qu'Aramis a fait les occurrences du 30/08 et du
+04/09 aurait été inventer. Confirmé : la série est de retour dans
+`/api/agenda?date=2026-09-05`.
 
 ## Decisions
 
-Les six arbitrages d'Aramis du 31/08 (`DECISIONS.md`) tiennent, inchangés.
-Deux décisions de cette session :
+1. **Le calendrier gagne, y compris par occurrence** — la décision du 18/08 ne
+   changeait pas, elle n'était simplement pas appliquée au *choix du jour*.
+   C'est désormais le cas dans les trois copies (agenda items, agenda snapshot,
+   digest).
+2. **PR ouverte, pas de déploiement** — arbitrage d'Aramis, projet en pause.
+3. **Réparer la donnée « Reposter 15 »** plutôt que la laisser ou la supprimer
+   — arbitrage d'Aramis.
 
-1. **Version MINEURE (`1.2.0.0`) et non MAJEURE** — arbitrage d'Aramis. L'app
-   garde les mêmes écrans et la même API côté client ; ce qui change est
-   interne au serveur et couvert par une migration automatique. Le `2.0.0.0`
-   reste disponible pour le jour où Brief a vraiment un second utilisateur.
-2. **Le 503 du cron des rappels** (ci-dessus) — mienne, réversible, mais elle
-   est maintenant écrite comme invariant : la relire avant de la défaire.
+## Blockers
+
+Aucun sur le code. Deux limites de cette session :
+
+- **Aucune capture d'écran authentifiée.** L'app exige une session Supabase ;
+  les cookies ne sont pas dans le Chrome du Mac (Aramis utilise la PWA). La
+  preuve visuelle livrée est un comparatif reconstruit sur ses données réelles,
+  pas une capture de l'app. Le blocage de recette d'écran authentifié dure
+  depuis six sessions.
+- **`npm run build` non lancé** — un `next dev` tourne, la règle du repo
+  l'interdit.
+
+## Next action
+
+**Déployer la PR #16** quand Aramis le voudra. Rien ne l'impose : le correctif
+ne touche ni les données ni la synchro, seulement l'affichage. Sur le VPS
+(`ssh -i ~/.ssh/brief_vps root@186.241.16.37`, `/docker/brief`) :
+
+```bash
+bash deploy/backup.sh
+git pull
+docker compose --env-file .env.production build
+docker compose --env-file .env.production up -d
+```
+
+⚠️ `--env-file .env.production` n'est pas facultatif : sans lui, **toute**
+commande `docker compose` échoue sur l'interpolation (constaté aujourd'hui,
+`docker compose ps` compris — utiliser `docker logs brief-app-1` en attendant).
+
+Ensuite, dans l'ordre de ce qui reste : recette des écrans authentifiés, puis
+lots 2 et 3 du pivot multi-utilisateur.
 
 ## Validations
 
-Lancées sur l'arbre final, sortie vue, enregistrées dans le registre de preuves
-gstack (`~/.gstack/projects/aramis75009-brief/logs/`) :
+Lancées sur l'arbre final, sortie vue :
 
 ```
 $ npx eslint .       → 0 erreur, 0 warning
 $ npx tsc --noEmit   → 0 erreur
-$ npx vitest run     → 589 passants, 1 skipped (47 fichiers)
+$ npx vitest run     → 597 passants, 1 skipped (47 fichiers)
 ```
 
 **NON LANCÉ — à ne pas croire fait :**
 
-- **`npm run build`.** Un `next dev` tourne sur le port 3100 : la règle du repo
-  l'interdit (corruption de `.next`). `npx tsc --noEmit` en tient lieu, ce qui
-  n'est pas la même chose — il ne prouve pas que la sortie standalone se
-  construit.
-- **La migration n'a PAS été rejouée sur un serveur réel** depuis `a2d7c53` et
-  `afeb0e6`, qui ont changé sa sentinelle, ajouté les dictées et normalisé la
-  casse. Elle l'avait été le 31/08, avant ces trois changements. Les tests
-  unitaires les couvrent ; le serveur réel, non. **C'est le risque numéro un du
-  déploiement.**
-- **Aucune recette d'écran authentifié.** Inchangé depuis cinq sessions : c'est
-  ce que ce lot débloque une fois déployé.
-- **`readSyncState`, `recordDeletedExternalUid`, `readAgendaSnapshot`,
-  `runCalDavSync`, `runReminders`, `sendPush` n'ont toujours AUCUN test
-  unitaire direct.** Le typecheck est leur seul filet.
-
-## Next — la prochaine action
-
-**Déployer.** Rien d'autre n'est en attente côté code. Dans cet ordre, et
-l'ordre compte — c'est le seul lot qui touche aux données existantes :
-
-1. Hermes lance **`deploy/backup.sh` AVANT tout**.
-2. Poser dans `.env.production` : **`SUPABASE_SECRET_KEY`** (clé service-role
-   Supabase) et **`BRIEF_OWNER_USER_ID`** (UUID d'Aramis, à lire dans
-   `authorized_users`). **En minuscules de préférence** — la casse est
-   désormais normalisée, mais autant ne pas dépendre du correctif. Aucune
-   migration SQL.
-3. Build + `up`. **Lire le journal `[migration]` en premier** : il dit
-   exactement ce qui a été déplacé, et **avertit en `warn`** si des dictées ont
-   été laissées à la racine.
-4. Vérifier qu'Aramis retrouve ses tâches **et** que ses dictées se jouent.
-5. **Puis seulement** : créer le compte agent, et recetter les écrans
-   authentifiés — le blocage de cinq sessions tombe là.
-
-Ensuite, lots 2 et 3 (voir le spec). Le lot 3 est plus urgent qu'il n'y paraît :
-d'ici là, **tout compte qui n'est pas le propriétaire n'a aucune synchro
-calendrier**.
-
-### ⚠️ Ce qui revient à Aramis, hors de portée d'un agent
-
-- Poser les deux variables sur le VPS (via Hermes — pas de SSH depuis le Mac).
-- Faire lancer `backup.sh` avant le déploiement.
-- **Ne pas créer le compte agent avant que le lot 1 soit déployé et vérifié.**
-  Aujourd'hui en prod, il donnerait un accès complet aux vraies données.
-- Révoquer le `TODOIST_API_TOKEN` chez Todoist (jeton vivant pour du code
-  supprimé) — reste des passations précédentes.
-
-## Blockers
-
-1. **Pas de SSH vers le VPS depuis le Mac.** Déployer passe par un message à
-   Hermes. ⚠️ Le webhook `deploy.sh` rend 202 sans rien déclencher, et
-   **l'absence de confirmation ne prouve pas qu'un déploiement n'a pas eu
-   lieu** — demander le SHA à Hermes.
-2. **Aucun agent ne peut recetter un écran authentifié.** Inchangé.
-3. **Course sur `caldav-last-sync.json`, NON corrigée** — pré-existante,
-   détaillée dans `TODOS.md` § « Dette connue ». `recordDeletedExternalUid` lit
-   sans sérialiser puis écrit en sérialisant, pendant que `runCalDavSync` relit
-   et réécrit le même état sur un passage de plusieurs dizaines de secondes.
-   **Symptôme à reconnaître : une tâche supprimée qui revient.**
-
-### Différé, à ne pas perdre (dans `TODOS.md`)
-
-- **⚠️ « Reporter » une tâche perd l'heure** et ne retire pas l'occurrence du
-  jour. Signalé le 31/08, non reproduit.
-- **⚠️ Les étiquettes ne se voient pas dans la fiche tâche.** Signalé le 31/08,
-  non reproduit.
-- Quatre intentions jamais câblées (« Réessayer » après échec, file hors-ligne
-  invisible, option `silent` de `loadProjects`, `groupByProject` testé mais
-  jamais appelé).
-
----
-
-## Historique des passations
-
-| Date | Sujet | Agent | Lien |
-|---|---|---|---|
-| 2026-09-01 (après-midi) | Lot 1 livré dans `main` — v1.2.0.0, PR #14 | Claude Code (Opus 5) | (cette passation) |
-| 2026-09-01 (matin) | Lot 1 relu : neuf pannes silencieuses fermées | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-09-01-lot1-relu-neuf-pannes.md) |
-| 2026-08-31 (nuit) | Lot 1 du pivot multi-utilisateur : données cloisonnées | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-nuit-lot1-multi-utilisateur.md) |
-| 2026-08-31 (soir) | Le pivot multi-utilisateur n'est pas fait — prochain chantier | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-soir-pivot-multi-utilisateur-pas-fait.md) |
-| 2026-08-31 (journée) | Kanban Trello livré, ménage du code mort, Vercel supprimé | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-kanban-trello-menage-vercel.md) |
-| 2026-08-31 (nuit) | Réglages desktop déployés + première recette navigateur | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-31-nuit-reglages-desktop-recette-navigateur.md) |
-| 2026-08-30 (nuit, tard) | Accès agenda machine + Réglages derrière le profil — PR #4 et #5 | Claude Code (Opus 5) | [fiche](docs/handoffs/2026-08-30-nuit-tard-agenda-machine-reglages.md) |
+- **`npm run build`** (un `next dev` tourne — règle du repo). `tsc --noEmit`
+  n'en tient pas lieu : il ne prouve pas que la sortie standalone se construit.
+- **Le correctif n'a PAS tourné en production.** Il est vérifié sur les données
+  de prod, rejouées **en local**. Ce n'est pas la même chose que la prod.
+- **Aucune recette d'écran authentifié** (voir Blockers).
+- `readSyncState`, `recordDeletedExternalUid`, `readAgendaSnapshot`,
+  `runCalDavSync`, `runReminders`, `sendPush` n'ont toujours **aucun test
+  unitaire direct**. Inchangé.

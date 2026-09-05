@@ -209,6 +209,18 @@ sujet proche) :
   — un `DTSTART` ICS sans `Z` ni tirets a crashé toute l'app le 19/08. Le
   fix est en 3 couches dans `store.ts` + `caldav.ts`. **Toujours tester
   la donnée, pas seulement l'API.**
+- **⚠️ Une récurrente qui reçoit `doneAt` sort de la synchro POUR TOUJOURS**
+  (trouvée le 05/09, non corrigée). Un item terminé ne produit plus d'ICS
+  (`buildEventIcs`), sort donc de `desired` dans `runCalDavSync`, et n'est plus
+  jamais réconcilié avec le calendrier — même si la série y tourne encore.
+  Constaté sur « Reposter 15 articles » : `doneAt` posé et `rrule` **perdue**,
+  alors qu'Apple portait toujours `FREQ=WEEKLY;BYDAY=FR,SA,SU`. Brief ne
+  l'aurait plus jamais montrée. La donnée a été réparée à la main le 05/09
+  (passation du jour) ; **la cause qui a effacé la `rrule` n'est pas
+  identifiée** — chercher du côté de `decideSync` action `complete` (adoption
+  d'une suppression calendrier) et de la coche d'une récurrente. Un item
+  terminé qui reste récurrent côté calendrier devrait au minimum être signalé,
+  pas gelé en silence.
 - **`<button>` imbriqué** dans `TodayRow` — voir P1.
 - **Drag & drop Kanban** : recetté partiellement, à vérifier edge cases.
 - **Bouton mort → câbler une vraie feature**, jamais supprimer (règle
