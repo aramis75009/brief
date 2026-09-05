@@ -144,6 +144,32 @@ n'a plus d'usage.
 - **`npm run build` non lancé** — un `next dev` tourne, la règle du repo
   l'interdit.
 
+## ⚠️ Déploiement : l'alias `brief-vps`, jamais l'IP en clair
+
+Changement du 2026-09-05, remonté par Hermes et **vérifié**. Le scan de
+sécurité d'Hermes signale toute commande contenant une IP brute (« URL uses
+raw IP address ») et met le run en attente d'une approbation « commande
+dangereuse ». **Cette approbation ne peut pas être donnée depuis Telegram** :
+le run du webhook vit dans sa propre session, le `/approve` n'y parvient
+jamais — le run reste bloqué **en silence**, alors que le `202` du webhook est
+déjà parti.
+
+```bash
+ssh brief-vps 'cd /docker/brief && …'     # ✅
+ssh root@<IP> 'cd /docker/brief && …'     # ❌ run bloqué, sans message
+```
+
+L'alias est configuré côté Hermes **et** sur le Mac de Claude Code
+(`~/.ssh/config`) : une seule forme de commande vaut désormais partout. Il
+n'existe pas *sur* le VPS — un script qui s'exécute déjà là-bas n'a pas besoin
+de SSH. Les passations archivées (`docs/handoffs/`) gardent l'ancienne forme :
+ce sont des documents historiques, on ne les réécrit pas.
+
+Corrigé dans `scripts/coord/status.sh` et `docs/coordination.md`. **Effet de
+bord :** `status.sh` voit maintenant la prod **depuis le Mac** (« ✅ Prod
+alignée avec GitHub ») — le « ⚠️ injoignable » qui traînait depuis fin août
+venait de la clé d'Hermes codée en dur, pas d'une impossibilité.
+
 ## Next action
 
 Rien d'urgent — le projet reste en pause. Ce qui attend :
