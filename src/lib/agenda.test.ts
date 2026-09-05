@@ -321,4 +321,90 @@ describe("buildDayAgenda", () => {
     });
     expect(buildDayAgenda([it1], [ev], DAY_START, DAY_END)).toHaveLength(0);
   });
+
+  /**
+   * Cas réel de prod du 2026-09-05, remonté par Aramis : le calendrier Apple
+   * et Brief ne racontaient pas la même semaine. Aramis décale ses séances
+   * directement dans l'app Calendrier ; la synchro adopte bien le décalage
+   * (`overrides`), mais l'agenda choisissait ses occurrences sur la grille
+   * RRULE BRUTE puis leur appliquait l'override — une occurrence déplacée
+   * restait donc affichée le jour d'ORIGINE, avec l'horodatage du jour
+   * d'ARRIVÉE, et manquait le jour où elle a réellement lieu.
+   *
+   * Constaté en prod : `GET /api/agenda?date=2026-09-03` rendait
+   * « Séance push » daté du 2026-09-04, et `?date=2026-09-04` était vide.
+   */
+  describe("occurrence décalée par override : elle compte pour le jour d'ARRIVÉE", () => {
+    // Jeudi 3 septembre 2026, Europe/Paris.
+    const THU_START = new Date("2026-09-02T22:00:00Z");
+    const THU_END = new Date("2026-09-03T22:00:00Z");
+    // Vendredi 4 septembre 2026, Europe/Paris.
+    const FRI_START = new Date("2026-09-03T22:00:00Z");
+    const FRI_END = new Date("2026-09-04T22:00:00Z");
+
+    const pushItem = item({
+      id: "it_push",
+      title: "Séance push",
+      due: "2026-09-07T14:00:00.000Z", // ancre : le lundi suivant
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      kind: "event",
+    });
+    const pushEvent = calEvent({
+      uid: "brief-it_push",
+      briefItemId: "it_push",
+      title: "Séance push",
+      start: "2026-09-07T14:00:00.000Z",
+      allDay: false,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      // Aramis a déplacé le jeudi 3 au vendredi 4, dans l'app Calendrier.
+      overrides: { "20260903T140000Z": "20260904T140000Z" },
+    });
+
+    it("le jour d'ORIGINE ne la montre plus (jeudi 3, déplacée au vendredi)", () => {
+      expect(buildDayAgenda([pushItem], [pushEvent], THU_START, THU_END)).toHaveLength(0);
+    });
+
+    it("le jour d'ARRIVÉE la montre (vendredi 4), comme le calendrier Apple", () => {
+      const out = buildDayAgenda([pushItem], [pushEvent], FRI_START, FRI_END);
+      expect(out).toHaveLength(1);
+      expect(out[0].title).toBe("Séance push");
+      expect(out[0].due).toBe("2026-09-04T14:00:00.000Z");
+    });
+
+    it("un item Brief NON récurrent décalé compte lui aussi pour le jour d'arrivée", () => {
+      // Même défaut dans la première boucle : le filtre de fenêtre testait
+      // `due` brut, puis l'override le sortait du jour.
+      const moved = item({
+        id: "it_moved",
+        title: "Relancer Matheo",
+        due: "2026-09-03T14:00:00.000Z",
+        allDay: false,
+        kind: "task",
+        overrides: { "20260903T140000Z": "20260904T140000Z" },
+      });
+      expect(buildDayAgenda([moved], [], THU_START, THU_END)).toHaveLength(0);
+      const out = buildDayAgenda([moved], [], FRI_START, FRI_END);
+      expect(out).toHaveLength(1);
+      expect(out[0].due).toBe("2026-09-04T14:00:00.000Z");
+    });
+
+    it("ne duplique pas une occurrence seulement décalée DANS la même journée", () => {
+      // Décalage d'heure sans changement de jour (16:00 → 17:00 Paris) :
+      // l'occurrence est à la fois sur la grille du jour ET cible d'un
+      // override qui atterrit ce même jour. Elle ne doit compter qu'une fois.
+      const sameDay = calEvent({
+        uid: "brief-it_push",
+        briefItemId: "it_push",
+        title: "Séance push",
+        start: "2026-09-07T14:00:00.000Z",
+        allDay: false,
+        rrule: "FREQ=WEEKLY;BYDAY=MO,TH",
+        overrides: { "20260903T140000Z": "20260903T150000Z" },
+      });
+      const out = buildDayAgenda([pushItem], [sameDay], THU_START, THU_END);
+      expect(out).toHaveLength(1);
+      expect(out[0].due).toBe("2026-09-03T15:00:00.000Z"); // 17:00 Paris
+    });
+  });
 });
