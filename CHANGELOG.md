@@ -12,6 +12,42 @@ quatrième.
 
 ---
 
+## 1.2.1.0 — 2026-09-05
+
+### Une occurrence décalée compte pour le jour d'arrivée (PR #16)
+
+Aramis décale ses séances directement dans l'app Calendrier. La synchro CalDAV
+adoptait bien le décalage (`Item.overrides`), mais l'agenda choisissait ses
+occurrences **sur la grille RRULE brute avant de leur appliquer l'override**.
+Une occurrence déplacée n'appartenait alors à aucun jour : elle restait
+affichée au jour d'origine, horodatée au jour d'arrivée, et manquait le jour
+où elle a réellement lieu.
+
+Mesuré en production le 05/09 : `GET /api/agenda?date=2026-09-03` rendait
+« Séance push » datée du 09-04, et `?date=2026-09-04` était vide — là où le
+calendrier Apple l'affichait bien le vendredi. Le dimanche 6 était vide de la
+même façon. Aucune erreur, aucun test rouge, `failures=0` dans le journal du
+cron : la synchro faisait son travail, c'est l'affichage qui rangeait mal.
+
+- `src/lib/agenda.ts` — le filtre de fenêtre se fait désormais sur l'heure
+  **effective**, aux deux endroits de `buildDayAgenda`. `candidateOccurrences`
+  ajoute les occurrences qu'un override amène **vers** le jour depuis un autre,
+  sans quoi elles ne sont candidates nulle part ; dédoublonné par horodatage,
+  un décalage d'heure dans la même journée arrivant par les deux chemins.
+- `src/lib/digest.ts` — même défaut de fond dans une troisième copie : le récap
+  classait sur `due` brut et réclamait le matin une séance déjà déplacée à
+  demain. Il applique maintenant l'override avant de trier, publie l'heure
+  réelle, et n'annonce plus une occurrence supprimée (EXDATE).
+
+Le calendrier gagne (décision du 18/08), y compris par occurrence. 8 tests
+ajoutés, tous en échec avant le correctif. Vérifié en rejouant les données
+réelles de production, puis à l'écran avec le compte agent de recette.
+
+Aucune migration, aucun changement de données : ce lot ne touche que
+l'affichage.
+
+---
+
 ## 1.2.0.0 — 2026-09-01
 
 ### Chaque compte possède ses données — lot 1 du pivot multi-utilisateur (PR #14)
