@@ -101,13 +101,39 @@ quel (2026-08-29) — deviner qu'Aramis a fait les occurrences du 30/08 et du
 
 ## Blockers
 
-Aucun sur le code. Deux limites de cette session :
+Aucun sur le code.
 
-- **Aucune capture d'écran authentifiée.** L'app exige une session Supabase ;
-  les cookies ne sont pas dans le Chrome du Mac (Aramis utilise la PWA). La
-  preuve visuelle livrée est un comparatif reconstruit sur ses données réelles,
-  pas une capture de l'app. Le blocage de recette d'écran authentifié dure
-  depuis six sessions.
+### ✅ Le blocage de recette authentifiée est LEVÉ — il n'aurait jamais dû durer
+
+Six passations ont répété « aucune recette d'écran authentifié possible ».
+**C'était faux depuis le 01/09** : Aramis avait fait créer un compte Supabase
+d'agent exactement pour ça. Il a fallu qu'il le dise pour que je le trouve.
+
+Deux causes, toutes deux traitées :
+
+1. **`docs/agent-recette-account.md` n'est PAS dans `main`.** Il vit sur la
+   branche `docs/agent-recette-account`, jamais fusionnée. Aucun agent lisant
+   `main`, `AGENTS.md` ou `HANDOFF.md` ne peut le trouver.
+   **→ à fusionner : c'est la cause racine, et elle est toujours ouverte.**
+2. **Les identifiants n'étaient que dans le repo Hermes du VPS.** Ils sont
+   désormais aussi dans le `.env.local` du Mac (`BRIEF_AGENT_EMAIL`,
+   `BRIEF_AGENT_PASSWORD`, `BRIEF_AGENT_USER_ID`). Repo public : jamais commis.
+
+Connexion vérifiée le 05/09 **sur la prod et en local**, captures à l'appui.
+Deux pièges qui font croire à un échec : `snapshot -i` ne voit rien tant que
+React n'a pas hydraté (attendre `input[type="email"]`), et le POST répond 200
+**sans** que l'écran bascule — il faut **recharger**.
+
+Le compte agent a **son propre store** (`41c52c5b-…`), invisible depuis celui
+d'Aramis. Pour prouver un rendu qui dépend des données d'Aramis : rejouer le cas
+dans le store du compte agent. C'est ainsi qu'a été produit l'avant/après du
+bug. **Un item de démonstration y reste** — `it_demo_push`, « Séance push »
+lun/jeu avec l'occurrence du jeudi 3 déplacée au vendredi 4 : il rejoue le bug
+en un coup d'œil, et servira à vérifier le déploiement. À supprimer quand il
+n'a plus d'usage.
+
+### Reste
+
 - **`npm run build` non lancé** — un `next dev` tourne, la règle du repo
   l'interdit.
 
@@ -128,8 +154,16 @@ docker compose --env-file .env.production up -d
 commande `docker compose` échoue sur l'interpolation (constaté aujourd'hui,
 `docker compose ps` compris — utiliser `docker logs brief-app-1` en attendant).
 
-Ensuite, dans l'ordre de ce qui reste : recette des écrans authentifiés, puis
-lots 2 et 3 du pivot multi-utilisateur.
+**Et fusionner `docs/agent-recette-account` dans `main`** (commit `f1cf421`,
+aucune PR ouverte à ce jour). Tant que ce fichier reste sur sa branche, chaque
+agent redécouvre à ses frais que la recette authentifiée est impossible — elle
+ne l'est pas.
+
+Après le déploiement, la vérification tient en une capture : ouvrir le
+calendrier avec le compte agent, semaine du 31/08, et regarder si « Séance
+push » est au vendredi 4 (correct) ou au jeudi 3 (bug).
+
+Ensuite, lots 2 et 3 du pivot multi-utilisateur.
 
 ## Validations
 
