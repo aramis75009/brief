@@ -1,36 +1,80 @@
 "use client";
 
 /**
- * Cadre desktop — remplace `PhoneFrame` à partir de 1024px (`useIsDesktop`).
- * Les feuilles partagées (Capture, Compte, Aide, Notifications, Chat…)
- * restent rendues par `BriefApp`, exactement comme pour mobile : ce
- * composant ne possède que l'en-tête, la navigation et les cinq écrans
- * propres au desktop.
+ * Cadre desktop — sidebar, en-tête à onglets, contenu, panneau de fiche.
+ *
+ * ⚠️ La navigation a DEUX axes depuis la refonte v2 (`types.ts`) : `nav` dit
+ * OÙ on est, `view` dit COMMENT on le regarde. C'est ce qui permet à
+ * « Calendrier » et « Kanban » de cesser d'être des destinations — ils
+ * n'étaient que deux façons de voir les mêmes tâches, et en faire des onglets
+ * de nav obligeait à choisir entre « mes tâches » et « mon calendrier » alors
+ * que c'est le même contenu.
+ *
+ * Les feuilles partagées (Capture, Compte, Aide, Chat…) restent rendues par
+ * `BriefApp`, exactement comme pour mobile.
  */
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { DesktopHeader } from "./DesktopHeader";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Sidebar, type CreateKind } from "./Sidebar";
+import { ViewHeader } from "./ViewHeader";
+import { DetailPanel } from "./DetailPanel";
+import { InboxScreen } from "./InboxScreen";
+import { PortfoliosScreen } from "./PortfoliosScreen";
 import { DesktopDashboard } from "./DesktopDashboard";
-import { DesktopCalendar } from "./DesktopCalendar";
-import { DesktopTasks } from "./DesktopTasks";
 import { DesktopKanban } from "./DesktopKanban";
-import { DesktopObjectives } from "./DesktopObjectives";
-import { DependencyGraph } from "./DependencyGraph";
-import { DesktopTaskDetail } from "./DesktopTaskDetail";
-import { DesktopIdeas } from "./DesktopIdeas";
 import { DesktopSettings } from "./DesktopSettings";
+import { DependencyGraph } from "./DependencyGraph";
 import { CommandPalette } from "./CommandPalette";
-import { leastUrgentId, type TaskKindFilter } from "@/lib/desktopDashboard";
+import { ListView } from "./views/ListView";
+import { TimelineView, shiftRangePatch } from "./views/TimelineView";
+import { WeekCalendarView } from "./views/WeekCalendarView";
+import { DashboardView } from "./views/DashboardView";
+import { FilesView } from "./views/FilesView";
+import { C } from "./tokens";
+import { hasViews, VIEWS_FOR, type NavKey, type ViewKey } from "./types";
 import { fallbackProjectId } from "@/lib/projects";
 import { graphStatus, graphTasks, indexById } from "@/lib/graph";
-import { fetchBoard, addColumn, renameColumn, deleteColumn, reorderColumns, setColumnWip, moveCard, fetchTags, createTag, fetchObjectives, createObjective, updateObjective, deleteObjective } from "@/lib/api";
-import type { DesktopScreen } from "./types";
+import { groupItems } from "@/lib/views";
+import { relativeSyncLabel } from "@/lib/syncLabel";
+import {
+  addColumn,
+  createObjective,
+  createPortfolio,
+  createTag,
+  deleteAttachment,
+  deleteColumn,
+  deleteObjective,
+  deletePortfolio,
+  fetchBoard,
+  fetchCalDavStatus,
+  fetchInbox,
+  fetchObjectives,
+  fetchPortfolios,
+  fetchTags,
+  markInboxRead,
+  moveCard,
+  renameColumn,
+  reorderColumns,
+  setColumnWip,
+  updateObjective,
+  updatePortfolio,
+  uploadAttachment,
+} from "@/lib/api";
 import type { AgendaItem } from "@/lib/agenda";
-import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, Tag, ToastKind } from "@/lib/types";
+import type {
+  DraftItem,
+  InboxEvent,
+  Item,
+  KanbanBoard,
+  Objective,
+  ObjectiveHorizon,
+  Overview,
+  Portfolio,
+  Project,
+  Tag,
+  ToastKind,
+} from "@/lib/types";
 
-const C = { bg: "var(--color-bg)" } as const;
-
-/** Âge relatif d'un timestamp epoch, en français — pour la ligne CalDAV de « Chaîne & sync ». */
 export function DesktopShell({
   items,
   activeItems,
@@ -69,26 +113,46 @@ export function DesktopShell({
   onPromoteIdea: (id: string) => void;
   onSaveItem: (id: string, patch: Partial<DraftItem>) => Promise<boolean>;
   onQuickAddTask: (title: string, projectId: string, columnId?: string) => void;
-  /** Relit les items depuis le serveur — après un geste qui écrit hors `onSaveItem`. */
   onRefreshItems: () => Promise<void>;
-  /** Le bandeau de `BriefApp`. Un dépôt qui échoue doit se voir (`TODOS.md` P3 #8). */
   onFlash: (msg: string, kind?: ToastKind) => void;
   onDeleteItem: (id: string) => void;
   onEnablePush: () => void;
   onOpenCapture: () => void;
   onOpenChat: () => void;
-  /** Termine la session — le desktop n'avait aucun moyen de le faire avant le 2026-08-30. */
   onLogout: () => void;
   onOpenNotifications: () => void;
 }) {
-  const [screen, setScreen] = useState<DesktopScreen>("dashboard");
-  const [tasksKind, setTasksKind] = useState<TaskKindFilter>("all");
-  const [calendarSelectedId, setCalendarSelectedId] = useState<string | null>(null);
+  /* --- Navigation, deux axes ------------------------------------------- */
+  const [nav, setNav] = useState<NavKey>("accueil");
+  const [view, setView] = useState<ViewKey>("list");
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [focusDetail, setFocusDetail] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+
   const [board, setBoard] = useState<KanbanBoard>({ columns: [], updatedAt: "" });
   const [tags, setTags] = useState<Tag[]>([]);
   const [objectives, setObjectives] = useState<Objective[]>([]);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [inbox, setInbox] = useState<{ events: InboxEvent[]; unread: number }>({ events: [], unread: 0 });
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+
+  /**
+   * `now` est figé par rendu et rafraîchi chaque minute.
+   *
+   * Sans ça, chaque `new Date()` dans le rendu donne un instant différent :
+   * une tâche pouvait être « En retard » dans la liste et « Dans les délais »
+   * dans le donut de la même page, pour un écart de quelques millisecondes
+   * autour de son échéance.
+   */
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -103,28 +167,82 @@ export function DesktopShell({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Charger le board, les tags et les objectifs au démarrage
+  // Chargement initial. Chaque source échoue INDÉPENDAMMENT : un `/api/inbox`
+  // en erreur ne doit pas laisser le Kanban sans colonnes.
   useEffect(() => {
-    (async () => {
-      try {
-        const [b, t, o] = await Promise.all([fetchBoard(), fetchTags(), fetchObjectives()]);
-        setBoard(b);
-        setTags(t);
-        setObjectives(o);
-      } catch {
-        // Non bloquant — le Kanban affichera des colonnes vides
-      }
+    void (async () => {
+      const settle = async <T,>(p: Promise<T>, apply: (v: T) => void) => {
+        try {
+          apply(await p);
+        } catch {
+          /* la vue concernée reste vide, les autres s'affichent */
+        }
+      };
+      await Promise.all([
+        settle(fetchBoard(), setBoard),
+        settle(fetchTags(), setTags),
+        settle(fetchObjectives(), setObjectives),
+        settle(fetchPortfolios(), setPortfolios),
+        settle(fetchInbox(), setInbox),
+        settle(fetchCalDavStatus(), (s) => setLastSyncAt(s.lastSyncAt)),
+      ]);
     })();
   }, []);
 
+  /* --- Périmètre affiché ------------------------------------------------ */
+
+  const project = projectId ? (projects.find((p) => p.id === projectId) ?? null) : null;
+
   /**
-   * ⚠️ Les gestes du board ne sont plus muets.
+   * Les items de la vue courante.
    *
-   * Les cinq `catch` vides d'origine faisaient revenir la carte à sa place
-   * sans un mot : indiscernable d'un dépôt refusé, d'une session expirée ou
-   * d'une panne réseau. Le succès, lui, reste muet — Trello ne dit
-   * rien quand un déplacement marche.
+   * Dans un projet : ceux du projet. Dans « Mes tâches » : tous les actifs.
+   * Les idées ne sont JAMAIS ici — elles vivent dans la boîte de réception,
+   * onglet « À trier », parce qu'une idée n'est pas encore une tâche.
    */
+  const scoped = useMemo(() => {
+    if (nav === "project" && projectId) return activeItems.filter((it) => it.projectId === projectId);
+    return activeItems;
+  }, [nav, projectId, activeItems]);
+
+  const groups = useMemo(
+    () => groupItems(scoped, nav === "project" ? "column" : "time", board.columns, now),
+    [scoped, nav, board.columns, now],
+  );
+
+  const projectCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const it of activeItems) {
+      if (it.doneAt) continue;
+      map.set(it.projectId, (map.get(it.projectId) ?? 0) + 1);
+    }
+    return map;
+  }, [activeItems]);
+
+  const detailItem = detailId ? (items.find((it) => it.id === detailId) ?? null) : null;
+
+  const openTask = useCallback((id: string) => setDetailId(id), []);
+  const closeDetail = useCallback(() => {
+    setDetailId(null);
+    setFocusDetail(false);
+  }, []);
+
+  const goTo = useCallback((key: NavKey) => {
+    setNav(key);
+    setDetailId(null);
+    setFocusDetail(false);
+    if (key === "mytasks") setView((v) => (VIEWS_FOR.mytasks.some((x) => x.key === v) ? v : "list"));
+  }, []);
+
+  const openProject = useCallback((id: string) => {
+    setNav("project");
+    setProjectId(id);
+    setDetailId(null);
+    setFocusDetail(false);
+  }, []);
+
+  /* --- Kanban ------------------------------------------------------------ */
+
   const handleAddColumn = useCallback(async (name: string) => {
     try {
       setBoard(await addColumn(name));
@@ -141,16 +259,12 @@ export function DesktopShell({
     }
   }, [onFlash]);
 
-  const handleDeleteColumn = useCallback(async (id: string, _cardCount: number) => {
+  const handleDeleteColumn = useCallback(async (id: string) => {
     try {
       setBoard(await deleteColumn(id));
-      // Relecture INCONDITIONNELLE. `cardCount` vient du `items` du client,
-      // qui peut être en retard : une carte posée sur cette colonne depuis un
-      // autre onglet, par l'iPhone ou par la synchro CalDAV donne `0` ici alors
-      // que le serveur en détache une. On sauterait alors le rafraîchissement,
-      // et cette carte garderait côté client un `columnId` mort — elle ne
-      // s'afficherait ni dans une colonne ni dans « Non placées ». C'est
-      // exactement la disparition que cette PR corrige.
+      // Relecture INCONDITIONNELLE : le `items` du client peut être en retard,
+      // et une carte détachée côté serveur garderait sinon un `columnId` mort —
+      // elle disparaîtrait de l'écran sans erreur.
       await onRefreshItems();
     } catch {
       onFlash("La liste n'a pas été supprimée.", "err");
@@ -170,19 +284,12 @@ export function DesktopShell({
       setBoard(await reorderColumns(ids));
     } catch {
       onFlash("L'ordre des listes n'a pas été enregistré.", "err");
-      try { setBoard(await fetchBoard()); } catch { /* le board affiché reste celui d'avant */ }
+      try {
+        setBoard(await fetchBoard());
+      } catch { /* le board affiché reste celui d'avant */ }
     }
   }, [onFlash]);
 
-  /**
-   * Déplacement d'une carte. On envoie une INTENTION (les voisins au point de
-   * dépôt), jamais des rangs : l'écran ne voit qu'une partie de la colonne.
-   * Le serveur numérote, on relit.
-   *
-   * Ne passe PAS par `onSaveItem` : celui-ci flashe « Modifications
-   * enregistrées » à chaque appel — un dépôt en produirait un par carte
-   * renumérotée.
-   */
   const handleMoveCard = useCallback(
     async (intent: { itemId: string; toColumnId: string | null; beforeId?: string; afterId?: string }) => {
       try {
@@ -190,58 +297,42 @@ export function DesktopShell({
       } catch {
         onFlash("Le déplacement n'a pas été enregistré.", "err");
       }
-      // Dans les deux cas : on relit. Après un succès pour prendre les rangs
-      // que le serveur a calculés, après un échec pour que la carte revienne à
+      // Dans les deux cas on relit : après un succès pour prendre les rangs
+      // calculés par le serveur, après un échec pour que la carte revienne à
       // sa place SERVEUR et non à celle qu'on croyait.
-      //
-      // Le `catch` est indispensable : si c'est le réseau qui est tombé, cette
-      // relecture échoue aussi, et un rejet non capturé ici remonterait dans le
-      // `.finally` de `DesktopKanban` sans que rien ne l'attrape.
       try {
         await onRefreshItems();
-      } catch { /* l'état affiché reste celui d'avant — le toast a déjà parlé */ }
+      } catch { /* le toast a déjà parlé */ }
     },
     [onFlash, onRefreshItems],
   );
 
-  /** Le « + » d'une colonne crée une vraie carte, en bas, sur le projet filtré. */
   const handleAddCard = useCallback(
-    (columnId: string, title: string, projectId: string | null) => {
-      onQuickAddTask(title, projectId ?? fallbackProjectId(projects), columnId);
+    (columnId: string, title: string, forProject: string | null) => {
+      onQuickAddTask(title, forProject ?? projectId ?? fallbackProjectId(projects), columnId);
     },
-    [onQuickAddTask, projects],
+    [onQuickAddTask, projectId, projects],
   );
 
-  /** Recharge les objectifs — l'auto-complétion (`reconcileObjectives`, côté
-   * serveur) peut avoir clos ou rouvert un objectif après une mutation d'item. */
+  /* --- Objectifs --------------------------------------------------------- */
+
   const refreshObjectives = useCallback(async () => {
     try {
       setObjectives(await fetchObjectives());
-    } catch { /* silencieux — l'état courant reste affiché */ }
+    } catch { /* l'état courant reste affiché */ }
   }, []);
 
-  /**
-   * Un seul chemin d'écriture pour « A dépend de B », partagé par la fiche
-   * tâche et par le tirage de lien de la vue Graphe. Deux copies du même
-   * `dependsOn` finiraient par diverger sur un détail (doublon, garde-fou).
-   *
-   * `targetId` préfixé `obj:` → c'est la dépendance d'un OBJECTIF ; sinon
-   * celle d'un item.
-   */
   const handleAddDependency = useCallback(async (targetId: string, depId: string) => {
     if (targetId.startsWith("obj:")) {
       const objId = targetId.slice(4);
       const obj = objectives.find((o) => o.id === objId);
       if (!obj || (obj.dependsOn ?? []).includes(depId)) return;
-      // Le serveur réconcilie ; l'objectif peut revenir atteint/rouvert.
       const updated = await updateObjective(objId, { dependsOn: [...(obj.dependsOn ?? []), depId] });
       setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
       return;
     }
     const it = items.find((i) => i.id === targetId);
     if (!it || (it.dependsOn ?? []).includes(depId)) return;
-    // La réconciliation des objectifs est déclenchée par l'effet `itemsObjectiveSig`
-    // quand `items` reflète le nouveau `dependsOn`.
     await onSaveItem(targetId, { dependsOn: [...(it.dependsOn ?? []), depId] });
   }, [items, objectives, onSaveItem]);
 
@@ -249,7 +340,6 @@ export function DesktopShell({
     if (targetId.startsWith("obj:")) {
       const objId = targetId.slice(4);
       const obj = objectives.find((o) => o.id === objId);
-      // Dépendance EXPLICITE (`dependsOn`) : on la retire de l'objectif.
       if (obj && (obj.dependsOn ?? []).includes(depId)) {
         const updated = await updateObjective(objId, {
           dependsOn: (obj.dependsOn ?? []).filter((d) => d !== depId),
@@ -257,7 +347,7 @@ export function DesktopShell({
         setObjectives((prev) => prev.map((o) => (o.id === objId ? updated : o)));
         return;
       }
-      // Dépendance IMPLICITE : une tâche qui pointe sur cet objectif — on la détache.
+      // Dépendance IMPLICITE : une tâche qui pointe sur cet objectif.
       const linked = items.find((i) => i.id === depId && i.objectiveId === objId);
       if (linked) await onSaveItem(depId, { objectiveId: null });
       return;
@@ -267,58 +357,41 @@ export function DesktopShell({
     await onSaveItem(targetId, { dependsOn: (it.dependsOn ?? []).filter((d) => d !== depId) });
   }, [items, objectives, onSaveItem]);
 
-  const handleToggleSub = useCallback(async (itemId: string, subId: string) => {
-    const item = items.find((it) => it.id === itemId);
-    if (!item?.subtasks) return;
-    const subtasks = item.subtasks.map((s) => s.id === subId ? { ...s, done: !s.done } : s);
-    try { await onSaveItem(itemId, { subtasks }); } catch { /* silencieux */ }
-  }, [items, onSaveItem]);
+  const handleCreateObjective = useCallback(
+    async (title: string, forProject: string, horizon: ObjectiveHorizon) => {
+      try {
+        const created = await createObjective(title, forProject, horizon);
+        setObjectives((prev) => [...prev, created]);
+      } catch {
+        onFlash("L'objectif n'a pas été créé.", "err");
+      }
+    },
+    [onFlash],
+  );
 
-  const handleAddSubtask = useCallback(async (itemId: string, title: string) => {
-    const item = items.find((it) => it.id === itemId);
-    if (!item) return;
-    const subtasks = [...(item.subtasks ?? []), { id: `sub-${Date.now().toString(36)}`, title: title.trim(), done: false }];
-    try { await onSaveItem(itemId, { subtasks }); } catch { /* silencieux */ }
-  }, [items, onSaveItem]);
-
-  /* --- Objectifs --- */
-
-  const handleCreateObjective = useCallback(async (title: string, projectId: string, horizon: ObjectiveHorizon) => {
-    const created = await createObjective(title, projectId, horizon);
-    setObjectives((prev) => [...prev, created]);
-  }, []);
+  const handleDeleteObjective = useCallback(async (id: string) => {
+    try {
+      await deleteObjective(id);
+      setObjectives((prev) => prev.filter((o) => o.id !== id));
+    } catch {
+      onFlash("L'objectif n'a pas été supprimé.", "err");
+    }
+  }, [onFlash]);
 
   const handleAchieveObjective = useCallback(async (id: string) => {
     // Geste explicite → collant : `reconcileObjectives` ne le rouvrira pas.
-    const updated = await updateObjective(id, {
-      achievedAt: new Date().toISOString(),
-      achievedManually: true,
-    });
+    const updated = await updateObjective(id, { achievedAt: new Date().toISOString(), achievedManually: true });
     setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
   }, []);
-
-  const handleDeleteObjective = useCallback(async (id: string) => {
-    await deleteObjective(id);
-    setObjectives((prev) => prev.filter((o) => o.id !== id));
-  }, []);
-
-  const handleEditObjective = useCallback(
-    async (id: string, patch: { title?: string; horizon?: ObjectiveHorizon; notes?: string }) => {
-      const updated = await updateObjective(id, patch);
-      setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
-    },
-    [],
-  );
 
   const handleReopenObjective = useCallback(async (id: string) => {
     const updated = await updateObjective(id, { achievedAt: null, achievedManually: false });
     setObjectives((prev) => prev.map((o) => (o.id === id ? updated : o)));
   }, []);
 
-  /* Auto-complétion : cocher une tâche, la (dé)lier à un objectif ou changer
-     ses dépendances peut clore ou rouvrir un objectif côté serveur
-     (`reconcileObjectives`). On recharge les objectifs quand une de ces
-     signatures bouge — jamais sur un simple re-render. */
+  /* Cocher une tâche, la (dé)lier à un objectif ou changer ses dépendances
+     peut clore ou rouvrir un objectif CÔTÉ SERVEUR (`reconcileObjectives`).
+     On recharge quand une de ces signatures bouge — jamais sur un re-render. */
   const itemsObjectiveSig = useMemo(
     () =>
       items
@@ -331,208 +404,381 @@ export function DesktopShell({
     return () => clearTimeout(id);
   }, [itemsObjectiveSig, refreshObjectives]);
 
-  const [detailId, setDetailId] = useState<string | null>(null);
+  /* --- Sous-tâches ------------------------------------------------------- */
 
-  const detailItem = detailId ? items.find((it) => it.id === detailId) ?? null : null;
+  const handleToggleSub = useCallback(async (itemId: string, subId: string) => {
+    const item = items.find((it) => it.id === itemId);
+    if (!item?.subtasks) return;
+    const subtasks = item.subtasks.map((s) => (s.id === subId ? { ...s, done: !s.done } : s));
+    try {
+      await onSaveItem(itemId, { subtasks });
+    } catch { /* silencieux */ }
+  }, [items, onSaveItem]);
 
-  const openTask = (id: string) => {
-    setDetailId(id);
-    setScreen("détail");
-  };
+  const handleAddSubtask = useCallback(async (itemId: string, title: string) => {
+    const item = items.find((it) => it.id === itemId);
+    if (!item) return;
+    const subtasks = [...(item.subtasks ?? []), { id: `sub-${Date.now().toString(36)}`, title: title.trim(), done: false }];
+    try {
+      await onSaveItem(itemId, { subtasks });
+    } catch { /* silencieux */ }
+  }, [items, onSaveItem]);
 
-  const onLighten = () => {
-    const candidate = overview?.peak ? leastUrgentId(overview.peak.items) : null;
-    if (candidate) onPostpone(candidate);
-  };
+  /* --- Portefeuilles ----------------------------------------------------- */
 
-  // Le badge « Graphe » compte les tâches bloquées : c'est le seul chiffre que
-  // cette vue apprend et qu'aucun autre onglet ne montre.
+  const handleCreatePortfolio = useCallback(async (name: string) => {
+    try {
+      const created = await createPortfolio(name);
+      setPortfolios((prev) => [...prev, created]);
+    } catch {
+      onFlash("Le portefeuille n'a pas été créé.", "err");
+    }
+  }, [onFlash]);
+
+  const handlePatchPortfolio = useCallback(
+    async (id: string, patch: { name?: string; projectIds?: string[] }) => {
+      try {
+        const updated = await updatePortfolio(id, patch);
+        setPortfolios((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      } catch {
+        onFlash("Le portefeuille n'a pas été mis à jour.", "err");
+      }
+    },
+    [onFlash],
+  );
+
+  const handleDeletePortfolio = useCallback(async (id: string) => {
+    try {
+      await deletePortfolio(id);
+      setPortfolios((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      onFlash("Le portefeuille n'a pas été supprimé.", "err");
+    }
+  }, [onFlash]);
+
+  /* --- Boîte de réception ------------------------------------------------ */
+
+  const handleMarkInboxRead = useCallback(async () => {
+    try {
+      setInbox(await markInboxRead([]));
+    } catch {
+      onFlash("Le journal n'a pas été mis à jour.", "err");
+    }
+  }, [onFlash]);
+
+  /* --- Pièces jointes ---------------------------------------------------- */
+
+  const handleUpload = useCallback(
+    async (itemId: string, file: File) => {
+      try {
+        await uploadAttachment(itemId, file);
+        await onRefreshItems();
+      } catch (e) {
+        onFlash(e instanceof Error ? e.message : "Le fichier n'a pas été envoyé.", "err");
+      }
+    },
+    [onFlash, onRefreshItems],
+  );
+
+  const handleDeleteAttachment = useCallback(
+    async (attachmentId: string) => {
+      try {
+        await deleteAttachment(attachmentId);
+        await onRefreshItems();
+      } catch {
+        onFlash("La pièce jointe n'a pas été supprimée.", "err");
+      }
+    },
+    [onFlash, onRefreshItems],
+  );
+
+  /* --- Création depuis la sidebar ---------------------------------------- */
+
+  const handleCreate = useCallback(
+    (kind: CreateKind) => {
+      switch (kind) {
+        case "dictee":
+          onOpenCapture();
+          return;
+        case "task":
+          onQuickAddTask("Nouvelle tâche", projectId ?? fallbackProjectId(projects));
+          goTo("mytasks");
+          return;
+        case "portfolio":
+          goTo("portfolios");
+          return;
+        case "objective":
+          goTo("portfolios");
+          onFlash("Crée l'objectif depuis un projet du portefeuille.");
+          return;
+        case "project":
+          // Les projets se créent dans les Réglages, où vivent déjà teinte et
+          // forme. Un second formulaire divergerait de celui-là.
+          setNav("réglages");
+          return;
+      }
+    },
+    [goTo, onFlash, onOpenCapture, onQuickAddTask, projectId, projects],
+  );
+
+  /* --- Rendu ------------------------------------------------------------- */
+
   const blockedCount = useMemo(() => {
     const tasks = graphTasks(activeItems);
     const byId = indexById(tasks);
     return tasks.filter((t) => graphStatus(t, byId) === "blocked").length;
   }, [activeItems]);
 
-  const badges: Partial<Record<DesktopScreen, number>> = {
-    calendrier: (overview?.horizon ?? []).filter((d) => d.isToday).reduce((n, d) => n + d.events, 0),
-    // L'onglet Tâches & RDV montre les deux par défaut : le badge compte les
-    // tâches ET les RDV actifs non faits.
-    tâches: activeItems.filter((it) => !it.doneAt).length,
-    graphe: blockedCount,
-    idées: ideaItems.length,
-  };
+  const openCount = scoped.filter((it) => !it.doneAt).length;
+  const doneCount = scoped.length - openCount;
+
+  const subtitle = useMemo(() => {
+    if (nav === "project") return `${openCount} ouvertes · ${doneCount} terminées`;
+    if (nav === "mytasks") return "Tout ce qui t'attend, toutes destinations confondues";
+    if (nav === "inbox") return inbox.unread > 0 ? `${inbox.unread} non lus` : "";
+    if (nav === "portfolios") return `${portfolios.length} portefeuille${portfolios.length > 1 ? "s" : ""}`;
+    if (nav === "graphe") return blockedCount > 0 ? `${blockedCount} tâches bloquées` : "Aucune tâche bloquée";
+    return "";
+  }, [nav, openCount, doneCount, inbox.unread, portfolios.length, blockedCount]);
+
+  const showsTasks = hasViews(nav);
+  const listLike = showsTasks && (view === "list" || view === "board" || view === "timeline" || view === "calendar");
 
   return (
     <>
-      <div className="h-dvh w-full overflow-hidden" style={{ background: C.bg, padding: "16px 20px 20px" }}>
-        <div className="mx-auto flex h-full flex-col gap-3" style={{ maxWidth: 1560, minWidth: 1024 }}>
-          {/* L'avatar ouvre l'écran Réglages, il n'ouvre plus le sheet mobile
-              (décision Aramis du 2026-08-30). `AccountSheet` reste le chemin
-              du mobile, inchangé. */}
-          <DesktopHeader
-            screen={screen}
-            badges={badges}
-            onNavigate={setScreen}
-            onOpenPalette={() => { setPaletteOpen(true); setPaletteQuery(""); }}
+      <div className="flex h-dvh w-full overflow-hidden" style={{ background: C.bg }}>
+        <Sidebar
+          nav={nav}
+          activeProjectId={projectId}
+          projects={projects}
+          counts={projectCounts}
+          inboxUnread={inbox.unread}
+          syncLabel={lastSyncAt === null ? null : relativeSyncLabel(lastSyncAt, now.getTime())}
+          onNavigate={goTo}
+          onOpenProject={openProject}
+          onCreate={handleCreate}
+          onOpenAccount={() => setNav("réglages")}
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <ViewHeader
+            nav={nav}
+            view={view}
+            project={project}
+            subtitle={subtitle}
+            countLabel={showsTasks ? `${scoped.length} tâches · ${doneCount} terminées` : null}
+            onSelectView={setView}
+            onOpenPalette={() => {
+              setPaletteOpen(true);
+              setPaletteQuery("");
+            }}
             onOpenNotifications={onOpenNotifications}
-            onOpenAccount={() => setScreen("réglages")}
             onCapture={onOpenCapture}
+            onAddTask={
+              listLike
+                ? () => onQuickAddTask("Nouvelle tâche", projectId ?? fallbackProjectId(projects))
+                : null
+            }
+            toolbar={
+              showsTasks && view === "calendar" ? (
+                <WeekNav offset={weekOffset} onChange={setWeekOffset} />
+              ) : null
+            }
           />
 
-          <div className="min-h-0 flex-1">
-          {screen === "dashboard" && (
-            <DesktopDashboard
-              items={items}
-              ideaItems={ideaItems}
-              todayAgenda={todayAgenda}
-              projects={projects}
-              overview={overview}
-              transcript={transcript}
-              onToggleDone={onToggleDone}
-              onOpenTask={openTask}
-              onOpenCapture={onOpenCapture}
-              onOpenChat={onOpenChat}
-              onGoTasks={() => setScreen("tâches")}
-              onGoTasksKind={(kind) => { setTasksKind(kind); setScreen("tâches"); }}
-            />
-          )}
+          <main className="min-h-0 flex-1 overflow-auto" style={{ padding: "22px 24px 60px" }}>
+            {nav === "accueil" && (
+              <DesktopDashboard
+                items={items}
+                ideaItems={ideaItems}
+                todayAgenda={todayAgenda}
+                projects={projects}
+                overview={overview}
+                transcript={transcript}
+                onToggleDone={onToggleDone}
+                onOpenTask={openTask}
+                onOpenCapture={onOpenCapture}
+                onOpenChat={onOpenChat}
+                onGoTasks={() => goTo("mytasks")}
+                onGoTasksKind={() => goTo("mytasks")}
+              />
+            )}
 
-          {screen === "calendrier" && (
-            <DesktopCalendar
-              items={items}
-              projects={projects}
-              selectedId={calendarSelectedId}
-              onSelect={setCalendarSelectedId}
-              onToggleDone={onToggleDone}
-              onPostpone={onPostpone}
-            />
-          )}
+            {nav === "inbox" && (
+              <InboxScreen
+                events={inbox.events}
+                unread={inbox.unread}
+                ideas={ideaItems}
+                projects={projects}
+                now={now}
+                onMarkRead={handleMarkInboxRead}
+                onOpenTask={openTask}
+                onPromoteIdea={onPromoteIdea}
+                onArchiveIdea={onArchiveIdea}
+                onRerouteIdea={(id, p) => void onSaveItem(id, { projectId: p })}
+              />
+            )}
 
-          {screen === "tâches" && (
-            <DesktopTasks
-              items={activeItems}
-              projects={projects}
-              onToggleDone={onToggleDone}
-              onOpenTask={openTask}
-              onPostpone={onPostpone}
-              onQuickAdd={onQuickAddTask}
-              initialKind={tasksKind}
-            />
-          )}
+            {nav === "portfolios" && (
+              <PortfoliosScreen
+                portfolios={portfolios}
+                projects={projects}
+                items={items}
+                objectives={objectives}
+                now={now}
+                onOpenProject={openProject}
+                onCreatePortfolio={handleCreatePortfolio}
+                onRenamePortfolio={(id, name) => void handlePatchPortfolio(id, { name })}
+                onSetProjects={(id, ids) => void handlePatchPortfolio(id, { projectIds: ids })}
+                onDeletePortfolio={handleDeletePortfolio}
+                onAchieveObjective={(id) => void handleAchieveObjective(id)}
+                onReopenObjective={(id) => void handleReopenObjective(id)}
+                onCreateObjective={(t, p, h) => void handleCreateObjective(t, p, h)}
+                onDeleteObjective={(id) => void handleDeleteObjective(id)}
+              />
+            )}
 
-          {screen === "kanban" && (
-            <DesktopKanban
-              items={activeItems}
-              projects={projects}
-              board={board}
-              tags={tags}
-              onMoveCard={handleMoveCard}
-              onReorderColumns={handleReorderColumns}
-              onAddColumn={handleAddColumn}
-              onRenameColumn={handleRenameColumn}
-              onDeleteColumn={handleDeleteColumn}
-              onSetWip={handleSetWip}
-              onAddCard={handleAddCard}
-              onOpenTask={openTask}
-            />
-          )}
+            {nav === "graphe" && (
+              <DependencyGraph
+                items={activeItems}
+                projects={projects}
+                tags={tags}
+                objectives={objectives}
+                onOpenTask={openTask}
+                onOpenObjectives={() => goTo("portfolios")}
+                onAddDependency={handleAddDependency}
+                onRemoveDependency={handleRemoveDependency}
+              />
+            )}
 
-          {screen === "graphe" && (
-            <DependencyGraph
-              items={activeItems}
-              projects={projects}
-              tags={tags}
-              objectives={objectives}
-              onOpenTask={openTask}
-              onOpenObjectives={() => setScreen("objectifs")}
-              onAddDependency={handleAddDependency}
-              onRemoveDependency={handleRemoveDependency}
-            />
-          )}
+            {nav === "réglages" && (
+              <DesktopSettings
+                projects={projects}
+                overview={overview}
+                pushSubscribed={pushSubscribed}
+                onEnablePush={onEnablePush}
+                onLogout={onLogout}
+              />
+            )}
 
-          {screen === "objectifs" && (
-            <DesktopObjectives
-              objectives={objectives}
-              items={items}
-              projects={projects}
-              onOpenTask={openTask}
-              onToggleDone={(id) => onToggleDone(id)}
-              onCreateObjective={handleCreateObjective}
-              onAchieveObjective={handleAchieveObjective}
-              onDeleteObjective={handleDeleteObjective}
-              onEditObjective={handleEditObjective}
-              onReopenObjective={handleReopenObjective}
-            />
-          )}
+            {showsTasks && view === "list" && (
+              <ListView
+                groups={groups}
+                projects={projects}
+                items={items}
+                now={now}
+                onToggleDone={(id) => onToggleDone(id)}
+                onOpenTask={openTask}
+                onAddTask={(groupKey) =>
+                  onQuickAddTask(
+                    "Nouvelle tâche",
+                    projectId ?? fallbackProjectId(projects),
+                    nav === "project" ? groupKey : undefined,
+                  )
+                }
+              />
+            )}
 
-          {screen === "détail" && (
-            <DesktopTaskDetail
-              item={detailItem}
-              items={items}
-              projects={projects}
-              onBack={() => setScreen("dashboard")}
-              onDone={onToggleDone}
-              onPostpone={onPostpone}
-              onDelete={(id) => { onDeleteItem(id); setScreen("dashboard"); }}
-              onToggleSub={handleToggleSub}
-              onAddSubtask={handleAddSubtask}
-              onOpenSibling={(id) => { setDetailId(id); }}
-              onSave={onSaveItem}
-              allTags={tags}
-              onCreateTag={async (name, color) => {
-                try {
-                  const tag = await createTag(name, color);
-                  setTags((t) => [...t, tag]);
-                  return tag;
-                } catch { return null; }
-              }}
-              onAddTag={async (itemId, tagId) => {
-                const it = items.find((i) => i.id === itemId);
-                if (!it) return;
-                const newTags = [...(it.tags ?? []), tagId];
-                await onSaveItem(itemId, { tags: newTags });
-              }}
-              onRemoveTag={async (itemId, tagId) => {
-                const it = items.find((i) => i.id === itemId);
-                if (!it) return;
-                const newTags = (it.tags ?? []).filter((t) => t !== tagId);
-                await onSaveItem(itemId, { tags: newTags });
-              }}
-              onAddDependency={handleAddDependency}
-              onRemoveDependency={async (itemId, depId) => {
-                const it = items.find((i) => i.id === itemId);
-                if (!it) return;
-                const newDeps = (it.dependsOn ?? []).filter((d) => d !== depId);
-                await onSaveItem(itemId, { dependsOn: newDeps });
-              }}
-              objectives={objectives.filter((o) => !o.achievedAt && o.projectId === detailItem?.projectId)}
-              onSetObjective={async (itemId, objectiveId) => {
-                await onSaveItem(itemId, { objectiveId });
-              }}
-            />
-          )}
+            {showsTasks && view === "board" && (
+              <DesktopKanban
+                items={scoped}
+                projects={projects}
+                board={board}
+                tags={tags}
+                onMoveCard={handleMoveCard}
+                onReorderColumns={handleReorderColumns}
+                onAddColumn={handleAddColumn}
+                onRenameColumn={handleRenameColumn}
+                onDeleteColumn={handleDeleteColumn}
+                onSetWip={handleSetWip}
+                onAddCard={handleAddCard}
+                onOpenTask={openTask}
+              />
+            )}
 
-          {screen === "idées" && (
-            <DesktopIdeas
-              ideas={ideaItems}
-              projects={projects}
-              onPromote={onPromoteIdea}
-              onReroute={(id, projectId) => void onSaveItem(id, { projectId })}
-              onArchive={onArchiveIdea}
-            />
-          )}
+            {showsTasks && view === "timeline" && (
+              <TimelineView
+                items={scoped}
+                projects={projects}
+                now={now}
+                onOpenTask={openTask}
+                onMoveRange={(id, days) => {
+                  const it = items.find((i) => i.id === id);
+                  if (!it) return;
+                  void onSaveItem(id, shiftRangePatch(it, days));
+                }}
+              />
+            )}
 
-          {screen === "réglages" && (
-            <DesktopSettings
-              projects={projects}
-              overview={overview}
-              pushSubscribed={pushSubscribed}
-              onEnablePush={onEnablePush}
-              onLogout={onLogout}
-            />
-          )}
-          </div>
+            {showsTasks && view === "calendar" && (
+              <WeekCalendarView
+                items={scoped}
+                projects={projects}
+                now={now}
+                weekOffset={weekOffset}
+                onOpenTask={openTask}
+              />
+            )}
+
+            {showsTasks && view === "dashboard" && (
+              <DashboardView items={scoped} groups={groups} now={now} />
+            )}
+
+            {showsTasks && view === "files" && (
+              <FilesView
+                items={scoped}
+                onOpenTask={openTask}
+                onUpload={detailItem ? (file) => handleUpload(detailItem.id, file) : null}
+                onDelete={(id) => void handleDeleteAttachment(id)}
+              />
+            )}
+          </main>
         </div>
+
+        <DetailPanel
+          item={detailItem}
+          items={items}
+          projects={projects}
+          focus={focusDetail}
+          onToggleFocus={() => setFocusDetail((v) => !v)}
+          onClose={closeDetail}
+          onDone={onToggleDone}
+          onPostpone={onPostpone}
+          onDelete={(id) => {
+            onDeleteItem(id);
+            closeDetail();
+          }}
+          onToggleSub={handleToggleSub}
+          onAddSubtask={handleAddSubtask}
+          onOpenSibling={(id) => setDetailId(id)}
+          onSave={onSaveItem}
+          allTags={tags}
+          onCreateTag={async (name, color) => {
+            try {
+              const tag = await createTag(name, color);
+              setTags((t) => [...t, tag]);
+              return tag;
+            } catch {
+              return null;
+            }
+          }}
+          onAddTag={async (itemId, tagId) => {
+            const it = items.find((i) => i.id === itemId);
+            if (!it) return;
+            await onSaveItem(itemId, { tags: [...(it.tags ?? []), tagId] });
+          }}
+          onRemoveTag={async (itemId, tagId) => {
+            const it = items.find((i) => i.id === itemId);
+            if (!it) return;
+            await onSaveItem(itemId, { tags: (it.tags ?? []).filter((t) => t !== tagId) });
+          }}
+          onAddDependency={handleAddDependency}
+          onRemoveDependency={handleRemoveDependency}
+          objectives={objectives.filter((o) => !o.achievedAt && o.projectId === detailItem?.projectId)}
+          onSetObjective={async (itemId, objectiveId) => {
+            await onSaveItem(itemId, { objectiveId });
+          }}
+        />
       </div>
 
       <CommandPalette
@@ -544,10 +790,44 @@ export function DesktopShell({
         projects={projects}
         onOpenItem={openTask}
         onDictate={onOpenCapture}
-        onGoCalendar={() => setScreen("calendrier")}
-        onGoIdeas={() => setScreen("idées")}
-        onLighten={onLighten}
+        onGoCalendar={() => {
+          goTo("mytasks");
+          setView("calendar");
+        }}
+        onGoIdeas={() => goTo("inbox")}
+        onLighten={() => {
+          const candidate = overview?.peak?.items?.[0]?.id;
+          if (candidate) onPostpone(candidate);
+        }}
       />
     </>
+  );
+}
+
+/** Les flèches de semaine du calendrier — dans la barre d'outils, pas dans la vue. */
+function WeekNav({ offset, onChange }: { offset: number; onChange: (n: number) => void }) {
+  const btn = {
+    height: 32,
+    padding: "0 12px",
+    borderRadius: 999,
+    border: "1px solid var(--hairline-2)",
+    background: "none",
+    fontFamily: "inherit",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  } as const;
+  return (
+    <div className="flex items-center gap-2">
+      <button type="button" aria-label="Semaine précédente" onClick={() => onChange(offset - 1)} style={btn}>
+        ‹
+      </button>
+      <button type="button" onClick={() => onChange(0)} style={{ ...btn, fontWeight: 700 }}>
+        {offset === 0 ? "Cette semaine" : offset === 1 ? "Semaine +1" : offset === -1 ? "Semaine −1" : `Semaine ${offset > 0 ? "+" : "−"}${Math.abs(offset)}`}
+      </button>
+      <button type="button" aria-label="Semaine suivante" onClick={() => onChange(offset + 1)} style={btn}>
+        ›
+      </button>
+    </div>
   );
 }

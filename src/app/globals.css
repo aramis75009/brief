@@ -102,6 +102,7 @@
   --animate-ping: ping 1.4s ease-out infinite;
   --animate-fade: fade .3s both;
   --animate-sheet: sheet .3s cubic-bezier(.2,.9,.3,1) both;
+  --animate-slidein: slidein .26s cubic-bezier(.2,.9,.3,1) both;
 }
 
 :root {
@@ -149,6 +150,11 @@
 }
 @keyframes sheet {
   from { transform: translateY(30px); opacity: .6; }
+  to { transform: none; opacity: 1; }
+}
+/* Le panneau de fiche, qui entre par la droite — pendant horizontal de `sheet`. */
+@keyframes slidein {
+  from { transform: translateX(28px); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
 @keyframes chatdot {
