@@ -175,6 +175,7 @@ export function TimelineView({
             <div className="relative">
               {rows.map((row) => {
                 const dragging = drag?.id === row.item.id ? drag.applied : 0;
+                const recurring = !!row.item.rrule;
                 const project = projectById.get(row.item.projectId);
                 const skin = skinFor(project ?? { id: row.item.projectId });
                 const left = (row.startIndex + dragging) * DAY_W + 6;
@@ -194,10 +195,15 @@ export function TimelineView({
                         onOpenTask(row.item.id);
                       }}
                       onMouseDown={(e) => {
+                        if (recurring) return;
                         e.preventDefault();
                         setDrag({ id: row.item.id, startX: e.clientX, applied: 0 });
                       }}
-                      title={`${row.item.title} — glisser pour décaler`}
+                      title={
+                        recurring
+                          ? `${row.item.title} — série récurrente : ouvre la fiche pour changer l'horaire`
+                          : `${row.item.title} — glisser pour décaler`
+                      }
                       className="absolute flex items-center font-bold"
                       style={{
                         top: 9,
@@ -217,7 +223,7 @@ export function TimelineView({
                         color: "#FFFFFF",
                         fontFamily: "inherit",
                         fontSize: 12,
-                        cursor: "grab",
+                        cursor: recurring ? "pointer" : "grab",
                         opacity: row.item.doneAt ? 0.45 : 1,
                       }}
                     >
@@ -264,7 +270,10 @@ export function TimelineView({
         className="flex items-center gap-4 text-[12px]"
         style={{ padding: "12px 18px", borderTop: `1px solid ${C.hairline}`, color: C.inkMuted }}
       >
-        <span>Glisse une barre pour décaler la tâche · les flèches sont des dépendances</span>
+        <span>
+          Glisse une barre pour décaler la tâche · les flèches sont des dépendances ·
+          {" "}une série récurrente ne se glisse pas, elle s&apos;édite depuis sa fiche
+        </span>
       </div>
     </div>
   );
@@ -282,6 +291,16 @@ export function TimelineView({
  * et déplace la tâche d'une heure deux fois par an.
  */
 export function shiftRangePatch(item: Item, days: number): { startDate?: string | null; due?: string | null } {
+  // ⚠️ JAMAIS sur une série récurrente — et c'est une garde, pas une
+  // préférence. `effectiveDue` rend l'occurrence *override appliqué* : repartir
+  // de là et réécrire `due` fait sauter la série de plusieurs jours pour un
+  // glissement d'un seul, place `due` hors de la grille RRULE (une série du
+  // dimanche atterrit un mercredi), et laisse l'`overrides` pointer une
+  // occurrence qui n'existe plus. La synchro CalDAV réécrirait ensuite tout ça
+  // sur iCloud. Décaler UNE occurrence d'une série est un vrai chantier
+  // (RECURRENCE-ID, EXDATE) — la fiche reste le chemin d'édition d'une
+  // échéance.
+  if (item.rrule) return {};
   const shiftIso = (date: Date): string => {
     const p = zonedParts(date);
     const moved = shiftDays({ y: p.y, m: p.m, d: p.d }, days);

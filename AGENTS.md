@@ -277,6 +277,15 @@ synchro calendrier qui s'arrête, en silence.
   exacte des routes `/api/audio` d'avant le 31/08. `/api/attachments/[id]` sert
   en ligne une **liste blanche** de types ; `image/svg+xml` en est
   délibérément absent (un SVG rendu en ligne s'exécute dans l'origine de Brief).
+- **On ne glisse pas une série récurrente sur la Chronologie**
+  (`shiftRangePatch` rend `{}` si `rrule` est posé, et la barre n'est pas
+  saisissable). `effectiveDue` rend l'occurrence *override appliqué* : repartir
+  de là et réécrire `due` fait sauter la série de plusieurs jours pour un
+  glissement d'un seul, la place hors de la grille RRULE (une série du dimanche
+  atterrit un mercredi) et laisse l'`overrides` pointer une occurrence
+  disparue — que la synchro réécrit ensuite sur iCloud. Décaler UNE occurrence
+  est un vrai chantier (RECURRENCE-ID, EXDATE) ; la fiche reste le chemin
+  d'édition d'une échéance.
 - **La navigation desktop a DEUX axes** (`src/components/desktop/types.ts`) :
   `nav` dit où on est, `view` dit comment on le regarde. La Chronologie
   n'existe QUE dans un projet — hors projet elle empilerait les barres de huit
