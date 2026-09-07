@@ -155,6 +155,22 @@ export function ListView({
                               VOIX
                             </span>
                           )}
+                          {it.ownerUserId && (
+                            <span
+                              className="flex-none font-mono font-semibold"
+                              title="Tâche qu'un autre compte t'a assignée — tu peux la cocher"
+                              style={{
+                                fontSize: 9,
+                                letterSpacing: "0.06em",
+                                padding: "3px 7px",
+                                borderRadius: 6,
+                                background: "var(--color-bg)",
+                                color: "var(--color-task-700, #2563EB)",
+                              }}
+                            >
+                              PARTAGÉE
+                            </span>
+                          )}
                           {(it.subtasks?.length ?? 0) > 0 && (
                             <span className="tnum flex-none text-[11px]" style={{ color: C.inkFaint }}>
                               {it.subtasks!.filter((s) => s.done).length}/{it.subtasks!.length}

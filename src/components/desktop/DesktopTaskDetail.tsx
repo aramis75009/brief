@@ -423,6 +423,8 @@ export function DesktopTaskDetail({
   onRemoveDependency,
   objectives,
   onSetObjective,
+  collaborators,
+  onSetAssignee,
   compact = false,
 }: {
   item: Item | null;
@@ -446,6 +448,10 @@ export function DesktopTaskDetail({
   objectives?: Objective[];
   /** Branche/retire le lien item → objectif (`Item.objectiveId`). */
   onSetObjective?: (itemId: string, objectiveId: string | null) => void;
+  /** Comptes assignables (2026-09-07) — vide/absent = sélecteur caché. */
+  collaborators?: { userId: string; displayName: string }[];
+  /** Branche/retire l'assignation (`Item.assigneeId`). */
+  onSetAssignee?: (itemId: string, assigneeId: string | null) => void;
   /**
    * Rendu en PANNEAU LATÉRAL (452 px) plutôt qu'en écran plein.
    *
@@ -749,6 +755,49 @@ export function DesktopTaskDetail({
                       ))}
                     </select>
                   )}
+                </div>
+              )}
+
+              {/* Collaborateur — « assignée à » (2026-09-07 : l'item vit chez
+                  son propriétaire, l'assigné lit + coche). Caché sur les
+                  items partagés : seul le propriétaire assigne. */}
+              {collaborators !== undefined && onSetAssignee && !item.ownerUserId && (
+                <div className="flex flex-wrap items-center" style={{ gap: 8, marginBottom: 18 }}>
+                  <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>
+                    Assignée à
+                  </span>
+                  <select
+                    value={item.assigneeId ?? ""}
+                    onChange={(e) => onSetAssignee(item.id, e.target.value || null)}
+                    style={{
+                      padding: "7px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(16,16,16,.1)",
+                      background: C.surface,
+                      fontFamily: "inherit",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: C.ink,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <option value="">Moi</option>
+                    {collaborators.map((c) => (
+                      <option key={c.userId} value={c.userId}>
+                        {c.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {item.ownerUserId && (
+                <div className="flex flex-wrap items-center" style={{ gap: 8, marginBottom: 18 }}>
+                  <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.09em", textTransform: "uppercase", color: C.inkFaint }}>
+                    Assignée à
+                  </span>
+                  <span className="text-[12px] font-bold" style={{ color: C.inkMuted }}>
+                    Toi — tâche partagée, tu peux la cocher.
+                  </span>
                 </div>
               )}
 

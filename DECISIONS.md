@@ -14,6 +14,57 @@ re-débat — c'est le premier réflexe à tuer.
 
 ---
 
+## 2026-09-07 (après-midi) · Collaborateurs — assigner une tâche à un autre compte
+
+**Contexte.** Aramis veut assigner des tâches au compte agent d'Hermes
+(`agent.brief@aramis.local`) : « comme ça tu as les tâches dans ton Brief et
+tu sais ce que tu dois faire. »
+
+**Décision 1 — l'item VIT chez son propriétaire, il n'est jamais copié.**
+`Item.assigneeId` (userId du collaborateur) est le seul lien. L'assigné voit
+la tâche en lecture + coche ; l'édition, la suppression et la réassignation
+restent au propriétaire. Comme un share iCalendar : si le propriétaire
+désassigne ou supprime, la tâche disparaît de la vue de l'assigné au
+rechargement — pas de fantôme à réconcilier.
+
+**Décision 2 — le cloisonnement tient, il est étendu, pas contourné.**
+Le parcours des stores des autres comptes vit dans `src/lib/collaborators.ts`,
+l'équivalent serveur des crons (seuls habilités à itérer les comptes). La
+différence : les fonctions exportées filtrent TOUJOURS sur l'identité de la
+session (`assigneeId === me`) — le `ownerUserId` envoyé par le client n'est
+jamais cru sur parole, la route relit chez le propriétaire et exige
+l'assignation avant d'écrire. `no-direct-store-access.test.ts` reste vert :
+aucune route n'appelle `storeForUser` elle-même.
+
+**Décision 3 — un assigné a UNE route d'écriture : la coche.**
+`POST /api/assigned` (`{ownerId, id, done}`), rien d'autre. Pas d'édition
+libre, pas de suppression, pas de réassignation par l'assigné. Si le besoin
+vient, il aura sa propre décision.
+
+**Décision 4 — `GET /api/items` fusionne, sans jamais échouer.**
+Les items partagés sont rendus en sus des miens, enrichis de `ownerUserId`
+(posé au rendu, jamais persisté). Un échec de lecture (clé service absente
+en dev) rend les miennes seules : la feature est périphérique, l'écran
+Tâches ne peut pas tomber pour elle.
+
+**Décision 5 — le sélecteur du propriétaire liste `authorized_users`.**
+`GET /api/collaborateurs` rend les comptes autorisés hors soi-même, avec
+`display_name` (colonne de la migration 0001, jamais lue avant — le compte
+agent est « Hermes (agent) »). La liste est vide en cas d'erreur : le
+sélecteur disparaît, l'app vit.
+
+**Décision 6 — visibilité immédiate : badge « PARTAGÉE » bleu dans la
+liste, et la fiche de l'assigné dit « tu peux la cocher ».** Le propriétaire,
+lui, voit « Assignée à : Hermes (agent) » dans sa fiche — sélecteur caché
+sur les items partagés : seul le propriétaire assigne.
+
+**Validation réelle (E2E 9/9)** — parcours navigateur complet, store
+propriétaire inclus : assignation → affichage → badge → fiche → coche →
+`doneAt` chez le propriétaire → 0 erreur JS
+(`/opt/data/scripts/e2e_collaborateurs.py`). 736 tests verts, tsc/eslint 0.
+
+---
+
 ## 2026-08-31 (soir) · Le pivot multi-utilisateur — six arbitrages
 
 **Contexte.** Aramis a demandé un compte de recette pour que les agents

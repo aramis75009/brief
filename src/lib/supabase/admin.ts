@@ -52,3 +52,30 @@ export async function listAuthorizedUserIds(): Promise<string[]> {
     .map((row) => (row as { user_id: unknown }).user_id)
     .filter((id): id is string => typeof id === "string" && USER_ID_PATTERN.test(id));
 }
+
+/**
+ * Les collaborateurs possibles pour `me` : les comptes autorisés sauf
+ * soi-même, avec leur nom d'affichage (collaborateurs, décision du
+ * 2026-09-07). Un échec Supabase rend une liste VIDE et journalise — la
+ * route appelante (`/api/collaborateurs`) ne doit pas rendre 500 pour une
+ * feature périphérique : l'app reste utilisable.
+ */
+export async function listCollaboratorRows(me: string): Promise<{ userId: string; displayName: string }[]> {
+  const { data, error } = await adminClient()
+    .from("authorized_users")
+    .select("user_id, display_name");
+  if (error) {
+    console.error("[collaborateurs] lecture authorized_users impossible :", error.message);
+    return [];
+  }
+  return (data ?? [])
+    .map((row) => {
+      const r = row as { user_id?: unknown; display_name?: unknown };
+      const userId =
+        typeof r.user_id === "string" && USER_ID_PATTERN.test(r.user_id) ? r.user_id : null;
+      const displayName =
+        typeof r.display_name === "string" && r.display_name.trim() ? r.display_name.trim() : "";
+      return userId ? { userId, displayName } : null;
+    })
+    .filter((c): c is { userId: string; displayName: string } => c !== null && c.userId !== me);
+}

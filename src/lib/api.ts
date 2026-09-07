@@ -555,3 +555,39 @@ export async function deleteAttachment(id: string): Promise<{ ok: boolean; id: s
 export function attachmentUrl(id: string): string {
   return `/api/attachments/${encodeURIComponent(id)}`;
 }
+
+/* --------------------------------------------------------------- *
+ * Collaborateurs (décision du 2026-09-07).
+ * Un item assigné VIT chez son propriétaire ; l'assigné le lit et le
+ * coche, jamais plus. `ownerUserId` (posé par le serveur au rendu)
+ * dit chez qui la coche doit repartir.
+ * --------------------------------------------------------------- */
+
+/** Un compte auquel on peut assigner une tâche. */
+export type Collaborator = { userId: string; displayName: string };
+
+/** Les collaborateurs assignables — comptes autorisés, hors soi-même. */
+export async function fetchCollaborators(): Promise<Collaborator[]> {
+  const data = await jsonFetch<{ collaborators: Collaborator[] }>(
+    "/api/collaborateurs",
+    {},
+    TIMEOUTS.projects,
+  );
+  return data.collaborators ?? [];
+}
+
+/**
+ * Coche/décoche une tâche qu'un AUTRE compte m'a assignée.
+ * Échoue en 403 si la tâche ne m'est pas (plus) assignée.
+ */
+export async function setAssignedDone(
+  ownerId: string,
+  id: string,
+  done: boolean,
+): Promise<{ item: Item }> {
+  return jsonFetch(
+    "/api/assigned",
+    { method: "POST", body: JSON.stringify({ ownerId, id, done }) },
+    TIMEOUTS.save,
+  );
+}

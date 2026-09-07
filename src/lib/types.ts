@@ -152,6 +152,20 @@ export type DraftItem = {
   attachments?: Attachment[];
   /** Statut : "active" par défaut. "idea" pour la boîte à idées. */
   status?: ItemStatus;
+  /**
+   * Compte auquel la tâche est assignée (userId Supabase, décision du
+   * 2026-09-07). L'item VIT chez son propriétaire : l'assigné le voit en
+   * lecture + coche, jamais en édition. `null`/absent = tâche personnelle.
+   */
+  assigneeId?: string | null;
+  /**
+   * ⚠️ CÔTÉ CLIENT/SERVEUR AU RENDU UNIQUEMENT — jamais persisté dans le
+   * store du propriétaire. Posé par `itemsAssignedTo()` sur les items
+   * partagés pour que le client sache chez qui la coche doit repartir.
+   * Sans lui, l'assigné ne peut pas distinguer « ma tâche » d'« une tâche
+   * qu'on m'a confiée ».
+   */
+  ownerUserId?: string;
 };
 
 /** Un item enregistré. */

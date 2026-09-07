@@ -166,6 +166,15 @@ export function sanitizePatch(
   } else if (typeof v.objectiveId === "string" && v.objectiveId.trim()) {
     out.objectiveId = v.objectiveId.trim();
   }
+  // Assignation collaborateur : userId d'un compte autorisé, ou null
+  // (désassigné). Absent = on ne touche pas. On ne valide PAS l'existence du
+  // compte ici — c'est le rôle de la route dédiée, qui seule a la clé
+  // service-role ; ici on ne stocke qu'un identifiant de forme UUID.
+  if (v.assigneeId === null) {
+    out.assigneeId = null;
+  } else if (typeof v.assigneeId === "string" && v.assigneeId.trim()) {
+    out.assigneeId = v.assigneeId.trim();
+  }
   return out;
 }
 

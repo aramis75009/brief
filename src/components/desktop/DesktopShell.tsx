@@ -51,6 +51,7 @@ import {
   deletePortfolio,
   fetchBoard,
   fetchCalDavStatus,
+  fetchCollaborators,
   fetchInbox,
   fetchObjectives,
   fetchPortfolios,
@@ -151,6 +152,8 @@ export function DesktopShell({
   const [tags, setTags] = useState<Tag[]>([]);
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  /** Comptes assignables (2026-09-07) — vide = sélecteur caché, l'app vit. */
+  const [collabList, setCollabList] = useState<{ userId: string; displayName: string }[]>([]);
   const [inbox, setInbox] = useState<{ events: InboxEvent[]; unread: number }>({ events: [], unread: 0 });
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
 
@@ -199,6 +202,7 @@ export function DesktopShell({
         settle(fetchPortfolios(), setPortfolios),
         settle(fetchInbox(), setInbox),
         settle(fetchCalDavStatus(), (s) => setLastSyncAt(s.lastSyncAt)),
+        settle(fetchCollaborators(), setCollabList),
       ]);
     })();
   }, []);
@@ -819,6 +823,10 @@ export function DesktopShell({
           objectives={objectives.filter((o) => !o.achievedAt && o.projectId === detailItem?.projectId)}
           onSetObjective={async (itemId, objectiveId) => {
             await onSaveItem(itemId, { objectiveId });
+          }}
+          collaborators={collabList}
+          onSetAssignee={async (itemId, assigneeId) => {
+            await onSaveItem(itemId, { assigneeId });
           }}
         />
       </div>

@@ -53,6 +53,9 @@ export function DetailPanel({
   onRemoveDependency: (targetId: string, depId: string) => Promise<void>;
   objectives: Objective[];
   onSetObjective: (itemId: string, objectiveId: string | null) => Promise<void>;
+  /** Comptes assignables (2026-09-07) — propagés à `DesktopTaskDetail`. */
+  collaborators?: { userId: string; displayName: string }[];
+  onSetAssignee?: (itemId: string, assigneeId: string | null) => Promise<void>;
 }) {
   // Échap ferme, comme la palette et les feuilles. Sans ça, un panneau ouvert
   // en mode focus n'a qu'une seule sortie : viser la croix.

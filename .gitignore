@@ -62,3 +62,4 @@ public/preview-*/
 # Worktrees git locaux (superpowers:using-git-worktrees, subagent-driven-development)
 .worktrees/
 .superpowers/
+data/

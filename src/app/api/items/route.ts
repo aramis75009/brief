@@ -1,4 +1,5 @@
 import { completionPatch } from "@/lib/completion";
+import { itemsAssignedTo } from "@/lib/collaborators";
 import { isRealCalendarDate } from "@/lib/due";
 import { requireStore } from "@/lib/guard";
 import { captureEvent } from "@/lib/inbox";
@@ -73,6 +74,10 @@ export function coerce(input: unknown, knownProjects: Set<string>, fallback: str
     dependsOn: cleanIdList(v.dependsOn, 20),
     tags: cleanIdList(v.tags, 10),
     objectiveId: typeof v.objectiveId === "string" && v.objectiveId.trim() ? v.objectiveId.trim() : undefined,
+    // Assignation collaborateur à la création (2026-09-07) — même borne que
+    // `sanitizePatch` : on stocke l'identifiant tel quel, la route dédiée
+    // seule sait dire s'il correspond à un compte autorisé.
+    assigneeId: typeof v.assigneeId === "string" && v.assigneeId.trim() ? v.assigneeId.trim() : undefined,
     // Placement Kanban à la création. Sans ces deux lignes, le composeur « + »
     // d'une colonne crée une carte qui atterrit dans « non placées » : le
     // sanitizer les laissait tomber sans rien signaler.
@@ -123,7 +128,18 @@ export async function GET(req: Request): Promise<Response> {
     items = items.filter((i) => i.status !== "idea" && i.status !== "archived");
   }
 
-  return Response.json({ items });
+  // Tâches des autres comptes assignées à MOI (collaborateurs, 2026-09-07) :
+  // rendues en sus des miennes, enrichies de `ownerUserId`. Un échec de
+  // lecture (clé service absente en dev local) ne doit pas casser l'écran
+  // Tâches : on rend les miennes seules.
+  let assigned: Awaited<ReturnType<typeof itemsAssignedTo>> = [];
+  try {
+    assigned = await itemsAssignedTo(session.userId);
+  } catch {
+    /* liste des miennes seule — feature périphérique */
+  }
+
+  return Response.json({ items: [...items, ...assigned] });
 }
 
 export async function POST(req: Request): Promise<Response> {

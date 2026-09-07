@@ -35,6 +35,7 @@ import {
   parseNote,
   saveItems,
   setItemDone,
+  setAssignedDone,
   transcribeAudio,
   updateItem,
   uploadAudio,
@@ -224,6 +225,16 @@ export function BriefApp() {
     const done = !before.doneAt;
     setSent((s) => s.map((t) => (t.id === id ? { ...t, doneAt: done ? new Date().toISOString() : null } : t)));
     try {
+      // Tâche qu'un AUTRE compte m'a assignée : la coche repart chez le
+      // propriétaire (`ownerUserId` posé par le serveur au rendu). C'est le
+      // seul geste d'écriture autorisé à un assigné.
+      if (before.ownerUserId) {
+        const { item } = await setAssignedDone(before.ownerUserId, id, done);
+        setSent((s) => s.map((t) => (t.id === id ? item : t)));
+        flash(done ? "Tâche terminée ✓" : "Tâche rouverte");
+        void refreshOverview();
+        return;
+      }
       const { item, outcome } = await setItemDone(id, done, completedAt);
       setSent((s) => s.map((t) => (t.id === id ? item : t)));
       // « Repoussé » disait à Aramis que la coche avait raté sa cible : on
