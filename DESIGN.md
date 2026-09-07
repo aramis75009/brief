@@ -74,8 +74,22 @@ couleur** sans entrée correspondante dans `globals.css`.
 | Token | Valeur | Usage |
 |---|---|---|
 | `danger` | `#E23A2E` | suppression, alerte critique |
+| `late-100` / `late-700` | `#F7D6D3` / `#A3241B` | pastille « En retard », priorité Urgente |
 | succès (hardcodé) | `#34C759` | « prête » dans le graphe, checkmark |
 | warning (hardcodé) | `#FF9500` | badge attention |
+
+⚠️ `danger` est une couleur de **texte et d'accent** : illisible en fond de
+pastille. C'est `late-100` qui sert de fond, `late-700` d'encre. Les statuts
+« À risque » et « Dans les délais » réutilisent délibérément `idea` et `meet`
+plutôt que d'introduire deux teintes de plus — à teintes voisines, l'œil cesse
+de les distinguer.
+
+**Huit tokens fantômes ont été supprimés le 2026-09-07** (`--color-error`,
+`--color-action`, `--color-action-lo`, `--color-warn`, `--color-page`,
+`--color-ink-2`, `--color-ink-3`) : vestiges du système corail, référencés dans
+`due.ts` et `projects.ts` mais jamais définis. Une `var()` non définie **sans
+repli** rend la déclaration invalide — les badges d'échéance n'avaient donc
+aucune des couleurs que leur code annonçait, sans erreur ni avertissement.
 
 ### Couleurs projet (p1–p8)
 
@@ -148,6 +162,7 @@ Famille : **`Plus Jakarta Sans`** chargée via Google Fonts. Font mono :
 | `animate-ping` | 1.4s ease-out | point de notification |
 | `animate-fade` | .3s both | fondu simple |
 | `animate-sheet` | .3s cubic-bezier(.2,.9,.3,1) | entrée d'une sheet iOS |
+| `animate-slidein` | .26s cubic-bezier(.2,.9,.3,1) | entrée du panneau de fiche (pendant horizontal de `sheet`) |
 
 ## 3. Composants (réels, dans `src/components/`)
 
@@ -176,6 +191,11 @@ Famille : **`Plus Jakarta Sans`** chargée via Google Fonts. Font mono :
 | `AuthGate` | Garde d'accès Supabase — email + mot de passe, puis session. |
 | `PhoneFrame` | Cadre iOS pour preview (dev uniquement). |
 
+**Ajoutés le 2026-09-07** : `MyTasksScreen` (filtres + groupes temporels, filtre
+de projet en pastille annulable) et `ProjectsScreen` (jauge et santé par
+projet). `BottomNav` porte désormais Accueil · Mes tâches · Projets · Recherche
++ un bouton **Dicter** — plus un « + » muet.
+
 ### Desktop (≥ 1024 px)
 
 Bascule : `useIsDesktop()` dans `src/app/page.tsx`. Mobile et desktop
@@ -184,18 +204,33 @@ l'étendent.
 
 | Composant | Rôle |
 |---|---|
-| `DesktopShell` | Layout global desktop : header + sidebar + zone principale. |
-| `DesktopHeader` | Top bar : logo, nav, recherche, compte. **Boutons à câbler** (jamais de bouton mort). |
-| `DesktopDashboard` | Vue d'accueil desktop (agrégats, raccourcis). |
-| `DesktopTasks` | Liste des tâches, filtres par statut/projet, tri par date. |
-| `DesktopCalendar` | Vue calendrier (events sur voies non-chevauchantes). |
-| `DesktopKanban` | Board Kanban drag & drop (DnD-kit). |
+| `DesktopShell` | Routeur des **deux axes** de navigation : `nav` (où) × `view` (comment). |
+| `Sidebar` | Colonne de gauche : Créer, nav, liste des projets, pastille CalDAV, compte. |
+| `ViewHeader` | Titre, onglets de vue, barre d'outils (filtre de type, tri, semaine). |
+| `DesktopDashboard` | Écran **Accueil** — 1ʳᵉ tuile + donut « Avancement » conservés de la v1. |
+| `views/ListView` | Vue Liste : Nom · Échéance · Projet · Priorité · Statut, groupée. |
+| `DesktopKanban` | Vue **Tableau** — drag & drop (dnd-kit), colonnes libres, WIP. |
 | `KanbanCard` | Carte Kanban (titre, tags, indicateur de blocage). |
-| `DesktopTaskDetail` | Fiche tâche desktop (édition + dépendances + sous-tâches). |
-| `DesktopIdeas` | Idées en grille desktop. |
+| `views/TimelineView` | Vue **Chronologie** (projet seul) : barres de plage + flèches de dépendance. |
+| `views/WeekCalendarView` | Vue **Calendrier**, mode semaine : bandes suivant `startDate`→`due`. |
+| `DesktopCalendar` | Vue **Calendrier**, mode mois (voies non chevauchantes). |
+| `views/DashboardView` | Vue **Tableau de bord** : KPI, barres, donut de statut, courbe d'achèvement. |
+| `views/FilesView` | Vue **Fichiers** : pièces jointes + dictées, chacune rattachée à son item. |
+| `DetailPanel` | Fiche en panneau latéral 452 px + mode focus plein écran. |
+| `DesktopTaskDetail` | Contenu de la fiche. **Prop `compact`** — voir « Pièges ». |
+| `InboxScreen` | Boîte de réception : onglets Activité (journal) et À trier (idées). |
+| `DesktopIdeas` | Les idées, rendues dans l'onglet « À trier ». |
+| `PortfoliosScreen` | Portefeuilles (groupes de projets) **et objectifs**. |
 | `DesktopSettings` | Préférences (compte, voix, projets). |
 | `CommandPalette` | ⌘K — recherche d'actions et d'items. |
-| `DependencyGraph` | Graphe de dépendances entre tâches (statuts prête / bloquée / terminée). |
+| `DependencyGraph` | Graphe de dépendances (tâches, RDV, objectifs). |
+| `ui.tsx` | Briques partagées : `StatusPill`, `PriorityPill`, `CheckCircle`, `Card`… |
+| `tokens.ts` | `C`, `PASTEL`, `STATUS_PASTEL`, `PRIORITY_PASTEL`, `R`, `SHADOW`. |
+
+`DesktopHeader`, `DesktopTasks` et `DesktopObjectives` ont été **supprimés** le
+2026-09-07 : la nav horizontale devient la sidebar, la liste devient `ListView`
+(filtre et tri repris dans la barre d'outils), les objectifs rejoignent les
+portefeuilles.
 
 ### Icônes
 
@@ -222,6 +257,26 @@ l'utilise en inline SVG (header tuile encre, CTA final tuile blanche).
   une promesse non tenue (décision Aramis, voir `TODOS.md` « Dette connue »).
 - **`Intl.DateTimeFormat.formatToParts()` ne doit jamais voir une date
   invalide** — tout parsing passe par `zoned.ts` (Europe/Paris).
+- **Une `var(--token)` sans repli ne dégrade pas, elle ANNULE la déclaration.**
+  Un token mal orthographié ou disparu ne produit ni erreur ni avertissement :
+  la propriété est simplement ignorée et la couleur retombe sur l'héritée. Huit
+  d'entre eux ont vécu ainsi jusqu'au 2026-09-07. Vérification mécanique :
+
+  ```bash
+  grep -rhoE 'var\(--[a-z0-9-]+\)' src/ | sed 's/var(\(.*\))/\1/' | sort -u > /tmp/used
+  grep -oE '^\s*--[a-z0-9-]+:' src/app/globals.css | sed 's/[: ]//g' | sort -u > /tmp/def
+  comm -23 /tmp/used /tmp/def   # doit ne rendre que --font-jakarta (posé par next/font)
+  ```
+- **`DesktopTaskDetail` prend une prop `compact`, et l'oublier casse le
+  panneau.** La fiche a été écrite pour 1080 px : colonne principale fluide +
+  colonne de méta figée à `w-[300px]`. Dans le panneau de 452 px, la colonne
+  figée ne laisse qu'une centaine de pixels à la principale — le titre s'empile
+  et la méta sort du panneau. En compact les deux colonnes s'empilent, et c'est
+  le panneau qui défile. Le mode focus plein écran repasse à `false`.
+- **Les accords de pluriel passent par `src/lib/plural.ts`.** En français,
+  **zéro prend le singulier** (« 0 tâche »), ce que les ternaires
+  `${n > 1 ? "s" : ""}` dispersées dans les composants rataient dans un sens ou
+  dans l'autre.
 
 ## 5. Écarts connus et assumés
 
@@ -230,12 +285,23 @@ Les points suivants sont connus, assumés et listés dans `TODOS.md` —
 
 - Le mockup du hero landing (`docs/landing/multi-user-v1.html`) utilise une
   maquette stylisée, pas une copie pixel d'un vrai écran.
-- `DesktopHeader` affiche `<img src="/icon-192.png">` (icône PWA) en lieu et
-  place d'un vrai logo vectoriel — pas encore de `BrandMark` composant.
+- `Sidebar` affiche `<img src="/icon-192.png">` (icône PWA) en lieu et place
+  d'un vrai logo vectoriel — pas encore de composant `BrandMark`. Le projet
+  Claude Design fournit un `logo.svg` (voir `docs/brief-refonte-v2.dc.html`)
+  qui n'est pas encore branché.
 - La couleur succès `#34C759` est hardcodée dans `DependencyGraph` (pas de
   token `@theme` dédié).
 - `DesktopCalendar` ne gère pas encore les événements en chevauchement
   complet — il répartit en voies.
+- La **Chronologie** ne dessine qu'une fenêtre de 21 jours (3 avant
+  aujourd'hui). Une tâche entièrement hors de cette fenêtre est absente de la
+  vue plutôt que collée au bord — délibéré : une barre au bord gauche
+  prétendrait que la tâche commence aujourd'hui.
+- Le champ **« Responsable »** de la fiche affiche le titulaire du compte et
+  n'est pas assignable. Brief est multi-compte depuis le 31/08, mais chaque
+  compte a SES fichiers (`users/<userId>/`) : aucun projet n'est partagé, donc
+  il n'y a personne d'autre à qui assigner. Le partage entre comptes est la
+  cible d'Aramis, hors périmètre de la refonte v2.
 
 ## 6. Pour aller plus loin
 
