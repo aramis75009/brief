@@ -130,6 +130,7 @@ export function DetailPanel({
           items={items}
           projects={projects}
           onBack={onClose}
+          compact={!focus}
           {...detail}
         />
       </div>

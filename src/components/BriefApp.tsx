@@ -6,6 +6,8 @@ import { TaskDetailScreen } from "./TaskDetailScreen";
 import { AgendaScreen } from "./AgendaScreen";
 import { IdeasScreen } from "./IdeasScreen";
 import { SearchScreen } from "./SearchScreen";
+import { MyTasksScreen } from "./MyTasksScreen";
+import { ProjectsScreen } from "./ProjectsScreen";
 import { CaptureSheet, type CaptureStage } from "./CaptureSheet";
 import { AccountSheet } from "./AccountSheet";
 import { HelpSheet } from "./HelpSheet";
@@ -103,6 +105,13 @@ export function BriefApp() {
   // moment de l'ouverture, pas figé sur "home". Sans ça, Recherche → Fiche →
   // Retour ramenait toujours à l'Accueil au lieu de Recherche.
   const [returnScreen, setReturnScreen] = useState<Screen>("home");
+  /**
+   * Le projet sur lequel « Mes tâches » est filtré, choisi depuis l'écran
+   * Projets. `null` = toutes destinations. Remis à zéro dès qu'on revient à
+   * « Mes tâches » par la barre du bas — sinon un filtre posé il y a trois
+   * écrans donne une liste vide sans qu'on comprenne pourquoi.
+   */
+  const [mobileProjectId, setMobileProjectId] = useState<string | null>(null);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -543,6 +552,12 @@ export function BriefApp() {
     [sent],
   );
   const ideaItems = useMemo(() => sent.filter((t) => t.status === "idea"), [sent]);
+
+  /** Les items de « Mes tâches » mobile, filtrés sur le projet choisi le cas échéant. */
+  const mobileTaskItems = useMemo(
+    () => (mobileProjectId ? activeItems.filter((it) => it.projectId === mobileProjectId) : activeItems),
+    [activeItems, mobileProjectId],
+  );
   const selectedTask = useMemo(
     () => (selectedTaskId ? sent.find((t) => t.id === selectedTaskId) ?? null : null),
     [selectedTaskId, sent],
@@ -736,6 +751,35 @@ export function BriefApp() {
           />
         )}
 
+        {screen === "mytasks" && (
+          <MyTasksScreen
+            items={mobileTaskItems}
+            projects={projects}
+            loading={loading}
+            onToggleDone={toggleDoneSimple}
+            onOpenTask={openTask}
+            onCapture={openCapture}
+            projectFilter={projects.find((p) => p.id === mobileProjectId) ?? null}
+            onClearProjectFilter={() => setMobileProjectId(null)}
+          />
+        )}
+
+        {screen === "projects" && (
+          <ProjectsScreen
+            items={activeItems}
+            projects={projects}
+            loading={loading}
+            onOpenProject={(id) => {
+              // « Ouvrir un projet » sur mobile = filtrer « Mes tâches »
+              // dessus. Un écran de projet dédié dupliquerait la liste pour
+              // n'ajouter qu'un titre.
+              setMobileProjectId(id);
+              setScreen("mytasks");
+            }}
+            onCapture={openCapture}
+          />
+        )}
+
         {screen === "search" && (
           <SearchScreen
             items={sent}
@@ -749,12 +793,15 @@ export function BriefApp() {
       </div>
 
       {/* CaptureBar uniquement sur les écrans-listes */}
-      {(screen === "home" || screen === "ideas" || screen === "search") && (
+      {(screen === "home" || screen === "ideas" || screen === "search" || screen === "mytasks" || screen === "projects") && (
         <CaptureBar onClick={openCapture} />
       )}
       <BottomNav
         current={screen}
-        onNavigate={(s) => setScreen(s)}
+        onNavigate={(s) => {
+          if (s === "mytasks") setMobileProjectId(null);
+          setScreen(s);
+        }}
         onCapture={openCapture}
       />
 

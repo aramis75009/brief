@@ -38,6 +38,7 @@ import { filterAgendaItems, TASK_KIND_FILTERS, type TaskKindFilter } from "@/lib
 import { sortItems, type TaskSort } from "@/lib/tasks";
 import { graphStatus, graphTasks, indexById } from "@/lib/graph";
 import { groupItems } from "@/lib/views";
+import { agree, plural } from "@/lib/plural";
 import { relativeSyncLabel } from "@/lib/syncLabel";
 import {
   addColumn,
@@ -549,11 +550,15 @@ export function DesktopShell({
   const doneCount = scoped.length - openCount;
 
   const subtitle = useMemo(() => {
-    if (nav === "project") return `${openCount} ouvertes · ${doneCount} terminées`;
+    if (nav === "project") return `${plural(openCount, "ouverte")} · ${plural(doneCount, "terminée")}`;
     if (nav === "mytasks") return "Tout ce qui t'attend, toutes destinations confondues";
     if (nav === "inbox") return inbox.unread > 0 ? `${inbox.unread} non lus` : "";
-    if (nav === "portfolios") return `${portfolios.length} portefeuille${portfolios.length > 1 ? "s" : ""}`;
-    if (nav === "graphe") return blockedCount > 0 ? `${blockedCount} tâches bloquées` : "Aucune tâche bloquée";
+    if (nav === "portfolios") return plural(portfolios.length, "portefeuille");
+    if (nav === "graphe") {
+      return blockedCount > 0
+        ? `${plural(blockedCount, "tâche")} ${agree(blockedCount, "bloquée")}`
+        : "Aucune tâche bloquée";
+    }
     return "";
   }, [nav, openCount, doneCount, inbox.unread, portfolios.length, blockedCount]);
 
@@ -582,7 +587,7 @@ export function DesktopShell({
             view={view}
             project={project}
             subtitle={subtitle}
-            countLabel={showsTasks ? `${scoped.length} tâches · ${doneCount} terminées` : null}
+            countLabel={showsTasks ? `${plural(scoped.length, "tâche")} · ${plural(doneCount, "terminée")}` : null}
             onSelectView={setView}
             onOpenPalette={() => {
               setPaletteOpen(true);

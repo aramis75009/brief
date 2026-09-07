@@ -423,6 +423,7 @@ export function DesktopTaskDetail({
   onRemoveDependency,
   objectives,
   onSetObjective,
+  compact = false,
 }: {
   item: Item | null;
   items: Item[];
@@ -445,6 +446,16 @@ export function DesktopTaskDetail({
   objectives?: Objective[];
   /** Branche/retire le lien item → objectif (`Item.objectiveId`). */
   onSetObjective?: (itemId: string, objectiveId: string | null) => void;
+  /**
+   * Rendu en PANNEAU LATÉRAL (452 px) plutôt qu'en écran plein.
+   *
+   * La fiche a été écrite pour un écran de 1080 px : une colonne principale
+   * fluide et une colonne de méta figée à 300 px. Dans un panneau, la colonne
+   * figée ne laisse qu'une centaine de pixels à la principale — le titre
+   * s'empile lettre par lettre et la méta déborde hors du panneau. En compact,
+   * les deux colonnes s'empilent et c'est le panneau qui défile.
+   */
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() =>
@@ -542,9 +553,15 @@ export function DesktopTaskDetail({
   const createdLabel = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: TIMEZONE }).format(new Date(item.createdAt));
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ animation: "fade .25s both" }}>
+    <div
+      className={compact ? "flex flex-col" : "flex h-full flex-col overflow-hidden"}
+      style={{ animation: "fade .25s both" }}
+    >
       {/* Barre d'actions supérieure */}
-      <div className="mx-auto flex w-full max-w-[1080px] flex-none items-center justify-between" style={{ padding: "0 0 16px 0" }}>
+      <div
+        className={`mx-auto flex w-full flex-none items-center justify-between ${compact ? "flex-wrap gap-3" : "max-w-[1080px]"}`}
+        style={{ padding: "0 0 16px 0" }}
+      >
         <div className="flex items-center gap-3">
           <button
             aria-label={editing ? "Annuler" : "Retour"}
@@ -588,9 +605,15 @@ export function DesktopTaskDetail({
       </div>
 
       {/* Corps — 2 colonnes */}
-      <div className="mx-auto flex w-full max-w-[1080px] min-h-0 flex-1 gap-6 overflow-hidden">
+      <div
+        className={
+          compact
+            ? "flex w-full flex-col gap-5"
+            : "mx-auto flex w-full max-w-[1080px] min-h-0 flex-1 gap-6 overflow-hidden"
+        }
+      >
         {/* Colonne principale */}
-        <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className={compact ? "flex w-full flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-y-auto"}>
           {editing ? (
             <div className="flex flex-col gap-4" style={{ paddingTop: 8 }}>
               <TypeSegmented value={draft.type} onChange={(t) => setDraft((d) => ({ ...d, type: t }))} />
@@ -878,7 +901,10 @@ export function DesktopTaskDetail({
 
         {/* Sidebar droite — méta en liste */}
         {!editing && (
-          <div className="flex h-full w-[300px] flex-none flex-col overflow-y-auto" style={{ paddingTop: 8 }}>
+          <div
+            className={compact ? "flex w-full flex-col" : "flex h-full w-[300px] flex-none flex-col overflow-y-auto"}
+            style={{ paddingTop: 8 }}
+          >
             <div style={{ padding: "0 4px" }}>
               <MetaRow label="PROJET">
                 <span className="flex items-center gap-2">

@@ -12,6 +12,7 @@
 import { useMemo } from "react";
 import { STATUS_LABEL, type TaskStatus } from "@/lib/status";
 import { dashboardStats, donutGradient, type ItemGroup } from "@/lib/views";
+import { agree, plural } from "@/lib/plural";
 import { Card } from "../ui";
 import { C } from "../tokens";
 import type { Item } from "@/lib/types";
@@ -43,7 +44,7 @@ export function DashboardView({
   const stats = useMemo(() => dashboardStats(items, groups, now), [items, groups, now]);
 
   const kpis = [
-    { label: "Terminées", value: stats.done, hint: `sur ${stats.total} tâches`, color: C.ink },
+    { label: "Terminées", value: stats.done, hint: `sur ${plural(stats.total, "tâche")}`, color: C.ink },
     { label: "En retard", value: stats.late, hint: "à traiter en priorité", color: "var(--color-late-700)" },
     { label: "À risque", value: stats.atrisk, hint: "échéance serrée", color: "var(--color-idea-700)" },
     { label: "Total", value: stats.total, hint: "toutes sections", color: C.ink },
@@ -169,6 +170,7 @@ export function DashboardView({
  * change de largeur avec la fenêtre et la courbe doit la suivre.
  */
 function CompletionChart({ series, max }: { series: number[]; max: number }) {
+  const total = series.reduce((n, v) => n + v, 0);
   const W = 720;
   const H = 180;
   const PAD = 10;
@@ -201,7 +203,7 @@ function CompletionChart({ series, max }: { series: number[]; max: number }) {
         />
       </svg>
       <p className="text-[12px]" style={{ color: C.inkMuted, marginTop: 8 }}>
-        {series.reduce((n, v) => n + v, 0)} tâches terminées sur la période.
+        {`${plural(total, "tâche")} ${agree(total, "terminée")} sur la période.`}
       </p>
     </>
   );

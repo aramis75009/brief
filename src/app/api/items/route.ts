@@ -16,7 +16,7 @@ import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
  * déduplication à maintenir.
  */
 
-function coerce(input: unknown, knownProjects: Set<string>, fallback: string): DraftItem | null {
+export function coerce(input: unknown, knownProjects: Set<string>, fallback: string): DraftItem | null {
   if (typeof input !== "object" || input === null) return null;
   const v = input as Record<string, unknown>;
 
@@ -65,6 +65,14 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     audioOrigin: isAudioOrigin(v.audioOrigin) ? v.audioOrigin : undefined,
     audioId: typeof v.audioId === "string" && v.audioId.trim() ? v.audioId.trim() : undefined,
     status: v.status === "idea" || v.status === "archived" ? v.status : undefined,
+    // Dépendances, étiquettes et objectif — les MÊMES bornes que
+    // `sanitizePatch` (`/api/items/[id]`). Sans ces trois lignes, un item créé
+    // avec un `dependsOn` le perdait en silence : la requête répondait 200, et
+    // la chaîne n'existait tout simplement pas. Invisible jusqu'à ce que la
+    // chronologie se mette à dessiner les flèches de dépendance.
+    dependsOn: cleanIdList(v.dependsOn, 20),
+    tags: cleanIdList(v.tags, 10),
+    objectiveId: typeof v.objectiveId === "string" && v.objectiveId.trim() ? v.objectiveId.trim() : undefined,
     // Placement Kanban à la création. Sans ces deux lignes, le composeur « + »
     // d'une colonne crée une carte qui atterrit dans « non placées » : le
     // sanitizer les laissait tomber sans rien signaler.
@@ -74,6 +82,16 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
         ? v.columnOrder
         : undefined,
   };
+}
+
+/** Une liste d'identifiants : chaînes non vides, rognées, plafonnée. */
+function cleanIdList(v: unknown, max: number): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+    .map((d) => d.trim())
+    .slice(0, max);
+  return out.length ? out : undefined;
 }
 
 function isSubTask(s: unknown): s is { id: string; title: string; done: boolean } {
