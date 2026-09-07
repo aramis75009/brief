@@ -53,26 +53,39 @@ export function ViewHeader({
   };
   const title = nav === "project" ? (project?.name ?? "Projet") : titles[nav];
   const views = nav === "mytasks" || nav === "project" ? VIEWS_FOR[nav] : null;
+  const hasToolbar = !!(onAddTask || toolbar || countLabel);
 
   return (
     <header
       className="flex-none"
-      style={{ background: C.surface, borderBottom: `1px solid ${C.hairline2}`, padding: "14px 24px 0" }}
+      style={{
+        background: C.surface,
+        borderBottom: `1px solid ${C.hairline2}`,
+        // Le padding bas n'existe QUE si rien ne suit le titre : sinon ce sont
+        // les onglets ou la barre d'outils qui l'apportent. Sans cette
+        // condition, l'accueil collait son titre au filet du bas.
+        padding: `20px 24px ${views || hasToolbar ? 0 : 18}px`,
+      }}
     >
-      <div className="flex min-h-[38px] items-center gap-3.5">
+      <div className="flex min-h-[40px] items-center gap-4">
         {nav === "project" && project && (
           <span className="flex-none" style={{ color: skinFor(project).bg }}>
             <ProjectDot size={12} shape={shapeFor(project)} />
           </span>
         )}
-        <h1 className="m-0 text-[22px] font-extrabold tracking-[-0.02em]">{title}</h1>
-        {subtitle && (
-          <span className="truncate text-[13px]" style={{ color: C.inkMuted }}>
-            {subtitle}
-          </span>
-        )}
+        {/* Titre et sous-titre alignés sur la LIGNE DE BASE, pas centrés : deux
+            corps différents (22 px et 13 px) centrés l'un sur l'autre donnent
+            un sous-titre qui flotte trop haut. */}
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h1 className="m-0 flex-none text-[22px] font-extrabold tracking-[-0.02em]">{title}</h1>
+          {subtitle && (
+            <span className="truncate text-[13px]" style={{ color: C.inkMuted }}>
+              {subtitle}
+            </span>
+          )}
+        </div>
 
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex flex-none items-center gap-2.5">
           <button
             type="button"
             onClick={onOpenPalette}
@@ -136,8 +149,23 @@ export function ViewHeader({
         </div>
       </div>
 
+      {/*
+        Onglets SANS marge intérieure horizontale, espacés par `gap`.
+        Avec `padding: "0 14px"`, le libellé du premier onglet démarrait 14 px
+        à droite du titre : trois rangées empilées dont aucune ne partageait son
+        bord gauche. Sans marge, « Liste » s'aligne exactement sous le titre, et
+        le trait actif épouse le mot au lieu d'une boîte plus large que lui.
+
+        Le filet de séparation est porté par la BANDE d'onglets, et le trait
+        actif le recouvre (`marginBottom: -1`) : auparavant le trait de 2 px et
+        le `borderTop` de la barre d'outils se touchaient, ce qui donnait deux
+        lignes horizontales collées.
+      */}
       {views && (
-        <div className="flex items-center gap-0.5" style={{ marginTop: 10 }}>
+        <div
+          className="flex items-center"
+          style={{ gap: 22, marginTop: 16, borderBottom: `1px solid ${C.hairline}` }}
+        >
           {views.map((v) => {
             const on = v.key === view;
             return (
@@ -147,11 +175,12 @@ export function ViewHeader({
                 onClick={() => onSelectView(v.key)}
                 aria-current={on ? "page" : undefined}
                 style={{
-                  height: 34,
-                  padding: "0 14px",
+                  height: 38,
+                  padding: 0,
                   border: "none",
                   background: "none",
                   borderBottom: `2px solid ${on ? C.ink : "transparent"}`,
+                  marginBottom: -1,
                   fontFamily: "inherit",
                   fontSize: 13.5,
                   fontWeight: on ? 800 : 600,
@@ -166,10 +195,10 @@ export function ViewHeader({
         </div>
       )}
 
-      {(onAddTask || toolbar || countLabel) && (
+      {hasToolbar && (
         <div
-          className="flex items-center gap-2"
-          style={{ padding: "10px 0", borderTop: views ? `1px solid ${C.hairline}` : "none", marginTop: views ? 0 : 10 }}
+          className="flex items-center gap-2.5"
+          style={{ padding: views ? "12px 0 14px" : "16px 0 14px" }}
         >
           {onAddTask && (
             <button
