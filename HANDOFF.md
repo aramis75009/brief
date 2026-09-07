@@ -10,160 +10,129 @@ que tu remplaces dans `docs/handoffs/`.
 
 ---
 
-# Passation — 2026-09-05 · Le calendrier Apple et Brief ne racontaient plus la même semaine
+# Passation — 2026-09-07 · Refonte v2 : le prototype Claude Design est en code
 
 | | |
 |---|---|
-| **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 01/09 après-midi). |
-| **Branche** | `fix/agenda-occurrences-decalees` — [PR #16](https://github.com/aramis75009/brief/pull/16), **ouverte, non fusionnée**. |
-| **Base** | `main` @ `7979624`. |
-| **GitHub** | `origin/main` = `7979624`. |
-| **Prod** | **`7979624`, branche `main`** — vérifié en SSH. Le lot 1 multi-utilisateur **A ÉTÉ DÉPLOYÉ** entre le 01/09 et aujourd'hui : les données vivent sous `users/<uuid>/` et deux comptes existent. La passation précédente disait « pas déployé » : c'est périmé. |
+| **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 05/09). |
+| **Branche** | `feat/refonte-v2`, 7 commits. **Pas de PR ouverte, rien de poussé.** |
+| **Base** | `origin/main` @ `fcdcf17`. |
+| **Prod** | **inchangée** — `3a1ea3e`, v1.2.1.0. Rien de cette refonte n'est déployé. |
 
 ## Goal
 
-Projet en pause. Aramis demande une seule chose : que **ce qui marchait avant
-continue de marcher**, en particulier la synchro du calendrier Apple et le
-récap du jour. Le reste attend.
+Aramis a fait produire par Claude Design un prototype de refonte complète
+(`docs/brief-refonte-v2.dc.html`, importé du projet
+`de78eee2-0a67-4d78-8ed2-f8f84c12affb`). Sa consigne : **« c'est pile ce dont
+j'avais besoin, il faut tout intégrer »**, en gardant la première tuile et le
+donut/avancement semaine de l'accueil v1, et le graphe dans la sidebar.
 
-## Ce qui n'allait pas — et pourquoi c'était invisible
+Consigne d'exécution, mot pour mot : *« je préfère que tu fasses tout et que tu
+te corriges ensuite »*, et *« ce que je n'aimerais pas, c'est que tu fasses bien
+toutes les implémentations, mais que rien ne fonctionne »*.
 
-Aramis décale ses séances directement dans l'app Calendrier. La synchro CalDAV
-adopte bien le décalage (`Item.overrides`), mais **`buildDayAgenda` choisissait
-ses occurrences sur la grille RRULE brute AVANT de leur appliquer l'override**.
+## Current state — livré et vérifié en local, PAS déployé
 
-Une occurrence déplacée n'appartenait alors à aucun jour :
+La spec de conception est dans
+[`docs/superpowers/specs/2026-09-07-refonte-v2-design.md`](docs/superpowers/specs/2026-09-07-refonte-v2-design.md).
 
-- pas au jour d'**origine** — l'override l'en sort, mais elle y restait
-  affichée, horodatée au jour d'arrivée ;
-- pas au jour d'**arrivée** — la grille RRULE ne l'y met jamais, elle n'était
-  donc jamais candidate.
+**Navigation à deux axes** : `nav` (où) × `view` (comment). La nav horizontale à
+sept onglets devient une sidebar à cinq entrées ; Calendrier, Kanban, Idées et
+Objectifs cessent d'être des destinations pour devenir des vues.
 
-Mesuré sur la prod avant correctif :
+| Sidebar | Contenu |
+|---|---|
+| Accueil | 1ʳᵉ tuile + donut « Avancement » **conservés de la v1** |
+| Boîte de réception | onglets Activité (journal) et À trier (les idées) |
+| Mes tâches | Liste · Tableau · Calendrier (semaine **et** mois) · Tableau de bord · Fichiers |
+| Portefeuilles | groupes de projets **+ objectifs** |
+| Graphe | inchangé |
+| *Projets* | mêmes vues **+ Chronologie** |
 
-```
-GET /api/agenda?date=2026-09-03  →  « Séance push », due = 2026-09-04T14:00Z
-GET /api/agenda?date=2026-09-04  →  []          ← Apple l'affiche pourtant le vendredi
-GET /api/agenda?date=2026-09-06  →  []          ← « Aller courir » du dimanche, disparue
-```
+**Données** : `Item.startDate` (le seul ajout structurant — sans lui, quatre vues
+sur six ne peuvent pas rendre une plage), `Item.attachments[]`, `portfolios.json`,
+`inbox.json`. Le **statut est dérivé**, jamais stocké (`src/lib/status.ts`).
 
-Aucune erreur, aucun test rouge, `failures=0` dans le journal du cron CalDAV :
-la synchro faisait son travail, c'est **l'affichage** qui rangeait mal.
+**La boîte de réception n'est pas une coquille** : cinq producteurs sont câblés
+sur des écritures réelles — rappel envoyé, adoption CalDAV, tâche débloquée,
+dictée structurée, objectif atteint tout seul.
 
-`buildDigest` portait le même défaut de fond dans une **troisième copie** : il
-classait sur `due` brut et réclamait le matin une séance déjà déplacée à demain.
-
-## Current state
-
-**Correctif écrit, testé, poussé — PAS déployé** (choix d'Aramis aujourd'hui).
-
-- `src/lib/agenda.ts` : le filtre de fenêtre se fait sur l'heure **effective**,
-  aux **deux** endroits de la fonction (items ligne ~68, snapshot ligne ~130).
-  `candidateOccurrences` ajoute les occurrences qu'un override amène **vers**
-  le jour depuis un autre — sans quoi elles ne sont candidates nulle part.
-  Dédoublonné par horodatage (un décalage d'heure *dans* la même journée arrive
-  par les deux chemins).
-- `src/lib/digest.ts` : applique l'override avant de trier, publie l'heure
-  réelle, et n'annonce plus une occurrence supprimée (EXDATE).
-- 8 tests ajoutés, **tous en échec avant le correctif**.
-
-Vérifié en rejouant les **données réelles de production** hors ligne
-(`items.json` + `caldav-agenda-snapshot.json` du compte d'Aramis) : le dimanche
-6 n'est plus vide, le vendredi 4 retrouve « Séance push », le jeudi 3 ne montre
-plus d'événement mal daté. La semaine rendue par Brief redevient celle d'Apple.
-
-### Une donnée réparée en production (accord d'Aramis)
-
-`it_1787066667909_reposter15` — « Reposter 15 articles » — portait un `doneAt`
-et avait **perdu sa `rrule`**, alors que la série tourne toujours côté Apple
-(`FREQ=WEEKLY;BYDAY=FR,SA,SU`). Un item terminé ne produit plus d'ICS, sort donc
-de `desired`, et n'est plus jamais réconcilié par la synchro : **il était gelé
-pour toujours**. Ce n'est pas le bug ci-dessus, c'est un accident de donnée.
-
-Réparé après sauvegarde fraîche (`/var/backups/brief/brief-20260905-114409.tar.gz`) :
-`rrule` remise, `doneAt` remis à `null`, `due` avancé à la prochaine occurrence
-réelle (`2026-09-05T15:30:00.000Z`, calculé par `nextOccurrence`, pas à la main).
-Écriture atomique, avec une garde qui refusait d'écrire si l'état sur disque
-n'était pas exactement celui analysé. `lastCompletedOccurrenceAt` laissé tel
-quel (2026-08-29) — deviner qu'Aramis a fait les occurrences du 30/08 et du
-04/09 aurait été inventer. Confirmé : la série est de retour dans
-`/api/agenda?date=2026-09-05`.
+**Mobile** : l'accueil correspondait déjà au prototype. Ajoutés :
+`MyTasksScreen`, `ProjectsScreen`, et une nav basse dont le FAB dit **Dicter**.
 
 ## Decisions
 
-1. **Le calendrier gagne, y compris par occurrence** — la décision du 18/08 ne
-   changeait pas, elle n'était simplement pas appliquée au *choix du jour*.
-   C'est désormais le cas dans les trois copies (agenda items, agenda snapshot,
-   digest).
-2. **PR ouverte, pas de déploiement** — arbitrage d'Aramis, projet en pause.
-3. **Réparer la donnée « Reposter 15 »** plutôt que la laisser ou la supprimer
-   — arbitrage d'Aramis.
+1. **Le statut est dérivé, pas stocké.** Le prototype le montre comme une
+   colonne de données. Stocké, il pourrit : une tâche « Dans les délais » dont
+   l'échéance est passée hier s'afficherait en vert.
+2. **Les « sections » du prototype SONT le Kanban existant** (`columnId`) —
+   pas un champ parallèle. Glisser une carte dans le Tableau déplace la ligne
+   dans la Liste, gratuitement.
+3. **Quatre priorités, pas trois.** Le prototype n'en montre que trois ; Brief
+   a `1|2|3|4` avec 1 = la plus haute (RFC 5545). Écraser 4 sur 3 créerait la
+   seconde échelle que `types.ts` interdit.
+4. **Objectifs fusionnés dans Portefeuilles**, comme Aramis le proposait.
+   `Objective.projectId` existe déjà, un portefeuille groupe des projets : la
+   chaîne se fait sans rien inventer. Création, atteinte, réouverture et
+   suppression sont toutes reprises — l'écran Objectifs supprimé n'emporte
+   aucune fonction.
+5. **Le partage de projet entre comptes est hors périmètre.** Brief est
+   multi-compte depuis le 31/08, mais `storeForUser` lit `users/<userId>/` :
+   aucune donnée n'est visible d'un compte à l'autre. Le but d'Aramis
+   (travailler à trois) demande une couche de partage qui n'existe pas. Le
+   champ « Responsable » affiche le titulaire et n'est pas assignable.
+6. **La Chronologie n'existe que dans un projet.** Hors projet, elle
+   empilerait les barres de huit projets sans rapport sur une même grille.
+
+## Trois bugs préexistants trouvés en chemin
+
+1. **Huit tokens CSS n'existaient pas.** `--color-error`, `--color-action`,
+   `--color-action-lo`, `--color-warn`, `--color-page`, `--color-ink-2`,
+   `--color-ink-3` — vestiges du système corail, référencés dans `due.ts` et
+   `projects.ts`, jamais définis. Une `var()` sans repli **annule** la
+   déclaration : les badges d'échéance et les pastilles de priorité n'avaient
+   aucune des couleurs que leur code annonce. Zéro erreur, zéro test rouge.
+   Commande d'audit dans `DESIGN.md` § Pièges.
+2. **`coerce()` jetait `dependsOn`, `tags` et `objectiveId` à la création.**
+   `POST /api/items` répondait 200 et la dépendance n'existait nulle part.
+   Trouvé parce que la Chronologie s'est mise à dessiner les flèches et n'en
+   trouvait aucune. `sanitizePatch` (PATCH), lui, les gardait — d'où
+   l'invisibilité.
+3. **Deux couleurs de PROJET servaient de fond à des badges de priorité et
+   d'échéance** (`--color-p4` violet Perso, `--color-p2` orange My Flip) : un
+   badge « Demain » violet sans rapport avec le projet de la tâche.
 
 ## Blockers
 
 Aucun sur le code.
 
-### ✅ Le blocage de recette authentifiée est LEVÉ — il n'aurait jamais dû durer
+### Deux branches non fusionnées bloquent des choses utiles
 
-Six passations ont répété « aucune recette d'écran authentifié possible ».
-**C'était faux depuis le 01/09** : Aramis avait fait créer un compte Supabase
-d'agent exactement pour ça. Il a fallu qu'il le dise pour que je le trouve.
-
-Deux causes, toutes deux traitées :
-
-1. **`docs/agent-recette-account.md` n'est PAS dans `main`.** Il vit sur la
-   branche `docs/agent-recette-account`, jamais fusionnée. Aucun agent lisant
-   `main`, `AGENTS.md` ou `HANDOFF.md` ne peut le trouver.
-   **→ à fusionner : c'est la cause racine, et elle est toujours ouverte.**
-2. **Les identifiants n'étaient que dans le repo Hermes du VPS.** Ils sont
-   désormais aussi dans le `.env.local` du Mac (`BRIEF_AGENT_EMAIL`,
-   `BRIEF_AGENT_PASSWORD`, `BRIEF_AGENT_USER_ID`). Repo public : jamais commis.
-
-Connexion vérifiée le 05/09 **sur la prod et en local**, captures à l'appui.
-Deux pièges qui font croire à un échec : `snapshot -i` ne voit rien tant que
-React n'a pas hydraté (attendre `input[type="email"]`), et le POST répond 200
-**sans** que l'écran bascule — il faut **recharger**.
-
-Le compte agent a **son propre store** (`41c52c5b-…`), invisible depuis celui
-d'Aramis. Pour prouver un rendu qui dépend des données d'Aramis : rejouer le cas
-dans le store du compte agent. C'est ainsi qu'a été produit l'avant/après du
-bug. **Un item de démonstration y reste** — `it_demo_push`, « Séance push »
-lun/jeu avec l'occurrence du jeudi 3 déplacée au vendredi 4 : il rejoue le bug
-en un coup d'œil, et servira à vérifier le déploiement. À supprimer quand il
-n'a plus d'usage.
-
-### Reste
-
-- **`npm run build` non lancé** — un `next dev` tourne, la règle du repo
-  l'interdit.
+- **`docs/agent-recette-account`** (1 commit, `f1cf421`, aucune PR) — c'est la
+  cause racine que la passation du 05/09 signalait déjà comme *toujours
+  ouverte*. Tant que ce fichier n'est pas dans `main`, chaque agent redécouvre
+  à ses frais que la recette authentifiée serait impossible. Elle ne l'est pas :
+  je m'en suis servi toute la session.
+- **`docs/passation-v1210-deployee`** (2 commits) portait la règle **« alias
+  SSH `brief-vps`, jamais une IP en clair »**. Elle n'existait dans **aucun
+  fichier de `main`** — un agent partant de `main` aurait bloqué son
+  déploiement en silence. **Je l'ai récupérée sur cette branche**
+  (`git checkout 37fa3b4 -- AGENTS.md docs/coordination.md scripts/coord/status.sh`) ;
+  fusionner `feat/refonte-v2` la porte donc dans `main`.
 
 ## Next action
 
-**Déployer la PR #16** quand Aramis le voudra. Rien ne l'impose : le correctif
-ne touche ni les données ni la synchro, seulement l'affichage. Sur le VPS
-(`ssh -i ~/.ssh/brief_vps root@186.241.16.37`, `/docker/brief`) :
-
-```bash
-bash deploy/backup.sh
-git pull
-docker compose --env-file .env.production build
-docker compose --env-file .env.production up -d
-```
-
-⚠️ `--env-file .env.production` n'est pas facultatif : sans lui, **toute**
-commande `docker compose` échoue sur l'interpolation (constaté aujourd'hui,
-`docker compose ps` compris — utiliser `docker logs brief-app-1` en attendant).
-
-**Et fusionner `docs/agent-recette-account` dans `main`** (commit `f1cf421`,
-aucune PR ouverte à ce jour). Tant que ce fichier reste sur sa branche, chaque
-agent redécouvre à ses frais que la recette authentifiée est impossible — elle
-ne l'est pas.
-
-Après le déploiement, la vérification tient en une capture : ouvrir le
-calendrier avec le compte agent, semaine du 31/08, et regarder si « Séance
-push » est au vendredi 4 (correct) ou au jeudi 3 (bug).
-
-Ensuite, lots 2 et 3 du pivot multi-utilisateur.
+1. **Recetter à l'écran** — c'est le point où Aramis doit dire oui ou non. Le
+   serveur de dev tourne sur `localhost:3100` ; se connecter avec le compte
+   agent (`.env.local`, `BRIEF_AGENT_*`), ou avec son propre compte pour voir
+   ses vraies données.
+2. **Ouvrir la PR** puis déployer — via le webhook Hermes, avec `ssh brief-vps`,
+   **jamais une IP**.
+3. Différé, demandé par Aramis : **graphe ↔ objectifs façon n8n** (nœuds
+   connectables pour créer des dépendances). Le graphe actuel est inchangé.
+4. Toujours en attente : la cause qui a effacé la `rrule` de « Reposter 15
+   articles » (`TODOS.md`, Dette connue), et les lots 2/3 du pivot
+   multi-utilisateur.
 
 ## Validations
 
@@ -172,16 +141,41 @@ Lancées sur l'arbre final, sortie vue :
 ```
 $ npx eslint .       → 0 erreur, 0 warning
 $ npx tsc --noEmit   → 0 erreur
-$ npx vitest run     → 597 passants, 1 skipped (47 fichiers)
+$ npx vitest run     → 728 passants, 1 skipped (52 fichiers)
 ```
+
+Soit **+131 tests** (597 → 728) : `views.ts` (41), `status.ts` (32),
+`inbox.ts` (19), portefeuilles + journal du store (14), `coerce` (11),
+`plural` (5), `describePatch` (5), journal des rappels (4). Le total de 597
+est celui de la passation du 05/09, mesuré sur la même base.
+
+**Recette authentifiée sur le compte agent, faite et vue** — API en `curl` puis
+navigateur (`/browse`, viewport 1600×1000 puis 393×852) :
+
+| Vérifié | Résultat |
+|---|---|
+| `POST /api/portfolios` → `GET` | créé, relu, persisté |
+| `startDate` sur un aller-retour | `startDate` conservé ; la Liste affiche « 9 – 11 sept » |
+| Événement « dictée structurée » | apparu, français accordé |
+| Événement « tâche débloquée » | apparu en cochant la dépendance |
+| Dédoublonnage | décocher/recocher → **1** événement, pas 2 |
+| Pièce jointe | déposée, relue, `Content-Disposition: attachment` + `nosniff` |
+| Console navigateur | **0 erreur**, 0 requête en échec, sur les 8 écrans |
+| Fiche en panneau | 452 px, **0 élément qui déborde** (mesuré au DOM) |
 
 **NON LANCÉ — à ne pas croire fait :**
 
-- **`npm run build`** (un `next dev` tourne — règle du repo). `tsc --noEmit`
-  n'en tient pas lieu : il ne prouve pas que la sortie standalone se construit.
-- **Le correctif n'a PAS tourné en production.** Il est vérifié sur les données
-  de prod, rejouées **en local**. Ce n'est pas la même chose que la prod.
-- **Aucune recette d'écran authentifié** (voir Blockers).
-- `readSyncState`, `recordDeletedExternalUid`, `readAgendaSnapshot`,
-  `runCalDavSync`, `runReminders`, `sendPush` n'ont toujours **aucun test
-  unitaire direct**. Inchangé.
+- **`npm run build`** — un `next dev` tourne sur 3100, la règle du repo
+  l'interdit. Le build de production n'a jamais tourné sur ce code.
+- **Rien n'est poussé ni déployé.** La prod est toujours en v1.2.1.0.
+- **Aucune recette sur les données réelles d'Aramis** : tout s'est fait dans le
+  store du compte agent. Les vues sont donc vérifiées sur 3 items, pas sur son
+  vrai agenda.
+- **La synchro CalDAV n'a pas tourné** sur ce code : le compte agent n'a pas
+  d'identifiants Apple. Les événements de journal `caldav` sont donc testés
+  unitairement (`describePatch`) mais **jamais vus partir en vrai**.
+- **`VERSION` et `CHANGELOG.md` ne sont pas bumpés** — c'est le rôle de `/ship`.
+
+**Reste dans le store du compte agent** (à supprimer quand ils n'ont plus
+d'usage) : `it_recette_a`, `it_recette_b`, le portefeuille « Recette v2 », une
+pièce jointe `tarifs.csv`, et l'`it_demo_push` de la session du 05/09.

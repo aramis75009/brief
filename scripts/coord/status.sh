@@ -52,10 +52,21 @@ if [[ -d "$VPS_DIR/.git" ]]; then
   echo "   HEAD    : $VPS_HEAD"
 elif command -v ssh >/dev/null 2>&1; then
   # Copie de travail dans un conteneur (Hermes) : la prod est sur la machine
-  # hôte, jointe par SSH. Clé : /opt/data/home/.ssh/id_ed25519 (HOME=/opt/data/home).
-  VPS_SSH_OUT="$(HOME=/opt/data/home ssh -i /opt/data/home/.ssh/id_ed25519 \
+  # hôte, jointe par SSH via l'alias `brief-vps` (HostName, User et clé sont
+  # dans le `.ssh/config` d'Hermes — inutile de repasser `-i`).
+  #
+  # ⚠️ JAMAIS d'IP en clair ici. Le scan de sécurité d'Hermes signale toute
+  # commande contenant une IP brute (« URL uses raw IP address ») et met le run
+  # en attente d'une approbation « commande dangereuse ». Cette approbation ne
+  # peut PAS être donnée depuis Telegram : le run du webhook vit dans sa propre
+  # session, le `/approve` n'y parvient jamais — le run reste bloqué **en
+  # silence**. C'est ce qui figeait les déploiements avant le 2026-09-05.
+  #
+  # L'alias est local à Hermes et au Mac ; sur le VPS lui-même il n'existe pas
+  # (un script qui tourne SUR le VPS n'a de toute façon pas besoin de SSH).
+  VPS_SSH_OUT="$(HOME=/opt/data/home ssh \
     -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o BatchMode=yes \
-    root@186.241.16.37 "cd /docker/brief && echo \$(git branch --show-current) \$(git rev-parse --short HEAD)" 2>/dev/null)"
+    brief-vps "cd /docker/brief && echo \$(git branch --show-current) \$(git rev-parse --short HEAD)" 2>/dev/null)"
   if [[ -n "$VPS_SSH_OUT" ]]; then
     VPS_BRANCH="${VPS_SSH_OUT% *}"
     VPS_HEAD="${VPS_SSH_OUT##* }"

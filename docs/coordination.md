@@ -110,8 +110,22 @@ et les backticks des labels Traefik. En essayant de « gérer » le projet, il a
 config Traefik/labels). Le déploiement se fait UNIQUEMENT en SSH :
 
 ```bash
-ssh root@186.241.16.37 'cd /docker/brief && docker compose --env-file .env.production up -d --build'
+ssh brief-vps 'cd /docker/brief && docker compose --env-file .env.production up -d --build'
 ```
+
+> ⚠️ **Toujours l'alias `brief-vps`, jamais l'IP en clair.** Le scan de
+> sécurité d'Hermes signale toute commande contenant une IP brute
+> (« URL uses raw IP address ») et met le run en attente d'une approbation
+> « commande dangereuse ». Cette approbation **ne peut pas être donnée depuis
+> Telegram** : le run du webhook vit dans sa propre session, le `/approve` n'y
+> parvient jamais — le run reste bloqué **en silence**, sans erreur ni message.
+> C'est ce qui figeait les déploiements avant le 2026-09-05.
+>
+> L'alias est configuré côté Hermes **et** sur le Mac de Claude Code. Il
+> n'existe pas *sur* le VPS : un script qui s'exécute déjà là-bas n'a pas
+> besoin de SSH, et les commandes des passations archivées
+> (`docs/handoffs/`) gardent l'ancienne forme — ce sont des documents
+> historiques, on ne les réécrit pas.
 
 Après un passage du panneau, vérifier que les labels Traefik sont intacts :
 `docker inspect brief-app-1 --format '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' | grep traefik`

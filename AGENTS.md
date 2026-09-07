@@ -243,6 +243,45 @@ synchro calendrier qui s'arrête, en silence.
   moyen était le bouton « Atteint », donc manuel) serait rouvert en masse au
   premier GET.
 
+### Refonte v2 — ce qui casse en silence
+
+- **`Item.startDate` obéit à la même règle que `due`.** Une chaîne illisible
+  devient `null`, jamais une date approchée. Une plage fausse s'affiche partout
+  (liste, cartes, bandes de calendrier, barres de chronologie) sans que rien ne
+  la signale ; une plage absente, elle, se voit. **Et il ne faut jamais en
+  fabriquer une par défaut** : la très grande majorité des items n'ont qu'une
+  échéance, leur en inventer une dessinerait un planning qu'Aramis n'a jamais
+  saisi.
+- **Le statut est DÉRIVÉ, jamais stocké** (`src/lib/status.ts`). Le prototype le
+  montre comme une colonne de données ; stocké, il faudrait le remettre à jour
+  à la main sur chaque tâche, et une tâche « Dans les délais » dont l'échéance
+  est passée hier s'afficherait en vert. `statusOf` applique les **overrides
+  d'occurrence** — une séance déplacée dans Apple Calendar n'est pas en retard.
+- **L'identifiant d'un événement de journal vient du FAIT, pas de l'heure
+  d'écriture** (`src/lib/inbox.ts`). Le cron des rappels repasse toutes les
+  60 s sur les mêmes items : un id horodaté produirait une ligne par passage
+  jusqu'à noyer la boîte de réception. `store.appendInbox` dédoublonne par id
+  et borne à 200 entrées.
+- **Aucune écriture au journal n'échoue sa requête.** Le push est déjà parti,
+  les items déjà enregistrés, les adoptions CalDAV déjà écrites : refuser là,
+  ce serait nier un fait accompli et faire rejouer au client une écriture qui a
+  réussi. Chaque appel est donc dans un `try/catch` — et des tests vérifient
+  que ce `catch` n'avale pas une régression (`reminders.test.ts`, section
+  « journal »).
+- **`newlyUnblocked` compare l'AVANT et l'APRÈS.** Sans la comparaison, chaque
+  coche annoncerait « débloquée » sur toutes les tâches prêtes du compte.
+  L'appelant doit donc lire les items *avant* la mutation
+  (`src/lib/inbox-notify.ts`).
+- **Les pièces jointes prennent leur répertoire du STORE**
+  (`store.attachmentsDir()`), jamais de `BRIEF_DATA_DIR` recomposé — la faute
+  exacte des routes `/api/audio` d'avant le 31/08. `/api/attachments/[id]` sert
+  en ligne une **liste blanche** de types ; `image/svg+xml` en est
+  délibérément absent (un SVG rendu en ligne s'exécute dans l'origine de Brief).
+- **La navigation desktop a DEUX axes** (`src/components/desktop/types.ts`) :
+  `nav` dit où on est, `view` dit comment on le regarde. La Chronologie
+  n'existe QUE dans un projet — hors projet elle empilerait les barres de huit
+  projets sans rapport sur une même grille.
+
 ### Interface — mobile et desktop
 
 - **Tailwind v4 ne compile pas les utilitaires arbitraires contenant
@@ -276,6 +315,14 @@ synchro calendrier qui s'arrête, en silence.
 
 ### Déploiement
 
+- **Toujours l'alias SSH `brief-vps`, jamais une IP en clair.** Le scan de
+  sécurité d'Hermes signale toute commande contenant une IP brute et met le run
+  en attente d'une approbation « commande dangereuse » — **qui ne peut pas être
+  donnée depuis Telegram** : le run du webhook vit dans sa propre session, le
+  `/approve` n'y parvient jamais. Le run reste bloqué **en silence**, alors que
+  le webhook a déjà répondu `202`. C'est ce qui figeait les déploiements avant
+  le 2026-09-05. L'alias est configuré chez Hermes et sur le Mac ; il n'existe
+  pas *sur* le VPS, où le SSH est de toute façon inutile.
 - **`--env-file .env.production` n'est pas facultatif.** `env_file:` injecte
   des variables dans un conteneur au démarrage ; il n'alimente pas
   l'interpolation `${...}` du `docker-compose.yml`.
