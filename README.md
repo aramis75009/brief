@@ -1,10 +1,19 @@
 # Brief
 
-Organiseur personnel piloté à la voix. Tu parles, Whisper transcrit, un LLM
-découpe la note en tâches et rendez-vous datés, tu relis, Brief les garde. Les
-rappels partent en **Web Push** depuis le serveur — iOS ne fournit aucune API
-de notification programmée à une application web, c'est donc au serveur de
-décider de la seconde d'envoi.
+**Application de gestion de projets et de tâches, multi-utilisateurs.** On
+parle (ou tape), Whisper transcrit, un LLM découpe la note en tâches et
+rendez-vous datés, on relit, Brief les garde. Les rappels partent en
+**Web Push** depuis le serveur — iOS ne fournit aucune API de notification
+programmée à une application web, c'est donc au serveur de décider de la
+seconde d'envoi.
+
+Le pilotage à la voix reste le geste signature, mais Brief n'est plus un
+simple organiseur personnel : depuis le 07/09/2026 c'est une vraie app de
+gestion — refonte visuelle v2 (sidebar, cinq vues de tâches, chronologie,
+portefeuilles), **comptes multiples cloisonnés** (Supabase Auth +
+`authorized_users`) et **collaborateurs** : un propriétaire assigne une tâche
+à un autre compte, qui la voit dans son « Mes tâches » et peut la cocher —
+l'item vit toujours chez son propriétaire, jamais copié.
 
 Brief ne dépend d'aucun service de tâches tiers : il possède ses données,
 sans plafond de projets. L'app est **mobile ET desktop** — PWA installée à
@@ -146,6 +155,10 @@ jeton Bearer (machine). Tableau en lecture seule : voir
 | `GET /api/search` | `?q=` | recherche plein-texte |
 | `GET /api/tags` | — | tags existants |
 | `GET /api/tags/[id]` | — | tag |
+| **Collaborateurs** | | |
+| `GET /api/collaborateurs` | — | comptes assignables (hors soi-même, avec `display_name`) |
+| `GET /api/assigned` | — | items des autres comptes assignés à MOI (+ `ownerUserId`) |
+| `POST /api/assigned` | `{ ownerId, id, done }` | coche/décoche une tâche partagée — **le seul geste d'écriture d'un assigné** |
 | **CalDAV Apple** | | |
 | `GET /api/caldav-status` | — | état de la synchro (dernière réussie, erreurs) |
 | `GET /api/cron/caldav-sync` | Bearer | **machine** — tire/pousse `src/lib/caldav.ts` |
