@@ -247,7 +247,7 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: "Pas d'échéance",
       tone: "none",
-      color: "var(--color-ink-3)",
+      color: "var(--color-ink-faint)",
       bg: "transparent",
     };
   }
@@ -257,7 +257,7 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: "Échéance illisible",
       tone: "none",
-      color: "var(--color-ink-3)",
+      color: "var(--color-ink-faint)",
       bg: "transparent",
     };
   }
@@ -280,8 +280,8 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: `${overdueLabel}${timeStr}`,
       tone: "overdue",
-      color: "var(--color-error)",
-      bg: "var(--color-action-lo)",
+      color: "var(--color-late-700)",
+      bg: "var(--color-late-100)",
     };
   }
 
@@ -289,8 +289,8 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: `Aujourd'hui${timeStr}`,
       tone: "today",
-      color: "var(--color-action)",
-      bg: "var(--color-action-lo)",
+      color: "var(--color-ink)",
+      bg: "var(--color-late-100)",
     };
   }
 
@@ -298,8 +298,8 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: `Demain${timeStr}`,
       tone: "tomorrow",
-      color: "var(--color-warn)",
-      bg: "var(--color-p4)",
+      color: "var(--color-idea-700)",
+      bg: "var(--color-idea-100)",
     };
   }
 
@@ -307,8 +307,8 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: `Après-demain${timeStr}`,
       tone: "future",
-      color: "var(--color-ink-2)",
-      bg: "var(--color-page)",
+      color: "var(--color-ink-muted)",
+      bg: "var(--color-bg)",
     };
   }
 
@@ -318,8 +318,8 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
     return {
       label: `${capitalized}${timeStr}`,
       tone: "future",
-      color: "var(--color-ink-2)",
-      bg: "var(--color-page)",
+      color: "var(--color-ink-muted)",
+      bg: "var(--color-bg)",
     };
   }
 
@@ -334,7 +334,7 @@ export function formatRelativeDue(due: string | null, allDay: boolean, now: Date
   return {
     label: `${formatted}${timeStr}`,
     tone: "future",
-    color: "var(--color-ink-2)",
-    bg: "var(--color-page)",
+    color: "var(--color-ink-muted)",
+    bg: "var(--color-bg)",
   };
 }

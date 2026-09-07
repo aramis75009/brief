@@ -33,6 +33,16 @@
   /* Sémantique */
   --color-danger: #E23A2E;
 
+  /* Pastels de statut (refonte v2) — les pastilles « En retard / À risque /
+   * Dans les délais » de la liste, des cartes et de la fiche.
+   *
+   * « À risque » et « Dans les délais » réutilisent délibérément les pastels
+   * idea/meet plutôt que d'en introduire deux de plus : à teintes voisines,
+   * l'œil cesse de les distinguer. Seul le rouge manquait — `--color-danger`
+   * est une couleur de TEXTE et d'accent, illisible en fond de pastille. */
+  --color-late-100: #F7D6D3;
+  --color-late-700: #A3241B;
+
   /* Couleurs de projet — alignées sur les couleurs des calendriers Apple
    * d'Aramis (vérifiées le 22/08/2026 dans l'app Calendrier iPhone).
    * Ordre = tint 1-6, correspond à l'ordre des projets dans projects.ts. */
