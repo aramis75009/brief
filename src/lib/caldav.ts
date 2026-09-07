@@ -1,7 +1,8 @@
 import "server-only";
 import type { Store } from "./store";
+import { caldavEvent } from "./inbox";
 import { shiftDays, zonedParts } from "./zoned";
-import type { Item } from "./types";
+import type { InboxEvent, Item } from "./types";
 // Conversions de dates et application des overrides : pures, partagées avec
 // le client (HomeScreen) — voir `overrides.ts`. Ré-exportées ici pour que les
 // modules serveur et les tests continuent d'importer depuis `./caldav`.
@@ -988,6 +989,28 @@ async function putEvent(calendarUrl: string, item: Item): Promise<void> {
  * chiffré, comme le cron des rappels : une sortie vide ne permettrait pas de
  * distinguer « rien à faire » de « cassé depuis trois jours ».
  */
+/**
+ * Ce qu'une adoption a changé, en français, pour la boîte de réception.
+ *
+ * On nomme les champs qui comptent pour Aramis (horaire, titre, récurrence,
+ * complétion) et on ignore la mécanique interne (`caldavSyncedDue`,
+ * `seriesAnchor`) : « Séance push — ancre de série mise à jour » ne dit rien
+ * à personne. Un patch qui ne touche QUE de la mécanique ne produit pas de
+ * ligne du tout — c'est pour ça que la fonction peut rendre une chaîne vide,
+ * que l'appelant traite comme « rien à raconter ».
+ */
+export function describePatch(patch: Partial<Item>): string {
+  const parts: string[] = [];
+  if (patch.due !== undefined) parts.push("horaire déplacé");
+  if (patch.title !== undefined) parts.push("titre modifié");
+  if (patch.rrule !== undefined) parts.push("récurrence modifiée");
+  if (patch.overrides !== undefined) parts.push("occurrence déplacée");
+  if (patch.exdates !== undefined) parts.push("occurrence supprimée");
+  if (patch.doneAt) parts.push("marqué terminé");
+  if (patch.durationMinutes !== undefined) parts.push("durée modifiée");
+  return parts.join(", ");
+}
+
 export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
   const lastSync = (await readSyncState(store)).lastSyncAt;
   const elapsedMs = Date.now() - lastSync;
@@ -1043,6 +1066,23 @@ export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
 
   const failures: { uid: string; error: string }[] = [];
   let put = 0;
+  /**
+   * Les événements à raconter à la fin du passage.
+   *
+   * Accumulés puis écrits EN UNE FOIS : `appendInbox` relit et réécrit tout le
+   * fichier, et un passage CalDAV peut adopter des dizaines d'éditions — une
+   * écriture par adoption relirait le journal des dizaines de fois.
+   */
+  const journal: InboxEvent[] = [];
+  /**
+   * N'écrit une ligne QUE si le patch touche quelque chose de racontable.
+   * `describePatch` rend une chaîne vide pour un patch purement mécanique
+   * (`caldavSyncedDue`, `seriesAnchor`) — publier « Séance push — » avec un
+   * tiret orphelin serait pire que de se taire.
+   */
+  const note = (item: Item | null, what: string) => {
+    if (item && what) journal.push(caldavEvent(item, what, new Date()));
+  };
   let adopted = 0;
   // Toujours 0 : Brief n'appelle plus jamais DELETE sur iCloud (voir la
   // note « LE CALENDRIER RESTE INTOUCHÉ » en tête de fichier). Le champ reste
@@ -1172,6 +1212,7 @@ export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
           const updated = await store.patchItem(it.id, decision.patch);
           if (updated) {
             adopted += 1;
+            note(updated, describePatch(decision.patch));
             continue; // le calendrier est déjà la vérité : rien à réécrire
           }
         } catch (e) {
@@ -1223,8 +1264,9 @@ export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
         await store.saveItems([{ ...decision.item, id: `caldav-${uid}`, createdAt: now, remindedAt: null, doneAt: null }]);
         externalAdopted += 1;
       } else if (decision.action === "update") {
-        await store.patchItem(existingItem!.id, decision.patch);
+        const updated = await store.patchItem(existingItem!.id, decision.patch);
         externalUpdated += 1;
+        note(updated, describePatch(decision.patch));
       }
       // "noop" (item terminé/supprimé, ou UID tombstoné) : le calendrier
       // reste intouché, rien à faire — voir `decideExternalSync`.
@@ -1246,8 +1288,9 @@ export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
     if (externalByUid.has(it.externalUid)) continue; // déjà traité ci-dessus
     if (it.externalCalendar && agendaReadFailed.has(it.externalCalendar)) continue;
     try {
-      await store.patchItem(it.id, { doneAt: new Date().toISOString() });
+      const updated = await store.patchItem(it.id, { doneAt: new Date().toISOString() });
       externalCompleted += 1;
+      note(updated, "supprimé du calendrier, marqué terminé");
     } catch (e) {
       failures.push({ uid: it.externalUid, error: e instanceof Error ? e.message : "complétion externe échouée" });
     }
@@ -1267,6 +1310,17 @@ export async function runCalDavSync(store: Store): Promise<CalDavSyncRun> {
       lastSyncAt: Date.now(),
       deletedExternalUids: stillPresentDeletedUids,
     });
+  }
+
+  // Le journal en dernier, et son échec n'échoue pas la synchro : les
+  // adoptions sont déjà écrites, et un passage marqué en échec pour cette
+  // seule raison serait rejoué en entier.
+  if (journal.length) {
+    try {
+      await store.appendInbox(journal);
+    } catch {
+      /* journal indisponible — les adoptions, elles, sont bien enregistrées */
+    }
   }
 
   return {

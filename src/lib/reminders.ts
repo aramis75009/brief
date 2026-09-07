@@ -1,6 +1,7 @@
 import "server-only";
 import { applyOverride } from "./caldav";
 import { formatDue } from "./due";
+import { reminderEvent } from "./inbox";
 import { nextOccurrence } from "./rrule";
 import type { Store } from "./store";
 import { sendPushToAll } from "./webpush";
@@ -148,6 +149,9 @@ export async function runReminders(store: Store, now: Date = new Date()): Promis
     ...beforeAnchor.map((item) => ({ id: item.id, patch: { due: item.seriesAnchor! } })),
   ];
 
+  /** Les items dont le push est PARTI — la source du journal, pas `ready`. */
+  const notified: Item[] = [];
+
   if (ready.length) {
     const subs = await store.readSubscriptions();
 
@@ -170,6 +174,7 @@ export async function runReminders(store: Store, now: Date = new Date()): Promis
           }
 
           run.sent += 1;
+          notified.push(item);
           const patch: Partial<Item> = { remindedAt: now.toISOString() };
 
           if (item.rrule && item.due) {
@@ -208,6 +213,18 @@ export async function runReminders(store: Store, now: Date = new Date()): Promis
   // Une seule écriture pour tout le passage : si le processus s'arrête ici,
   // soit tous les marquages sont posés, soit aucun — jamais la moitié.
   await store.patchItems(patches);
+
+  // Le journal vient APRÈS les marquages, et son échec n'échoue pas le passage :
+  // un rappel est parti pour de bon, le nier serait pire que de ne pas le
+  // raconter. Le dédoublonnage par id (`inbox.ts`) fait que le prochain passage
+  // ne réécrira pas les mêmes lignes.
+  if (notified.length) {
+    try {
+      await store.appendInbox(notified.map((item) => reminderEvent(item, now)));
+    } catch {
+      /* journal indisponible — le rappel, lui, est bien parti */
+    }
+  }
 
   return run;
 }

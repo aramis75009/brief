@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { pendingReminders } from "./reminders";
-import type { Item } from "./types";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { pendingReminders, runReminders } from "./reminders";
+import { fakeStore } from "./testing/fake-store";
+import * as webpush from "./webpush";
+import type { InboxEvent, Item } from "./types";
+
+afterEach(() => vi.restoreAllMocks());
 
 /**
  * Le planificateur a deux façons de rater, et une seule se voit :
@@ -114,5 +118,86 @@ describe("pendingReminders", () => {
     const noAnchor = item({ due: "2026-08-01T09:00:00+02:00" });
     const { beforeAnchor } = pendingReminders([noAnchor], NOW);
     expect(beforeAnchor).toHaveLength(0);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Le journal — `runReminders` doit y déposer un événement par rappel PARTI.
+ *
+ * L'écriture est enveloppée dans un `try/catch` (un journal indisponible ne
+ * doit pas faire échouer un passage dont les pushs sont déjà partis). Sans les
+ * tests ci-dessous, ce `catch` avalerait aussi une régression : la fonction
+ * n'écrirait plus rien et tout resterait vert.
+ * ------------------------------------------------------------------------ */
+
+describe("runReminders — journal", () => {
+  /** Un store minimal, avec un espion sur `appendInbox`. */
+  function harness(items: Item[]) {
+    const appended: InboxEvent[][] = [];
+    const patched: { id: string; patch: Partial<Item> }[][] = [];
+    const store = fakeStore({
+      readItems: async () => items,
+      readSubscriptions: async () => [
+        { endpoint: "https://push.example/x", keys: { p256dh: "k", auth: "a" }, createdAt: "2026-08-01T00:00:00Z" },
+      ],
+      patchItems: async (p) => {
+        patched.push(p);
+        return p.length;
+      },
+      appendInbox: async (events) => {
+        appended.push(events);
+        return events;
+      },
+    });
+    return { store, appended, patched };
+  }
+
+  it("dépose un événement quand un rappel est parti", async () => {
+    vi.spyOn(webpush, "sendPushToAll").mockResolvedValue([{ ok: true, endpoint: "https://push.example/x" }]);
+    const { store, appended } = harness([item()]);
+
+    const run = await runReminders(store, NOW);
+
+    expect(run.sent).toBe(1);
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toHaveLength(1);
+    expect(appended[0][0]).toMatchObject({ kind: "reminder", itemId: "i1", readAt: null });
+  });
+
+  it("n'écrit RIEN au journal quand l'envoi a échoué", async () => {
+    // Un rappel qui n'est pas parti ne doit pas être raconté comme parti :
+    // c'est exactement le genre de mensonge que la boîte doit éviter.
+    vi.spyOn(webpush, "sendPushToAll").mockResolvedValue([
+      { ok: false, endpoint: "https://push.example/x", status: 410, error: "refusé", gone: true },
+    ]);
+    const { store, appended } = harness([item()]);
+
+    const run = await runReminders(store, NOW);
+
+    expect(run.sent).toBe(0);
+    expect(appended).toEqual([]);
+  });
+
+  it("n'écrit rien quand il n'y a aucun rappel dû", async () => {
+    const { store, appended } = harness([item({ due: "2026-08-20T09:00:00+02:00" })]);
+    await runReminders(store, NOW);
+    expect(appended).toEqual([]);
+  });
+
+  it("un journal en panne n'empêche pas le passage de réussir", async () => {
+    // Le push est déjà parti : échouer ici le nierait.
+    vi.spyOn(webpush, "sendPushToAll").mockResolvedValue([{ ok: true, endpoint: "https://push.example/x" }]);
+    const store = fakeStore({
+      readItems: async () => [item()],
+      readSubscriptions: async () => [
+        { endpoint: "https://push.example/x", keys: { p256dh: "k", auth: "a" }, createdAt: "2026-08-01T00:00:00Z" },
+      ],
+      patchItems: async () => 1,
+      appendInbox: async () => {
+        throw new Error("disque plein");
+      },
+    });
+
+    await expect(runReminders(store, NOW)).resolves.toMatchObject({ sent: 1 });
   });
 });

@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  agendaWindow,
-  applyOverride,
-  buildEventIcs,
-  calendarForProject,
-  calendarPatch,
-  decideExternalSync,
-  decideSync,
-  parseRemoteEvent,
-  postPutPatch,
-  projectForCalendar,
-  remoteDiffers,
-  remoteDueToItem,
-  toCalendarEvent,
-  unescapeText,
-} from "./caldav";
+import { agendaWindow, applyOverride, buildEventIcs, calendarForProject, calendarPatch, decideExternalSync, decideSync, describePatch, parseRemoteEvent, postPutPatch, projectForCalendar, remoteDiffers, remoteDueToItem, toCalendarEvent, unescapeText } from "./caldav";
 import type { RemoteEvent } from "./caldav";
 import type { Item } from "./types";
 
@@ -769,5 +754,36 @@ describe("decideExternalSync — adoption des événements posés dans Calendrie
   it("un item `brief-*` n'est JAMAIS écrit dans le calendrier — buildEventIcs l'exclut", () => {
     const it = adopted({ externalUid: "91A2AEE9-AD19-42EB-AD7E-ABFF79178A86" });
     expect(buildEventIcs(it)).toBeNull();
+  });
+});
+/* ---------------------------------------------------------------------------
+ * describePatch — ce que la boîte de réception raconte d'une adoption.
+ * ------------------------------------------------------------------------ */
+
+describe("describePatch", () => {
+  it("nomme un horaire déplacé", () => {
+    expect(describePatch({ due: "2026-09-08T10:00:00.000Z" })).toBe("horaire déplacé");
+  });
+
+  it("cumule plusieurs changements dans une seule phrase", () => {
+    expect(describePatch({ due: "2026-09-08T10:00:00.000Z", title: "Neuf" })).toBe(
+      "horaire déplacé, titre modifié",
+    );
+  });
+
+  it("rend une chaîne VIDE pour un patch purement mécanique", () => {
+    // `caldavSyncedDue` et `seriesAnchor` sont de la tuyauterie interne :
+    // « Séance push — ancre de série mise à jour » ne dit rien à personne, et
+    // l'appelant se sert de la chaîne vide pour ne rien écrire du tout.
+    expect(describePatch({ caldavSyncedDue: "20260908T100000Z", seriesAnchor: "2026-09-08T10:00:00.000Z" })).toBe("");
+  });
+
+  it("ne parle pas de complétion quand doneAt est remis à null", () => {
+    expect(describePatch({ doneAt: null })).toBe("");
+  });
+
+  it("distingue une occurrence déplacée d'une occurrence supprimée", () => {
+    expect(describePatch({ overrides: { "20260906T100000Z": "20260908T100000Z" } })).toBe("occurrence déplacée");
+    expect(describePatch({ exdates: ["20260906T100000Z"] })).toBe("occurrence supprimée");
   });
 });

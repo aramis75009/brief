@@ -1,6 +1,7 @@
 import { recordDeletedExternalUid } from "@/lib/caldav";
 import { isRealCalendarDate } from "@/lib/due";
 import { requireStore } from "@/lib/guard";
+import { announceUnblocked } from "@/lib/inbox-notify";
 import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import type { ItemKind, Item, Priority, Project } from "@/lib/types";
@@ -201,6 +202,10 @@ export async function PATCH(
   // Même traitement d'erreur que `/api/items` : un disque en lecture seule ou
   // une écriture qui échoue doit produire un 503 en français, pas le 500
   // générique de Next — le client affiche le message tel quel.
+  // Lu AVANT la mutation : `announceUnblocked` compare les deux états, et
+  // sans l'avant il annoncerait « débloquée » sur toutes les tâches prêtes.
+  const beforeItems = await store.readItems();
+
   try {
     const updated = await store.patchItem(id, patch);
     if (!updated) {
@@ -211,6 +216,7 @@ export async function PATCH(
     // peuvent tous clore ou rouvrir un objectif. `reconcileObjectives` ne
     // réécrit rien si rien n'a bougé — pas de liste blanche de champs à tenir.
     await reconcileObjectivesInStore(store);
+    await announceUnblocked(store, beforeItems);
     return Response.json({ item: updated });
   } catch (e) {
     return Response.json(
@@ -259,7 +265,8 @@ export async function DELETE(
     // indiscernable d'un événement jamais adopté — et RECRÉE l'item avec le
     // même id déterministe. Lu AVANT `deleteItem` : après, l'item n'existe
     // plus nulle part pour retrouver son `externalUid`.
-    const before = (await store.readItems()).find((i) => i.id === id);
+    const beforeItems = await store.readItems();
+    const before = beforeItems.find((i) => i.id === id);
     if (before?.externalUid) {
       await recordDeletedExternalUid(store, before.externalUid);
     }
@@ -271,6 +278,9 @@ export async function DELETE(
     // Supprimer une tâche liée à un objectif retire une dépendance : l'objectif
     // peut désormais être satisfait (ou n'avoir plus aucune dépendance).
     await reconcileObjectivesInStore(store);
+    // Supprimer une dépendance débloque son successeur, exactement comme la
+    // cocher — l'événement doit partir dans les deux cas.
+    await announceUnblocked(store, beforeItems);
     return Response.json({ ok: true, id });
   } catch (e) {
     return Response.json(

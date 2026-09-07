@@ -32,7 +32,10 @@ import { DashboardView } from "./views/DashboardView";
 import { FilesView } from "./views/FilesView";
 import { C } from "./tokens";
 import { hasViews, VIEWS_FOR, type NavKey, type ViewKey } from "./types";
+import { DesktopCalendar } from "./DesktopCalendar";
 import { fallbackProjectId } from "@/lib/projects";
+import { filterAgendaItems, TASK_KIND_FILTERS, type TaskKindFilter } from "@/lib/desktopDashboard";
+import { sortItems, type TaskSort } from "@/lib/tasks";
 import { graphStatus, graphTasks, indexById } from "@/lib/graph";
 import { groupItems } from "@/lib/views";
 import { relativeSyncLabel } from "@/lib/syncLabel";
@@ -127,6 +130,16 @@ export function DesktopShell({
   const [view, setView] = useState<ViewKey>("list");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  /**
+   * Filtre de type et tri — repris de l'ecran « Taches & RDV » supprime.
+   * Sans eux, la refonte perdrait deux controles qui existaient, ce qui n'est
+   * pas la meme chose que de les remplacer.
+   */
+  const [kindFilter, setKindFilter] = useState<TaskKindFilter>("all");
+  const [sort, setSort] = useState<TaskSort>("urgency");
+  /** Le calendrier garde ses DEUX portees : la semaine du prototype, et le mois de la v1. */
+  const [calendarMode, setCalendarMode] = useState<"week" | "month">("week");
+  const [calendarSelectedId, setCalendarSelectedId] = useState<string | null>(null);
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [focusDetail, setFocusDetail] = useState(false);
@@ -201,9 +214,12 @@ export function DesktopShell({
    * onglet « À trier », parce qu'une idée n'est pas encore une tâche.
    */
   const scoped = useMemo(() => {
-    if (nav === "project" && projectId) return activeItems.filter((it) => it.projectId === projectId);
-    return activeItems;
-  }, [nav, projectId, activeItems]);
+    const base =
+      nav === "project" && projectId
+        ? activeItems.filter((it) => it.projectId === projectId)
+        : activeItems;
+    return sortItems(filterAgendaItems(base, kindFilter), sort);
+  }, [nav, projectId, activeItems, kindFilter, sort]);
 
   const groups = useMemo(
     () => groupItems(scoped, nav === "project" ? "column" : "time", board.columns, now),
@@ -580,8 +596,18 @@ export function DesktopShell({
                 : null
             }
             toolbar={
-              showsTasks && view === "calendar" ? (
-                <WeekNav offset={weekOffset} onChange={setWeekOffset} />
+              showsTasks ? (
+                <ViewToolbar
+                  view={view}
+                  kind={kindFilter}
+                  sort={sort}
+                  weekOffset={weekOffset}
+                  calendarMode={calendarMode}
+                  onKind={setKindFilter}
+                  onSort={setSort}
+                  onWeekOffset={setWeekOffset}
+                  onCalendarMode={setCalendarMode}
+                />
               ) : null
             }
           />
@@ -710,13 +736,24 @@ export function DesktopShell({
               />
             )}
 
-            {showsTasks && view === "calendar" && (
+            {showsTasks && view === "calendar" && calendarMode === "week" && (
               <WeekCalendarView
                 items={scoped}
                 projects={projects}
                 now={now}
                 weekOffset={weekOffset}
                 onOpenTask={openTask}
+              />
+            )}
+
+            {showsTasks && view === "calendar" && calendarMode === "month" && (
+              <DesktopCalendar
+                items={scoped}
+                projects={projects}
+                selectedId={calendarSelectedId}
+                onSelect={setCalendarSelectedId}
+                onToggleDone={onToggleDone}
+                onPostpone={onPostpone}
               />
             )}
 
@@ -804,30 +841,143 @@ export function DesktopShell({
   );
 }
 
-/** Les flèches de semaine du calendrier — dans la barre d'outils, pas dans la vue. */
-function WeekNav({ offset, onChange }: { offset: number; onChange: (n: number) => void }) {
-  const btn = {
+/**
+ * La barre d'outils de la vue courante.
+ *
+ * Le filtre de type et le tri viennent de l'ancien ecran « Taches & RDV » ;
+ * la navigation de semaine et la bascule semaine/mois n'apparaissent que sur
+ * le calendrier. Un controle sans effet sur la vue affichee ne s'y montre pas
+ * plutot que d'y rester grise.
+ */
+function ViewToolbar({
+  view,
+  kind,
+  sort,
+  weekOffset,
+  calendarMode,
+  onKind,
+  onSort,
+  onWeekOffset,
+  onCalendarMode,
+}: {
+  view: ViewKey;
+  kind: TaskKindFilter;
+  sort: TaskSort;
+  weekOffset: number;
+  calendarMode: "week" | "month";
+  onKind: (k: TaskKindFilter) => void;
+  onSort: (s: TaskSort) => void;
+  onWeekOffset: (n: number) => void;
+  onCalendarMode: (m: "week" | "month") => void;
+}) {
+  const chip = {
     height: 32,
     padding: "0 12px",
     borderRadius: 999,
     border: "1px solid var(--hairline-2)",
-    background: "none",
+    background: "var(--color-surface)",
     fontFamily: "inherit",
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
   } as const;
+
+  const onCalendar = view === "calendar";
+
   return (
     <div className="flex items-center gap-2">
-      <button type="button" aria-label="Semaine précédente" onClick={() => onChange(offset - 1)} style={btn}>
-        ‹
-      </button>
-      <button type="button" onClick={() => onChange(0)} style={{ ...btn, fontWeight: 700 }}>
-        {offset === 0 ? "Cette semaine" : offset === 1 ? "Semaine +1" : offset === -1 ? "Semaine −1" : `Semaine ${offset > 0 ? "+" : "−"}${Math.abs(offset)}`}
-      </button>
-      <button type="button" aria-label="Semaine suivante" onClick={() => onChange(offset + 1)} style={btn}>
-        ›
-      </button>
+      {/* Le filtre de type ne dit rien sur le tableau de bord ni les fichiers. */}
+      {(view === "list" || view === "board" || view === "timeline" || onCalendar) && (
+        <div className="flex gap-0.5" style={{ padding: 3, background: "var(--color-bg)", borderRadius: 999 }}>
+          {TASK_KIND_FILTERS.map((f) => {
+            const on = f.key === kind;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => onKind(f.key)}
+                aria-pressed={on}
+                style={{
+                  height: 26,
+                  padding: "0 11px",
+                  borderRadius: 999,
+                  border: "none",
+                  background: on ? "var(--color-ink)" : "transparent",
+                  color: on ? "#FFFFFF" : "var(--color-ink-muted)",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {view === "list" && (
+        <select
+          value={sort}
+          onChange={(e) => onSort(e.target.value as TaskSort)}
+          aria-label="Trier"
+          style={chip}
+        >
+          <option value="urgency">Tri : urgence</option>
+          <option value="due">Tri : échéance</option>
+          <option value="priority">Tri : priorité</option>
+          <option value="project">Tri : projet</option>
+        </select>
+      )}
+
+      {onCalendar && (
+        <>
+          <div className="flex gap-0.5" style={{ padding: 3, background: "var(--color-bg)", borderRadius: 999 }}>
+            {(["week", "month"] as const).map((m) => {
+              const on = m === calendarMode;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => onCalendarMode(m)}
+                  aria-pressed={on}
+                  style={{
+                    height: 26,
+                    padding: "0 11px",
+                    borderRadius: 999,
+                    border: "none",
+                    background: on ? "var(--color-ink)" : "transparent",
+                    color: on ? "#FFFFFF" : "var(--color-ink-muted)",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {m === "week" ? "Semaine" : "Mois"}
+                </button>
+              );
+            })}
+          </div>
+
+          {calendarMode === "week" && (
+            <div className="flex items-center gap-1.5">
+              <button type="button" aria-label="Semaine précédente" onClick={() => onWeekOffset(weekOffset - 1)} style={chip}>
+                ‹
+              </button>
+              <button type="button" onClick={() => onWeekOffset(0)} style={{ ...chip, fontWeight: 700 }}>
+                {weekOffset === 0
+                  ? "Cette semaine"
+                  : `Semaine ${weekOffset > 0 ? "+" : "−"}${Math.abs(weekOffset)}`}
+              </button>
+              <button type="button" aria-label="Semaine suivante" onClick={() => onWeekOffset(weekOffset + 1)} style={chip}>
+                ›
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

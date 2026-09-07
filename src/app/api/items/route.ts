@@ -1,6 +1,8 @@
 import { completionPatch } from "@/lib/completion";
 import { isRealCalendarDate } from "@/lib/due";
 import { requireStore } from "@/lib/guard";
+import { captureEvent } from "@/lib/inbox";
+import { announceUnblocked } from "@/lib/inbox-notify";
 import { reconcileObjectivesInStore } from "@/lib/objective-reconcile";
 import { fallbackProjectId, isPriority } from "@/lib/projects";
 import type { DraftItem, Item, ItemKind, SaveResult } from "@/lib/types";
@@ -148,6 +150,18 @@ export async function POST(req: Request): Promise<Response> {
       // Un item créé (ou ré-enregistré) peut déjà porter un `objectiveId` :
       // un objectif auto-atteint doit alors se rouvrir.
       await reconcileObjectivesInStore(store);
+      // Le journal APRÈS l'écriture, et son échec n'échoue pas la requête :
+      // les items sont enregistrés, refuser ici les ferait renvoyer en
+      // double au prochain essai du client. L'id de l'événement vient du
+      // premier item, donc un ré-envoi ne crée pas de seconde ligne.
+      const event = captureEvent(toSave, new Date());
+      if (event) {
+        try {
+          await store.appendInbox([event]);
+        } catch {
+          /* journal indisponible — les items, eux, sont bien là */
+        }
+      }
     } catch (e) {
       // Le disque peut être en lecture seule (Vercel). On le dit plutôt que de
       // laisser croire que les items sont enregistrés.
@@ -202,7 +216,8 @@ export async function PATCH(req: Request): Promise<Response> {
   // enregistrerait la mauvaise occurrence comme faite.
   const completedAt = typeof body.completedAt === "string" ? body.completedAt : undefined;
 
-  const item = (await store.readItems()).find((i) => i.id === id);
+  const before = await store.readItems();
+  const item = before.find((i) => i.id === id);
   if (!item) return Response.json({ error: "Item introuvable." }, { status: 404 });
 
   const { kind, patch } = completionPatch(item, body.done, new Date(), completedAt);
@@ -212,6 +227,7 @@ export async function PATCH(req: Request): Promise<Response> {
     if (!updated) return Response.json({ error: "Item introuvable." }, { status: 404 });
     // Cocher/décocher une tâche peut clore (ou rouvrir) l'objectif qu'elle sert.
     await reconcileObjectivesInStore(store);
+    await announceUnblocked(store, before);
     // `kind` permet au client de dire « repoussé à mardi » plutôt que « fait »
     // sur une récurrence — sans ça, cocher paraîtrait ne rien faire.
     return Response.json({ item: updated, outcome: kind });
