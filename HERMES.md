@@ -13,11 +13,21 @@
 | | |
 |---|---|
 | Orchestrateur | Hermes Agent v0.20.0 (2026.8.3), Nous Research, `/opt/hermes` |
-| Modèle | `deepseek/deepseek-v4-flash-0731` via OpenRouter |
-| Modèle vision | `google/gemma-4-26b-a4b-it:free`, même passerelle |
+| Passerelle | **Ollama Cloud** (abonnement Pro). OpenRouter n'est plus qu'un **repli de secours** (`google/gemma-4-27b-it:free`), si Ollama tombe |
+| Modèle par défaut | `glm-5.3-flash` — et `glm-5.3` épinglé pour les tâches lourdes (c'est lui qui domine les compteurs) |
+| Modèle vision | `minimax-m3` (Ollama Cloud) — plus du tout gemma/OpenRouter |
+| Extraction web | `minimax-m3` |
+| Compression de contexte | `deepseek-v4-flash:0731` |
+| Tâches auxiliaires (titres, skills hub, approbations, triage) | `nemotron-3-nano:30b` |
+| Curator / décomposition kanban | `deepseek-v4-pro:0813` |
 | Conteneur | `hermes-agent-samk-hermes-agent-1` (Docker, PID 1 = `s6-svscan`) |
 | Interface | WhatsApp, numéro bridé à celui d'Aramis |
 | Outils | `search_files` (grep + glob), `read_file` (pagination ~2000 l.), terminal, `clarify` |
+
+> Modèles vérifiés dans `/opt/data/config.yaml` le 2026-09-07. Cette ligne a
+> dérivé une fois (elle annonçait `deepseek-v4-flash` via OpenRouter alors
+> qu'Ollama Cloud avait pris le relais) : si tu constates un écart, c'est le
+> fichier de config qui fait foi, pas ce tableau.
 
 ---
 
@@ -200,7 +210,9 @@ Deux points qui te concernent particulièrement :
 - **La ligne `Agent`.** Tes commits portent `Aramis
   <aramis.begnene@gmail.com>` : rien dans git ne distingue ton travail du
   sien. `HANDOFF.md` est le seul endroit où l'attribution existe. Écris
-  `Hermes Agent v0.20.0 · deepseek-v4-flash`.
+  `Hermes Agent v0.20.0 · <le modèle qui a réellement fait la session>` —
+  celui qui a tourné, pas celui configuré par défaut. C'est la seule trace
+  qui dit à la session suivante avec quoi le travail a été fait.
 - **La section `Validations`.** Trois états : passant, échoué, **non lancé**.
   Colle la sortie réelle. Si tu as sauté une commande, écris-le — c'est
   exactement l'information qu'Aramis cherche en premier quand quelque chose
