@@ -167,7 +167,8 @@ répertoire `attachments/` sont créés paresseusement au premier usage ;
 Une fois la PR fusionnée dans `main` :
 
 ```bash
-ssh brief-vps 'cd /docker/brief && git fetch origin && git reset --hard origin/main \
+ssh brief-vps 'cd /docker/brief && bash deploy/backup.sh && git fetch origin \
+  && git pull --ff-only origin main \
   && docker compose --env-file .env.production up -d --build'
 ```
 
@@ -181,7 +182,10 @@ Trois choses qui font échouer un déploiement en silence si on les oublie :
    met un run contenant une IP brute en attente d'une approbation « commande
    dangereuse » qui **ne peut pas être donnée depuis Telegram** : le run reste
    bloqué en silence alors que le webhook a déjà répondu `202`.
-3. **Sauvegarder avant** : `bash deploy/backup.sh` sur le VPS.
+3. **`git pull --ff-only`, pas `reset --hard`.** Le `--ff-only` échoue
+   bruyamment si la copie du VPS a divergé ; un `reset --hard` effacerait la
+   divergence sans rien dire. La sauvegarde (`deploy/backup.sh`) est en tête de
+   la commande pour la même raison.
 
 Vérifications après déploiement :
 
