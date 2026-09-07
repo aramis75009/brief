@@ -18,6 +18,16 @@ const nextConfig: NextConfig = {
   // garde donc la sortie autonome dont le Dockerfile a besoin.
   output: process.env.VERCEL ? undefined : "standalone",
 
+  // Préviews dev derrière Traefik (07/09) — Next 16 bloque les chunks JS
+  // servis depuis un Host différent de celui qui a démarré le dev server.
+  // Sans cette liste, l'écran reste figé sur le spinner en attendant
+  // des bundles qui ne viendront jamais (cf. lesson 2026-09-07).
+  allowedDevOrigins: [
+    "brief-v2.dev.srv1899780.hstgr.cloud",
+    "brief-toolbar.dev.srv1899780.hstgr.cloud",
+    "localhost",
+  ],
+
   async rewrites() {
     return [
       {
