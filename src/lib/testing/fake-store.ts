@@ -32,6 +32,12 @@ export function fakeStore(overrides: Partial<Store> = {}): Store {
     readObjectives: notStubbed("readObjectives"),
     writeObjectives: notStubbed("writeObjectives"),
     updateObjectivesAtomically: notStubbed("updateObjectivesAtomically"),
+    readPortfolios: notStubbed("readPortfolios"),
+    writePortfolios: notStubbed("writePortfolios"),
+    updatePortfoliosAtomically: notStubbed("updatePortfoliosAtomically"),
+    readInbox: notStubbed("readInbox"),
+    appendInbox: notStubbed("appendInbox"),
+    markInboxRead: notStubbed("markInboxRead"),
     readItems: notStubbed("readItems"),
     saveItems: notStubbed("saveItems"),
     patchItem: notStubbed("patchItem"),
@@ -44,6 +50,7 @@ export function fakeStore(overrides: Partial<Store> = {}): Store {
     readUserJson: notStubbed("readUserJson"),
     writeUserJson: notStubbed("writeUserJson"),
     audioDir: notStubbed("audioDir"),
+    attachmentsDir: notStubbed("attachmentsDir"),
   };
 
   return { ...base, ...overrides };

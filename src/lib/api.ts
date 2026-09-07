@@ -2,7 +2,7 @@
 
 import type { AgendaItem } from "./agenda";
 import type { Settings } from "./settings";
-import type { DraftItem, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Project, SaveResult, Tag } from "./types";
+import type { Attachment, DraftItem, InboxEvent, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Portfolio, Project, SaveResult, Tag } from "./types";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -472,4 +472,86 @@ export async function updateObjective(
 
 export async function deleteObjective(id: string): Promise<{ ok: boolean }> {
   return jsonFetch("/api/objectives", { method: "DELETE", body: JSON.stringify({ id }) }, TIMEOUTS.projects);
+}
+
+/* --- Portefeuilles -------------------------------------------------------- */
+
+export async function fetchPortfolios(): Promise<Portfolio[]> {
+  return jsonFetch<Portfolio[]>("/api/portfolios", {}, TIMEOUTS.projects);
+}
+
+export async function createPortfolio(name: string, projectIds: string[] = []): Promise<Portfolio> {
+  return jsonFetch<Portfolio>(
+    "/api/portfolios",
+    { method: "POST", body: JSON.stringify({ name, projectIds }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function updatePortfolio(
+  id: string,
+  patch: { name?: string; projectIds?: string[]; archived?: boolean },
+): Promise<Portfolio> {
+  return jsonFetch<Portfolio>(
+    "/api/portfolios",
+    { method: "PATCH", body: JSON.stringify({ id, ...patch }) },
+    TIMEOUTS.projects,
+  );
+}
+
+export async function deletePortfolio(id: string): Promise<{ ok: boolean }> {
+  return jsonFetch("/api/portfolios", { method: "DELETE", body: JSON.stringify({ id }) }, TIMEOUTS.projects);
+}
+
+/* --- Boîte de réception --------------------------------------------------- */
+
+export type InboxPayload = { events: InboxEvent[]; unread: number };
+
+export async function fetchInbox(): Promise<InboxPayload> {
+  return jsonFetch<InboxPayload>("/api/inbox", {}, TIMEOUTS.projects);
+}
+
+/** `ids` vide = tout marquer comme lu. */
+export async function markInboxRead(ids: string[] = []): Promise<InboxPayload> {
+  return jsonFetch<InboxPayload>(
+    "/api/inbox",
+    { method: "PATCH", body: JSON.stringify({ ids }) },
+    TIMEOUTS.projects,
+  );
+}
+
+/* --- Pièces jointes ------------------------------------------------------- */
+
+/**
+ * Dépose un fichier sur un item. Rend la pièce ET l'item à jour : le serveur
+ * est seul à savoir ce que l'item porte après coup, et le client qui
+ * reconstruirait la liste lui-même écraserait une pièce ajoutée depuis un
+ * autre onglet.
+ */
+export async function uploadAttachment(
+  itemId: string,
+  file: File,
+): Promise<{ attachment: Attachment; item: Item }> {
+  const form = new FormData();
+  form.append("itemId", itemId);
+  form.append("file", file);
+  const res = await apiFetch("/api/attachments", { method: "POST", body: form });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new ApiError(detail?.error ?? "Le fichier n'a pas été enregistré.");
+  }
+  return (await res.json()) as { attachment: Attachment; item: Item };
+}
+
+export async function deleteAttachment(id: string): Promise<{ ok: boolean; id: string }> {
+  return jsonFetch(
+    `/api/attachments/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    TIMEOUTS.projects,
+  );
+}
+
+/** L'URL de téléchargement d'une pièce jointe — même origine, cookies inclus. */
+export function attachmentUrl(id: string): string {
+  return `/api/attachments/${encodeURIComponent(id)}`;
 }

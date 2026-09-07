@@ -77,6 +77,22 @@ export type DraftItem = {
   projectId: string;
   /** ISO 8601 avec décalage, ex. `2026-08-12T14:00:00+02:00`. `null` = sans échéance. */
   due: string | null;
+  /**
+   * Borne BASSE d'une plage de dates. `null`/absent = l'item n'a qu'une
+   * échéance, et c'est le cas de la très grande majorité — ne jamais en
+   * fabriquer une par défaut.
+   *
+   * Sans ce champ, une plage (« 9 – 11 sep ») est impossible à rendre : la
+   * liste, les cartes du tableau, les bandes du calendrier et les barres de
+   * la chronologie n'auraient qu'un point. Correspondance CalDAV : DTSTART
+   * d'un VTODO (`due` reste DUE), DTSTART d'un VEVENT (DTEND vient toujours
+   * de `durationMinutes`).
+   *
+   * ⚠️ Même règle que `due` : une chaîne non parseable devient `undefined`,
+   * jamais une date approchée. Une plage fausse ne se voit pas ; une plage
+   * absente, si.
+   */
+  startDate?: string | null;
   /** Journée entière : l'heure de `due` est alors sans signification. */
   allDay: boolean;
   priority: Priority;
@@ -132,6 +148,8 @@ export type DraftItem = {
   audioOrigin?: AudioOrigin;
   /** Identifiant de l'audio persisté (`audio_…`) — pour rejouer l'enregistrement. */
   audioId?: string;
+  /** Pièces jointes de l'item — alimente la vue « Fichiers ». */
+  attachments?: Attachment[];
   /** Statut : "active" par défaut. "idea" pour la boîte à idées. */
   status?: ItemStatus;
 };
@@ -445,6 +463,75 @@ export type Objective = {
    * non faite ou si on en ajoute une.
    */
   achievedManually?: boolean;
+};
+
+/* ---------------------------------------------------------------------------
+ * Pièces jointes — la vue « Fichiers » n'est que la lecture transverse de ce
+ * que les items portent. Il n'existe pas de fichier sans item propriétaire :
+ * supprimer l'item supprime ses pièces.
+ * ------------------------------------------------------------------------ */
+
+export type Attachment = {
+  /** `att_<base36>` — sert AUSSI de nom sur disque, d'où la validation stricte. */
+  id: string;
+  /** Nom d'origine, tel que déposé. Affiché, jamais utilisé comme chemin. */
+  name: string;
+  mime: string;
+  sizeBytes: number;
+  addedAt: string;
+};
+
+/* ---------------------------------------------------------------------------
+ * Portefeuilles — un groupe de projets, et rien de plus.
+ *
+ * Un portefeuille ne possède ni tâche ni objectif : il n'agrège que des
+ * projets, dont il tire sa santé et sa progression. C'est ce qui lui permet de
+ * rester juste sans maintenance — supprimer un projet le retire du groupe, il
+ * n'y a pas de compteur à corriger.
+ * ------------------------------------------------------------------------ */
+
+export type Portfolio = {
+  id: string;
+  name: string;
+  /** Ids de projets. Un projet peut appartenir à plusieurs portefeuilles. */
+  projectIds: string[];
+  createdAt: string;
+  archived?: boolean;
+};
+
+/* ---------------------------------------------------------------------------
+ * Boîte de réception — le journal de ce que Brief a fait SANS qu'on le lui
+ * demande.
+ *
+ * C'est la seule façon d'apprendre qu'un rappel est parti, qu'Apple Calendar a
+ * déplacé un rendez-vous ou qu'une tâche vient d'être débloquée : ces trois
+ * événements sont aujourd'hui invisibles, ils ne laissent qu'une ligne dans le
+ * journal d'un conteneur que personne ne lit.
+ * ------------------------------------------------------------------------ */
+
+export type InboxEventKind =
+  /** Un rappel Web Push est parti. */
+  | "reminder"
+  /** La synchro a adopté une édition faite dans l'app Calendrier. */
+  | "caldav"
+  /** La dernière dépendance d'une tâche vient d'être faite. */
+  | "unblocked"
+  /** Une dictée a été structurée en items. */
+  | "capture"
+  /** Un objectif a été atteint par convergence de ses dépendances. */
+  | "objective";
+
+export type InboxEvent = {
+  id: string;
+  kind: InboxEventKind;
+  title: string;
+  body: string;
+  /** ISO — l'instant de l'événement, pas celui de l'écriture. */
+  at: string;
+  /** `null` tant qu'il n'a pas été lu. Pilote le badge de la sidebar. */
+  readAt: string | null;
+  itemId?: string | null;
+  projectId?: string | null;
 };
 
 /**

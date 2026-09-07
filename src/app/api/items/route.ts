@@ -35,12 +35,22 @@ function coerce(input: unknown, knownProjects: Set<string>, fallback: string): D
     if (isRealCalendarDate(v.due) && !Number.isNaN(parsed.getTime())) due = v.due;
   }
 
+  // Borne basse de la plage — même règle que `due`. Absente dans la très
+  // grande majorité des cas, et il ne faut surtout pas en fabriquer une : une
+  // plage inventée s'affiche partout sans que rien ne la signale.
+  let startDate: string | null = null;
+  if (typeof v.startDate === "string" && v.startDate.trim()) {
+    const parsed = new Date(v.startDate);
+    if (isRealCalendarDate(v.startDate) && !Number.isNaN(parsed.getTime())) startDate = v.startDate;
+  }
+
   return {
     id,
     kind,
     title,
     projectId,
     due,
+    startDate,
     allDay: v.allDay === true,
     priority: isPriority(v.priority) ? v.priority : 4,
     rrule: typeof v.rrule === "string" && /^FREQ=/i.test(v.rrule) ? v.rrule : null,

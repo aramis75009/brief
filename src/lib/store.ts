@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { SEED_PROJECTS } from "./projects";
 import { isRecord, type PushSubscriptionRecord } from "./push-subscription";
 import { normalizeSettings, type Settings } from "./settings";
-import type { Item, KanbanBoard, Objective, Project, Tag } from "./types";
+import type { InboxEvent, Item, KanbanBoard, Objective, Portfolio, Project, Tag } from "./types";
 
 /**
  * Stockage de Brief — fichiers JSON sur le disque du serveur, UN JEU PAR
@@ -113,6 +113,38 @@ export type Store = {
   updateObjectivesAtomically(
     fn: (objectives: Objective[], items: Item[]) => Objective[] | null,
   ): Promise<Objective[]>;
+  readPortfolios(): Promise<Portfolio[]>;
+  writePortfolios(portfolios: Portfolio[]): Promise<void>;
+  /**
+   * Lecture-modification-écriture ATOMIQUE des portefeuilles. `fn` renvoie le
+   * nouveau tableau, ou `null` pour ne rien écrire. Nécessaire dès qu'une
+   * route modifie un portefeuille à partir de son contenu : lire puis écrire
+   * en deux temps laisse une fenêtre où un second appel écrase le premier.
+   */
+  updatePortfoliosAtomically(
+    fn: (portfolios: Portfolio[]) => Portfolio[] | null,
+  ): Promise<Portfolio[]>;
+  /**
+   * Le journal du compte, **du plus récent au plus ancien**.
+   *
+   * L'ordre est une garantie du store, pas une convention d'appelant : la
+   * boîte de réception, le badge et le cron le lisent tous les trois, et un
+   * seul d'entre eux qui trie à l'envers afficherait un journal qui remonte
+   * le temps sans que rien ne le signale.
+   */
+  readInbox(): Promise<InboxEvent[]>;
+  /**
+   * Ajoute des événements au journal, dédoublonnés par `id` et rognés à
+   * `INBOX_MAX` entrées.
+   *
+   * Le rognage n'est pas une optimisation : `/api/cron/reminders` passe toutes
+   * les 60 secondes sur tous les comptes. Sans borne, `inbox.json` grossit sans
+   * fin et finit par coûter une lecture-écriture complète du fichier à chaque
+   * passage.
+   */
+  appendInbox(events: InboxEvent[]): Promise<InboxEvent[]>;
+  /** Marque des événements comme lus. `ids` vide = tout le journal. */
+  markInboxRead(ids: string[]): Promise<InboxEvent[]>;
   readItems(): Promise<Item[]>;
   saveItems(items: Item[]): Promise<void>;
   patchItem(id: string, patch: Partial<Item>): Promise<Item | null>;
@@ -147,6 +179,15 @@ export type Store = {
    * n'importe quel compte pouvait alors lire les dictées d'un autre.
    */
   audioDir(): string;
+  /**
+   * Le répertoire des pièces jointes du compte.
+   *
+   * Même raison d'être qu'`audioDir()` : une route qui recomposerait ce chemin
+   * depuis `BRIEF_DATA_DIR` rouvrirait exactement la faille du 2026-08-31 —
+   * les ids sont énumérables, et n'importe quel compte authentifié lirait les
+   * fichiers d'un autre. `no-direct-store-access.test.ts` fige la règle.
+   */
+  attachmentsDir(): string;
 };
 
 /** Un nom de fichier de données, sans chemin. Interdit toute remontée (`..`). */
@@ -566,12 +607,128 @@ function makeStore(dir: string, key: string): Store {
       return serialize(() => writeJson(name, value));
     },
 
+    /* --- Portefeuilles --------------------------------------------------- */
+
+    async readPortfolios() {
+      const stored = await readJson<Portfolio[]>("portfolios.json", []);
+      return stored.map(normalizePortfolio);
+    },
+
+    writePortfolios(portfolios) {
+      return serialize(() => writeJson("portfolios.json", portfolios));
+    },
+
+    updatePortfoliosAtomically(fn) {
+      return serialize(async () => {
+        const stored = await readJson<Portfolio[]>("portfolios.json", []);
+        const portfolios = stored.map(normalizePortfolio);
+        const next = fn(portfolios);
+        if (next && next !== portfolios) await writeJson("portfolios.json", next);
+        return next ?? portfolios;
+      });
+    },
+
+    /* --- Boîte de réception ---------------------------------------------- */
+
+    async readInbox() {
+      const stored = await readJson<InboxEvent[]>("inbox.json", []);
+      return sortInbox(stored.filter(isInboxEvent));
+    },
+
+    appendInbox(events) {
+      return serialize(async () => {
+        const stored = await readJson<InboxEvent[]>("inbox.json", []);
+        const existing = stored.filter(isInboxEvent);
+        // Dédoublonnage par `id` : les crons repassent toutes les 60 s et
+        // recalculent les mêmes faits. Sans cette garde, « rappel envoyé »
+        // s'écrirait une fois par passage jusqu'à noyer le journal.
+        const seen = new Set(existing.map((e) => e.id));
+        const fresh = events.filter((e) => isInboxEvent(e) && !seen.has(e.id));
+        if (fresh.length === 0) return sortInbox(existing);
+        const next = sortInbox([...existing, ...fresh]).slice(0, INBOX_MAX);
+        await writeJson("inbox.json", next);
+        return next;
+      });
+    },
+
+    markInboxRead(ids) {
+      return serialize(async () => {
+        const stored = await readJson<InboxEvent[]>("inbox.json", []);
+        const existing = sortInbox(stored.filter(isInboxEvent));
+        const target = ids.length ? new Set(ids) : null;
+        const at = new Date().toISOString();
+        let touched = false;
+        const next = existing.map((e) => {
+          if (e.readAt) return e;
+          if (target && !target.has(e.id)) return e;
+          touched = true;
+          return { ...e, readAt: at };
+        });
+        if (!touched) return existing;
+        await writeJson("inbox.json", next);
+        return next;
+      });
+    },
+
     /* --- Enregistrements vocaux ------------------------------------------ */
 
     audioDir() {
       return join(dir, "audio");
     },
+
+    attachmentsDir() {
+      return join(dir, "attachments");
+    },
   };
+}
+
+/* --- Normalisation des portefeuilles et du journal ------------------------ */
+
+/**
+ * Un portefeuille lu du disque, avec ses champs obligatoires garantis.
+ *
+ * `projectIds` doit être un tableau de chaînes : c'est lui qui pilote tous les
+ * calculs de santé et de progression, et un `undefined` venu d'un fichier écrit
+ * par une version antérieure ferait lever `.map()` au premier rendu — dans un
+ * composant client, donc en écran blanc.
+ */
+function normalizePortfolio(p: Portfolio): Portfolio {
+  return {
+    ...p,
+    projectIds: Array.isArray(p.projectIds) ? p.projectIds.filter((id) => typeof id === "string") : [],
+  };
+}
+
+/** Bornage du journal — voir `appendInbox` dans le type `Store`. */
+const INBOX_MAX = 200;
+
+const INBOX_KINDS = new Set(["reminder", "caldav", "unblocked", "capture", "objective"]);
+
+/**
+ * Un événement de journal valide.
+ *
+ * Le filtre existe parce que ce fichier est écrit par les DEUX crons en plus
+ * des routes : une entrée mal formée par l'un d'eux ne doit pas faire tomber
+ * la boîte de réception de l'autre. On jette l'entrée, on garde le journal.
+ */
+function isInboxEvent(value: unknown): value is InboxEvent {
+  if (typeof value !== "object" || value === null) return false;
+  const e = value as Record<string, unknown>;
+  return (
+    typeof e.id === "string" &&
+    typeof e.title === "string" &&
+    typeof e.body === "string" &&
+    typeof e.at === "string" &&
+    !Number.isNaN(new Date(e.at as string).getTime()) &&
+    typeof e.kind === "string" &&
+    INBOX_KINDS.has(e.kind as string) &&
+    (e.readAt === null || typeof e.readAt === "string")
+  );
+}
+
+/** Du plus récent au plus ancien — la garantie d'ordre du type `Store`. */
+function sortInbox(events: InboxEvent[]): InboxEvent[] {
+  return [...events].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 
 /** Les stores déjà construits — un objet stable par compte. */

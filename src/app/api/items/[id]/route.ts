@@ -65,6 +65,20 @@ export function sanitizePatch(
       out.allDay = true;
     }
   }
+  // Borne basse de la plage. MÊME RÈGLE que `due` — une chaîne illisible
+  // devient « pas de début », jamais une date approchée : une plage fausse
+  // s'affiche sans que rien ne la signale, une plage absente se voit.
+  //
+  // Différence avec `due` : l'échec efface `startDate` SEUL et ne touche pas
+  // à `allDay`. Une plage illisible ne doit pas transformer un rendez-vous
+  // horaire en journée entière.
+  if (v.startDate === null || v.startDate === "") {
+    out.startDate = null;
+  } else if (typeof v.startDate === "string" && v.startDate.trim()) {
+    const parsed = new Date(v.startDate);
+    out.startDate =
+      isRealCalendarDate(v.startDate) && !Number.isNaN(parsed.getTime()) ? v.startDate : null;
+  }
   if (typeof v.allDay === "boolean") out.allDay = v.allDay;
   if (v.rrule === null || v.rrule === "") {
     out.rrule = null;
