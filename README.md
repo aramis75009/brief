@@ -202,6 +202,16 @@ régression n'y produirait aucun test rouge. Voir
 
 ## Pièges à connaître
 
+### Préviews dev derrière Traefik — Next 16 bloque les chunks cross-host
+
+Quand on expose un `next dev` via Traefik sur un sous-domaine `*.dev.srv...`,
+**chaque nouveau sous-domaine doit être ajouté à `allowedDevOrigins` dans
+`next.config.ts`**, sans quoi le navigateur reste figé sur le spinner (la
+page charge, le HTML arrive, mais les bundles JS ne se servent jamais —
+ils sont refusés en cross-origin). Vu deux fois en septembre 2026
+(`brief-v2.dev...`, `brief-toolbar.dev...`) ; ajouter systématiquement
+le host dans la liste au moment où on crée la route Traefik.
+
 - **La priorité 1 est la PLUS HAUTE** (convention iCalendar). Une seule échelle
   dans tout le code — ne pas en réintroduire une seconde sans conversion testée.
 - **Brief résout les dates lui-même.** `/api/parse` injecte l'instant courant
