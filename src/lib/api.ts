@@ -3,6 +3,7 @@
 import type { AgendaItem } from "./agenda";
 import type { Settings } from "./settings";
 import type { Attachment, DraftItem, InboxEvent, Item, KanbanBoard, Objective, ObjectiveHorizon, Overview, Portfolio, Project, SaveResult, Tag } from "./types";
+import type { UserPrefs } from "./prefs";
 
 /** Erreur porteuse d'un message déjà lisible en français. */
 export class ApiError extends Error {
@@ -588,6 +589,36 @@ export async function setAssignedDone(
   return jsonFetch(
     "/api/assigned",
     { method: "POST", body: JSON.stringify({ ownerId, id, done }) },
+    TIMEOUTS.save,
+  );
+}
+
+/* --------------------------------------------------------------- *
+ * Préférences utilisateur (07/09/2026).
+ * Stockées dans users/<id>/prefs.json ; PATCH merge shallow.
+ * ----------------------------------------------------------------*/
+import type { TasksGroupBy, TasksSort } from "./prefs";
+
+export async function fetchPrefs(): Promise<UserPrefs> {
+  return jsonFetch("/api/prefs", { method: "GET" }, TIMEOUTS.items);
+}
+
+/**
+ * PATCH partiel — on n'envoie que les clés qui changent.
+ * Le serveur fait un merge shallow (`mergePrefs` côté serveur) et persiste
+ * l'union. Un fragment `tasksToolbar` suffit pour rester honnête : on ne
+ * promet pas un payload complet.
+ */
+export async function patchPrefs(patch: {
+  tasksToolbar?: Partial<{
+    doneHidden: boolean;
+    sort: TasksSort;
+    groupBy: TasksGroupBy;
+  }>;
+}): Promise<UserPrefs> {
+  return jsonFetch(
+    "/api/prefs",
+    { method: "PATCH", body: JSON.stringify(patch) },
     TIMEOUTS.save,
   );
 }

@@ -21,6 +21,7 @@ import { DetailPanel } from "./DetailPanel";
 import { InboxScreen } from "./InboxScreen";
 import { PortfoliosScreen } from "./PortfoliosScreen";
 import { DesktopDashboard } from "./DesktopDashboard";
+import { DesktopTasksToolbar } from "./DesktopTasksToolbar";
 import { DesktopKanban } from "./DesktopKanban";
 import { DesktopSettings } from "./DesktopSettings";
 import { DependencyGraph } from "./DependencyGraph";
@@ -55,9 +56,11 @@ import {
   fetchInbox,
   fetchObjectives,
   fetchPortfolios,
+  fetchPrefs,
   fetchTags,
   markInboxRead,
   moveCard,
+  patchPrefs,
   renameColumn,
   reorderColumns,
   setColumnWip,
@@ -139,6 +142,13 @@ export function DesktopShell({
    */
   const [kindFilter, setKindFilter] = useState<TaskKindFilter>("all");
   const [sort, setSort] = useState<TaskSort>("urgency");
+  /**
+   * Préférences « Mes tâches » — chargées du store, PATCH à chaque
+   * modification. Si la lecture échoue, on garde les défauts : la
+   * toolbar reste utilisable.
+   */
+  const [doneHidden, setDoneHidden] = useState(true);
+  const [groupBy, setGroupBy] = useState<"time" | "project">("time");
   /** Le calendrier garde ses DEUX portees : la semaine du prototype, et le mois de la v1. */
   const [calendarMode, setCalendarMode] = useState<"week" | "month">("week");
   const [calendarSelectedId, setCalendarSelectedId] = useState<string | null>(null);
@@ -203,6 +213,13 @@ export function DesktopShell({
         settle(fetchInbox(), setInbox),
         settle(fetchCalDavStatus(), (s) => setLastSyncAt(s.lastSyncAt)),
         settle(fetchCollaborators(), setCollabList),
+        settle(fetchPrefs(), (p) => {
+          if (p.tasksToolbar) {
+            setDoneHidden(p.tasksToolbar.doneHidden);
+            setSort(p.tasksToolbar.sort);
+            setGroupBy(p.tasksToolbar.groupBy);
+          }
+        }),
       ]);
     })();
   }, []);
@@ -223,8 +240,13 @@ export function DesktopShell({
       nav === "project" && projectId
         ? activeItems.filter((it) => it.projectId === projectId)
         : activeItems;
-    return sortItems(filterAgendaItems(base, kindFilter), sort);
-  }, [nav, projectId, activeItems, kindFilter, sort]);
+    // Filtre « tâches terminées masquées » (07/09) — actif par défaut.
+    // On n'exclut PAS les terminées du compte de tâches global (le Dashboard
+    // continue de rendre le pourcentage global), on ne les enlève QUE de
+    // l'écran Mes tâches et de ses 4 vues.
+    const filtered = doneHidden ? base.filter((it) => !it.doneAt) : base;
+    return sortItems(filterAgendaItems(filtered, kindFilter), sort);
+  }, [nav, projectId, activeItems, kindFilter, sort, doneHidden]);
 
   const groups = useMemo(
     () => groupItems(scoped, nav === "project" ? "column" : "time", board.columns, now),
@@ -606,17 +628,48 @@ export function DesktopShell({
             }
             toolbar={
               showsTasks ? (
-                <ViewToolbar
-                  view={view}
-                  kind={kindFilter}
-                  sort={sort}
-                  weekOffset={weekOffset}
-                  calendarMode={calendarMode}
-                  onKind={setKindFilter}
-                  onSort={setSort}
-                  onWeekOffset={setWeekOffset}
-                  onCalendarMode={setCalendarMode}
-                />
+                <div className="flex w-full items-center justify-between gap-3">
+                  <DesktopTasksToolbar
+                    state={{
+                      doneHidden,
+                      sort,
+                      groupBy,
+                      doneHiddenCount: activeItems.filter((it) => it.doneAt).length,
+                    }}
+                    handlers={{
+                      onAddTask: () =>
+                        onQuickAddTask(
+                          "Nouvelle tâche",
+                          projectId ?? fallbackProjectId(projects),
+                        ),
+                      onToggleDoneHidden: (next) => {
+                        setDoneHidden(next);
+                        void patchPrefs({
+                          tasksToolbar: { doneHidden: next },
+                        });
+                      },
+                      onChangeSort: (s) => {
+                        setSort(s);
+                        void patchPrefs({ tasksToolbar: { sort: s } });
+                      },
+                      onChangeGroupBy: (g) => {
+                        setGroupBy(g);
+                        void patchPrefs({ tasksToolbar: { groupBy: g } });
+                      },
+                    }}
+                  />
+                  <ViewToolbar
+                    view={view}
+                    kind={kindFilter}
+                    sort={sort}
+                    weekOffset={weekOffset}
+                    calendarMode={calendarMode}
+                    onKind={setKindFilter}
+                    onSort={setSort}
+                    onWeekOffset={setWeekOffset}
+                    onCalendarMode={setCalendarMode}
+                  />
+                </div>
               ) : null
             }
           />
