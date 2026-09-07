@@ -12,6 +12,76 @@ quatrième.
 
 ---
 
+## 1.3.0.0 — 2026-09-07
+
+### Refonte v2 — le prototype Claude Design est en code
+
+La navigation desktop passe d'une barre horizontale à sept onglets à une
+**sidebar à cinq entrées**, et prend deux axes : `nav` dit *où* on est, `view`
+dit *comment* on le regarde. « Calendrier » et « Kanban » n'étaient pas des
+destinations, seulement deux façons de voir les mêmes tâches — en onglets de
+nav, ils obligeaient à choisir entre « mes tâches » et « mon calendrier ».
+Ils deviennent des **vues** ; « Idées » et « Objectifs » aussi.
+
+| Sidebar | Contenu |
+|---|---|
+| Accueil | 1ʳᵉ tuile + donut « Avancement » conservés de la v1 |
+| Boîte de réception | Activité (journal) et À trier (les idées) |
+| Mes tâches | Liste · Tableau · Calendrier (semaine et mois) · Tableau de bord · Fichiers |
+| Portefeuilles | groupes de projets **et** objectifs |
+| Graphe | inchangé |
+| *Projets* | mêmes vues **+ Chronologie** |
+
+#### Données
+
+- **`Item.startDate`** — le seul ajout structurant. Le prototype affiche des
+  plages (« 9 – 11 sept ») dans la liste, sur les cartes, en bandes de
+  calendrier et en barres de chronologie ; sans borne basse, quatre vues sur
+  six ne rendaient qu'un point. Même règle que `due` : une chaîne illisible
+  devient `null`, jamais une date approchée, et on n'en fabrique jamais par
+  défaut.
+- **`Item.attachments[]`**, `portfolios.json`, `inbox.json`. Tous créés
+  paresseusement — **aucune migration**.
+- **Le statut est DÉRIVÉ**, jamais stocké (`src/lib/status.ts`). Stocké, il
+  pourrirait : une tâche « Dans les délais » dont l'échéance est passée hier
+  s'afficherait en vert. Il applique les overrides d'occurrence — une séance
+  déplacée dans Apple Calendar n'est pas en retard.
+
+#### La boîte de réception n'est pas une coquille
+
+Cinq producteurs câblés sur des écritures réelles : rappel envoyé, adoption
+CalDAV, tâche débloquée, dictée structurée, objectif atteint tout seul. Ces
+faits n'existaient nulle part dans l'interface — un rendez-vous déplacé dans
+Apple arrivait sans que rien ne le dise. L'identifiant d'un événement vient du
+**fait**, pas de l'heure d'écriture : le cron repasse toutes les 60 s sur les
+mêmes items, un id horodaté produirait une ligne par passage.
+
+#### Mobile
+
+`MyTasksScreen` et `ProjectsScreen` ajoutés ; le FAB de la barre basse dit
+**Dicter** et non « + » — un « + » sur une app pilotée à la voix annonce une
+saisie clavier.
+
+#### Quatre bugs préexistants, tous silencieux
+
+- **Huit tokens CSS n'existaient pas** (`--color-error`, `--color-warn`,
+  `--color-page`…), vestiges du système corail. Une `var()` sans repli *annule*
+  la déclaration : les badges d'échéance et pastilles de priorité n'avaient
+  aucune des couleurs annoncées par leur code.
+- **`coerce()` jetait `dependsOn`, `tags` et `objectiveId`** à la création.
+  `POST /api/items` répondait 200 et la dépendance n'existait nulle part.
+- **Deux couleurs de projet** servaient de fond à des badges de priorité et
+  d'échéance — un badge « Demain » violet sans rapport avec le projet.
+- **Glisser une série récurrente sur la Chronologie corrompait sa grille** :
+  un glissement d'un jour en déplaçait trois, hors de la grille RRULE, en
+  laissant l'override pointer une occurrence disparue. La barre d'une série
+  n'est plus saisissable.
+
+**+138 tests** (597 → 735). Aucune migration, aucune variable
+d'environnement nouvelle.
+
+---
+
 ## 1.2.1.0 — 2026-09-05
 
 ### Une occurrence décalée compte pour le jour d'arrivée (PR #16)

@@ -15,9 +15,10 @@ que tu remplaces dans `docs/handoffs/`.
 | | |
 |---|---|
 | **Agent** | **Claude Code (Opus 5)**. Je garde la main (passation précédente : moi-même, 05/09). |
-| **Branche** | `feat/refonte-v2`, 7 commits. **Pas de PR ouverte, rien de poussé.** |
+| **Branche** | `feat/refonte-v2`, **poussée**. Version `1.3.0.0`. |
 | **Base** | `origin/main` @ `fcdcf17`. |
 | **Prod** | **inchangée** — `3a1ea3e`, v1.2.1.0. Rien de cette refonte n'est déployé. |
+| **À déployer** | oui, une fois la PR fusionnée — voir « Déploiement » plus bas. |
 
 ## Goal
 
@@ -101,12 +102,48 @@ dictée structurée, objectif atteint tout seul.
 3. **Deux couleurs de PROJET servaient de fond à des badges de priorité et
    d'échéance** (`--color-p4` violet Perso, `--color-p2` orange My Flip) : un
    badge « Demain » violet sans rapport avec le projet de la tâche.
+4. **`package-lock.json` avait dérivé** : sa racine annonçait `1.2.0` là où
+   `package.json` disait `1.2.1`. Réalignés à `1.3.0`.
+
+## Un défaut que j'ai introduit, et corrigé
+
+**Glisser une série récurrente sur la Chronologie corrompait sa grille.**
+Vérifié sur une vraie série (« Séance push », hebdo le dimanche, une occurrence
+déplacée du 6 au 8 septembre) : un glissement d'**un** jour donnait
+
+```
+due          2026-09-06  →  2026-09-09    (trois jours, pas un)
+overrides    inchangés, pointant une occurrence disparue
+seriesAnchor 2026-08-30, un dimanche : le 9 est un mercredi
+```
+
+`effectiveDue` rend l'occurrence *override appliqué* ; repartir de là et
+réécrire `due` fait sortir la série de sa propre grille RRULE — et la synchro
+CalDAV réécrit ensuite ça sur iCloud. La barre d'une série n'est plus
+saisissable, et `shiftRangePatch` rend `{}` si `rrule` est posé.
+
+## ⚠️ `feat/v2-desktop` est ABANDONNÉE — ne pas la fusionner
+
+Hermes a construit la même refonte en parallèle le 07/09 sur
+`origin/feat/v2-desktop` (7 commits, dont « unified Tasks & RDV tab with five
+views »). **Aramis l'a écartée** : « ce que Hermes a construit, c'était
+n'importe quoi, c'était pas du tout ce que je voulais, c'était un essai ».
+
+Elle porte 77 lignes de `DECISIONS.md` qui n'ont **jamais été fusionnées dans
+`main`** et qui décrivent une autre architecture (nav horizontale conservée,
+pas de sidebar). Ne pas les traiter comme des décisions en vigueur : le flux
+validé par Aramis est **preview Claude Design → Claude Code → passation →
+Hermes pour les retouches**.
+
+Une seule chose en a été retenue, et parce qu'elle était vraie : le risque du
+glisser-décaler sur une série récurrente. Vérifié dans mon propre code, c'était
+un vrai défaut — corrigé (voir ci-dessous).
 
 ## Blockers
 
 Aucun sur le code.
 
-### Deux branches non fusionnées bloquent des choses utiles
+### Une branche non fusionnée bloque encore quelque chose d'utile
 
 - **`docs/agent-recette-account`** (1 commit, `f1cf421`, aucune PR) — c'est la
   cause racine que la passation du 05/09 signalait déjà comme *toujours
@@ -119,6 +156,43 @@ Aucun sur le code.
   déploiement en silence. **Je l'ai récupérée sur cette branche**
   (`git checkout 37fa3b4 -- AGENTS.md docs/coordination.md scripts/coord/status.sh`) ;
   fusionner `feat/refonte-v2` la porte donc dans `main`.
+
+## Déploiement — ce que Hermes doit faire
+
+**Rien de spécial, et c'est le point important** : aucune migration, aucune
+variable d'environnement nouvelle. `portfolios.json`, `inbox.json` et le
+répertoire `attachments/` sont créés paresseusement au premier usage ;
+`Item.startDate` est optionnel et absent de tous les items existants.
+
+Une fois la PR fusionnée dans `main` :
+
+```bash
+ssh brief-vps 'cd /docker/brief && git fetch origin && git reset --hard origin/main \
+  && docker compose --env-file .env.production up -d --build'
+```
+
+Trois choses qui font échouer un déploiement en silence si on les oublie :
+
+1. **`--env-file .env.production` n'est pas facultatif.** `env_file:` injecte
+   des variables dans un conteneur au démarrage, il n'alimente pas
+   l'interpolation `${...}` du `docker-compose.yml`. Le fichier compose porte
+   des gardes `${VAR:?absente}` qui font échouer bruyamment — s'y fier.
+2. **`ssh brief-vps`, jamais une IP en clair.** Le scan de sécurité d'Hermes
+   met un run contenant une IP brute en attente d'une approbation « commande
+   dangereuse » qui **ne peut pas être donnée depuis Telegram** : le run reste
+   bloqué en silence alors que le webhook a déjà répondu `202`.
+3. **Sauvegarder avant** : `bash deploy/backup.sh` sur le VPS.
+
+Vérifications après déploiement :
+
+```bash
+ssh brief-vps 'docker exec brief-app-1 cat /app/VERSION'   # doit rendre 1.3.0.0
+ssh brief-vps 'cd /docker/brief && git rev-parse --short HEAD'
+```
+
+Puis à l'écran, connecté : la sidebar à cinq entrées, et
+`GET /api/portfolios` qui répond `200` (et non `404` — c'est le signal que le
+build a bien pris les routes neuves).
 
 ## Next action
 
@@ -141,13 +215,14 @@ Lancées sur l'arbre final, sortie vue :
 ```
 $ npx eslint .       → 0 erreur, 0 warning
 $ npx tsc --noEmit   → 0 erreur
-$ npx vitest run     → 728 passants, 1 skipped (52 fichiers)
+$ npx vitest run     → 735 passants, 1 skipped (53 fichiers)
 ```
 
-Soit **+131 tests** (597 → 728) : `views.ts` (41), `status.ts` (32),
+Soit **+138 tests** (597 → 735) : `views.ts` (41), `status.ts` (32),
 `inbox.ts` (19), portefeuilles + journal du store (14), `coerce` (11),
-`plural` (5), `describePatch` (5), journal des rappels (4). Le total de 597
-est celui de la passation du 05/09, mesuré sur la même base.
+`shiftRangePatch` (7), `plural` (5), `describePatch` (5), journal des rappels
+(4). Le total de 597 est celui de la passation du 05/09, mesuré sur la même
+base.
 
 **Recette authentifiée sur le compte agent, faite et vue** — API en `curl` puis
 navigateur (`/browse`, viewport 1600×1000 puis 393×852) :
